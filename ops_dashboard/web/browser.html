@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Browser · ConductLoop</title>
+  <style>
+    :root{--bg:#0f172a;--card:#1a2332;--border:#334155;--ink:#f1f5f9;--muted:#94a3b8;--blue:#3b82f6;--amber:#f59e0b}
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+    body{display:flex;flex-direction:column}
+    #tabs{display:flex;gap:4px;padding:6px 8px 0;overflow-x:auto;min-height:34px}
+    .tab{display:flex;align-items:center;gap:6px;max-width:220px;background:var(--card);border:1px solid var(--border);border-bottom:0;border-radius:8px 8px 0 0;padding:5px 8px;font-size:12px;cursor:pointer;color:var(--muted)}
+    .tab.active{color:var(--ink);background:#22304a}
+    .tab .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .tab button{background:transparent;border:0;color:var(--muted);cursor:pointer;padding:0 2px}
+    #bar{display:flex;gap:6px;padding:6px 8px;border-bottom:1px solid var(--border);background:#22304a}
+    #bar button{background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer}
+    #url{flex:1;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px}
+    #msg{padding:4px 10px;font-size:12px;color:var(--amber);min-height:0}
+    #main{flex:1;display:flex;min-height:0}
+    #viewport{flex:1;position:relative}
+    #ask{width:340px;border-left:1px solid var(--border);background:var(--card);display:flex;flex-direction:column;padding:8px;gap:6px}
+    #ask[hidden]{display:none}
+    #ask textarea{background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:6px;font:inherit;font-size:13px;resize:vertical;min-height:60px}
+    #ask button{background:var(--blue);color:#fff;border:0;border-radius:6px;padding:6px;cursor:pointer}
+    #answer{flex:1;overflow:auto;white-space:pre-wrap;font-size:13px;line-height:1.45}
+    #ask .note,#agent .note{font-size:11px;color:var(--muted)}
+    .tab.agent{border-color:var(--amber);box-shadow:inset 0 2px 0 var(--amber)}
+    #agentbar{display:flex;gap:6px;align-items:center;padding:4px 8px;background:#3b2a0a;color:var(--amber);font-size:12px}
+    #agentbar[hidden]{display:none}
+    #approvals{display:flex;flex-direction:column;gap:4px;padding:4px 8px;background:#3b0a0a;color:#ffd7d7;font-size:12px}
+    #approvals[hidden]{display:none}
+    #approvals .ap{display:flex;gap:6px;align-items:center}
+    #approvals .ap span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    #approvals button{background:var(--card);color:var(--ink);border:1px solid #ff8a8a;border-radius:6px;padding:2px 8px;cursor:pointer}
+    #agentbar button{background:var(--card);color:var(--ink);border:1px solid var(--amber);border-radius:6px;padding:2px 8px;cursor:pointer}
+    #agent{width:340px;border-left:1px solid var(--border);background:var(--card);display:flex;flex-direction:column;padding:8px;gap:6px}
+    #agent[hidden]{display:none}
+    #agent input,#agent textarea{background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:5px;font:inherit;font-size:12px}
+    #agent button{background:var(--amber);color:#111;border:0;border-radius:6px;padding:6px;cursor:pointer}
+    #empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px;text-align:center;padding:24px}
+    .badge{font-size:10px;border:1px solid var(--amber);color:var(--amber);border-radius:4px;padding:0 4px;margin-left:6px}
+  </style>
+</head>
+<body>
+  <div id="tabs"></div>
+  <div id="bar">
+    <a href="/" style="color:var(--muted);text-decoration:none;padding:4px 6px" title="Back to ConductLoop">←&nbsp;App</a>
+    <button id="back" title="Back">◀</button>
+    <button id="fwd" title="Forward">▶</button>
+    <button id="reload" title="Reload">⟳</button>
+    <input id="url" placeholder="Type a URL (https://…)" autocomplete="off" spellcheck="false">
+    <button id="newtab" title="New tab">＋</button>
+    <button id="agenttoggle" title="Start a browsing agent">Agent…</button>
+    <button id="asktoggle" title="Ask the Brain about this page">Ask</button>
+    <button id="clip" title="Save the readable part of this page to your vault (marked as untrusted web content)">Send to vault</button>
+  </div>
+  <div id="msg" role="status"></div>
+  <div id="agentbar" hidden>
+    <span id="agentlabel"></span>
+    <button id="ag-pause">Pause</button>
+    <button id="ag-take">Take control</button>
+    <button id="ag-give">Give back to agent</button>
+  </div>
+  <div id="approvals" hidden aria-live="assertive"></div>
+  <div id="main">
+    <div id="viewport"><div id="empty"></div></div>
+    <aside id="ask" hidden>
+      <div class="note">Ask about this page. The page is sent as untrusted content, without tools; keys are redacted. Nothing is saved.</div>
+      <textarea id="question" placeholder="What does this page say about…?" maxlength="2000"></textarea>
+      <button id="askgo">Ask</button>
+      <div id="answer" aria-live="polite"></div>
+    </aside>
+    <aside id="agent" hidden>
+      <div class="note">Browsing agent (experimental): it opens and reads pages in its own tab. By default it is read-only. If you allow actions, it can click and type, but it asks you first for anything with an effect (forms, buying, posting, sensitive pages) and it never types passwords. You can pause it or take control at any time. Uses your BYOK key and a mandatory budget.</div>
+      <input id="ag-provider" placeholder="provider (anthropic, openai, ollama…)">
+      <input id="ag-model" placeholder="model">
+      <input id="ag-key" placeholder="key reference (byok.<provider>.<label>)">
+      <input id="ag-budget" type="number" min="0.01" step="0.01" placeholder="budget (EUR)">
+      <textarea id="ag-prompt" placeholder="What should it find out?" maxlength="20000"></textarea>
+      <label class="note"><input id="ag-act" type="checkbox"> Allow click and type (asks before anything with effects)</label>
+      <button id="ag-start">Start agent</button>
+    </aside>
+  </div>
+<script>
+(function () {
+  "use strict";
+  // Browser design PR 4. Native child webviews (tab-*) are positioned over
+  // #viewport by the desktop app; this page only draws the chrome. Pages in
+  // the tabs never get IPC, cookies of this app, nor loopback/LAN access.
+  var FLAG = "cl.browser.experimental";
+  var T = window.__TAURI_INTERNALS__;
+  var $ = function (id) { return document.getElementById(id); };
+  var empty = $("empty"), msg = $("msg");
+  var state = { tabs: [], active: null };
+
+  function say(t) { msg.textContent = t || ""; }
+  function inv(cmd, args) { return T.invoke(cmd, args || {}); }
+  var REASONS = {
+    "blocked:loopback": "Blocked: local addresses (127.0.0.1, ::1) are not reachable from browser tabs.",
+    "blocked:local_name": "Blocked: local names (localhost, *.local, single-label hosts) are not reachable.",
+    "blocked:private": "Blocked: LAN, Tailscale and link-local addresses are not reachable from browser tabs.",
+    "blocked:reserved": "Blocked: reserved address.",
+    "blocked:scheme": "Blocked: only http, https and about:blank.",
+    "blocked:userinfo": "Blocked: URLs with user:password@ are not allowed.",
+    "invalid_url": "That does not look like a URL.",
+    "too_many_tabs": "Too many tabs (max 8).",
+    "macos_14_required": "The in-app browser needs macOS 14 (Sonoma) or later.",
+    "proxy_unavailable": "The browser's network filter could not start, so tabs are disabled. Restart the app.",
+    "extract_timeout": "The page did not answer in time. Try again when it has finished loading.",
+    "extract_too_large": "This page is too large to save.",
+    "extract_bad_result": "Could not read this page.",
+    "empty": "Nothing readable on this page.",
+    "bad_url": "Only http(s) pages can be saved or asked about.",
+    "question_required": "Type a question first."
+  };
+  function err(e) { say(REASONS[String(e)] || ("Error: " + e)); }
+
+  if (!T || typeof T.invoke !== "function") {
+    empty.textContent = "The browser is only available inside the ConductLoop desktop app.";
+    return;
+  }
+  if (localStorage.getItem(FLAG) !== "1") {
+    empty.textContent = "";
+    var p = document.createElement("div");
+    p.innerHTML = "<p><b>In-app browser</b> <span class='badge'>EXPERIMENTAL</span></p>" +
+      "<p style='max-width:520px'>Pages open in an isolated, private profile (nothing is kept when you close the app), " +
+      "with no access to ConductLoop, localhost or your LAN. No passwords are stored.</p>";
+    var b = document.createElement("button");
+    b.textContent = "Enable experimental browser";
+    b.style.cssText = "background:var(--blue);color:#fff;border:0;border-radius:6px;padding:8px 14px;cursor:pointer";
+    b.onclick = function () { localStorage.setItem(FLAG, "1"); location.reload(); };
+    p.appendChild(b); empty.appendChild(p);
+    return;
+  }
+
+  function sendBounds() {
+    var r = $("viewport").getBoundingClientRect();
+    if (r.width < 50 || r.height < 50) return;
+    inv("browser_set_bounds", { x: r.left, y: r.top, width: r.width, height: r.height }).catch(err);
+  }
+  function render() {
+    var box = $("tabs"); box.textContent = "";
+    state.tabs.forEach(function (t) {
+      var el = document.createElement("div");
+      el.className = "tab" + (t.id === state.active ? " active" : "") + (t.agent ? " agent" : "");
+      var s = document.createElement("span"); s.className = "t";
+      s.textContent = (t.agent ? "Agent #" + t.agent + " · " : "") + (t.loading ? "… " : "") + (t.title || t.url || "New tab");
+      s.title = t.url;
+      var x = document.createElement("button"); x.textContent = "×"; x.title = "Close tab";
+      x.onclick = function (ev) { ev.stopPropagation(); inv("browser_close", { id: t.id }).then(refresh).catch(err); };
+      el.onclick = function () { inv("browser_activate", { id: t.id }).then(refresh).catch(err); };
+      el.appendChild(s); el.appendChild(x); box.appendChild(el);
+    });
+    var cur = state.tabs.filter(function (t) { return t.id === state.active; })[0];
+    if (cur && document.activeElement !== $("url")) $("url").value = cur.url === "about:blank" ? "" : cur.url;
+    if (cur && cur.blocked) say("Navigation blocked (" + cur.blocked.split(" ")[0] + "): " + cur.blocked.split(" ").slice(1).join(" "));
+    empty.textContent = state.tabs.length ? "" : "No tabs. Type a URL above.";
+    // PR 8: agent tab controls (pause / take control / give back).
+    var ab = $("agentbar");
+    ab.hidden = !(cur && cur.agent);
+    if (cur && cur.agent) {
+      var who = { agent: "the agent is browsing", paused: "paused", human: "you have control" }[cur.control] || cur.control;
+      $("agentlabel").textContent = "Agent session #" + cur.agent + ": " + who + ".";
+      $("ag-pause").disabled = cur.control !== "agent";
+      $("ag-take").disabled = cur.control === "human";
+      $("ag-give").disabled = cur.control === "agent";
+    }
+    pollApprovals(cur && cur.agent);
+  }
+  // PR 9: the agent's click/type that need your OK. Bound to the page as the
+  // agent read it: if the page changes, the approval is discarded.
+  var apState = { sid: null, at: 0, key: "" };
+  function pollApprovals(sid) {
+    var box = $("approvals");
+    if (!sid) { if (!box.hidden) { box.hidden = true; box.textContent = ""; apState.key = ""; sendBounds(); } return; }
+    var now = Date.now();
+    if (apState.sid === sid && now - apState.at < 1500) return;
+    apState.sid = sid; apState.at = now;
+    fetch("/api/sessions/" + sid + "/browser-approvals", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); }).then(function (j) {
+        var rows = (j && j.approvals) || [];
+        var key = rows.map(function (a) { return a.id; }).join(",");
+        if (key === apState.key) return;
+        apState.key = key; box.textContent = "";
+        rows.forEach(function (a) {
+          var p = a.payload || {}, row = document.createElement("div"); row.className = "ap";
+          var t = document.createElement("span");
+          t.textContent = (a.summary || "Browser action") + " — " + (p.url || "");
+          t.title = JSON.stringify(p.element || {}) + (p.text !== undefined ? "\ntext: " + p.text : "");
+          var ok = document.createElement("button"); ok.textContent = "Approve";
+          var no = document.createElement("button"); no.textContent = "Reject";
+          function decide(d) {
+            ok.disabled = no.disabled = true;
+            api("/api/sessions/" + sid + "/browser-approvals", { id: a.id, decision: d })
+              .catch(err).then(function () { apState.at = 0; apState.key = ""; });
+          }
+          ok.onclick = function () { decide("approve"); };
+          no.onclick = function () { decide("reject"); };
+          row.appendChild(t); row.appendChild(ok); row.appendChild(no); box.appendChild(row);
+        });
+        var was = box.hidden; box.hidden = rows.length === 0;
+        if (was !== box.hidden) sendBounds();
+      }).catch(function () {});
+  }
+  function refresh() {
+    return inv("browser_list").then(function (l) {
+      state.tabs = l.tabs || []; state.active = l.active;
+      (l.new_window_requests || []).forEach(function (u) {
+        inv("browser_open", { url: u }).catch(err);
+      });
+      render();
+    }).catch(err);
+  }
+  function go() {
+    var v = $("url").value.trim(); say("");
+    if (!state.active) { inv("browser_open", { url: v }).then(refresh).catch(err); return; }
+    inv("browser_navigate", { id: state.active, url: v }).then(refresh).catch(err);
+  }
+  $("url").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+  $("newtab").onclick = function () { say(""); inv("browser_open", { url: "" }).then(refresh).catch(err); };
+  // PR 6: «Enviar al vault». Extraction runs in the tab (Readability, hidden
+  // nodes dropped); the backend re-validates and stores it as source="web".
+  $("clip").onclick = function () {
+    if (!state.active) { say("Open a page first."); return; }
+    var btn = $("clip"); btn.disabled = true; say("Saving…");
+    inv("browser_extract", { id: state.active }).then(function (page) {
+      return fetch("/api/web/clip", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify(page)
+      }).then(function (r) { return r.json().then(function (j) { if (!r.ok || !j.ok) throw (j.error || r.status); return j; }); });
+    }).then(function (j) {
+      say("Saved to vault: " + j.title + (j.truncated ? " (truncated)" : ""));
+    }).catch(err).then(function () { btn.disabled = false; });
+  };
+  // PR 7: ask the Brain about the open page. The answer is plain text
+  // (textContent): no Markdown/HTML rendering of model output here.
+  $("asktoggle").onclick = function () {
+    var a = $("ask"); a.hidden = !a.hidden; sendBounds();
+    if (!a.hidden) $("question").focus();
+  };
+  $("askgo").onclick = function () {
+    if (!state.active) { say("Open a page first."); return; }
+    var q = $("question").value.trim();
+    if (!q) { err("question_required"); return; }
+    var btn = $("askgo"); btn.disabled = true; $("answer").textContent = "Thinking…"; say("");
+    inv("browser_extract", { id: state.active }).then(function (page) {
+      return fetch("/api/brain/ask-page", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, page: page })
+      }).then(function (r) { return r.json().then(function (j) { if (!r.ok || !j.ok) throw (j.message || j.error || r.status); return j; }); });
+    }).then(function (j) {
+      $("answer").textContent = j.answer;
+      var notes = [];
+      if (j.redactions) notes.push(j.redactions + " secret(s) redacted before sending");
+      if (j.truncated) notes.push("page truncated");
+      if (notes.length) say(notes.join(" · "));
+    }).catch(function (e) { $("answer").textContent = ""; err(e); })
+      .then(function () { btn.disabled = false; });
+  };
+  function control(c) {
+    if (!state.active) return;
+    inv("browser_agent_control", { id: state.active, control: c }).then(refresh).catch(err);
+  }
+  $("ag-pause").onclick = function () { control("paused"); };
+  $("ag-take").onclick = function () { control("human"); };
+  $("ag-give").onclick = function () { control("agent"); };
+  $("agenttoggle").onclick = function () { var a = $("agent"); a.hidden = !a.hidden; sendBounds(); };
+  function api(path, body) {
+    return fetch(path, { method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok || !j.ok) throw (j.message || j.error || r.status); return j; }); });
+  }
+  $("ag-start").onclick = function () {
+    var eur = parseFloat($("ag-budget").value);
+    var body = { provider: $("ag-provider").value.trim(), model: $("ag-model").value.trim(),
+      key_ref: $("ag-key").value.trim() || undefined, budget_cost_cents: Math.round(eur * 100),
+      prompt: $("ag-prompt").value.trim(), browser_mode: $("ag-act").checked ? "act" : "read" };
+    if (!body.prompt) { say("Describe the task first."); return; }
+    if (!(eur > 0)) { say("Set a budget in EUR."); return; }
+    var btn = $("ag-start"); btn.disabled = true; say("Starting agent…");
+    api("/api/sessions/browser", body).then(function (j) {
+      if (!j.bridge_available) say("Session created, but the browser bridge is not available (desktop app on macOS 14+ needed).");
+      return api("/api/sessions/" + j.session.id + "/start").then(function () {
+        say("Agent session #" + j.session.id + " started. Its tab appears in the strip.");
+      });
+    }).catch(err).then(function () { btn.disabled = false; });
+  };
+  $("back").onclick = function () { if (state.active) inv("browser_back", { id: state.active }).catch(err); };
+  $("fwd").onclick = function () { if (state.active) inv("browser_forward", { id: state.active }).catch(err); };
+  $("reload").onclick = function () { if (state.active) inv("browser_reload", { id: state.active }).catch(err); };
+
+  new ResizeObserver(sendBounds).observe($("viewport"));
+  window.addEventListener("resize", sendBounds);
+  // Native webviews sit above this page: hide them whenever we leave it.
+  window.addEventListener("pagehide", function () { inv("browser_set_visible", { visible: false }); });
+  document.addEventListener("visibilitychange", function () {
+    inv("browser_set_visible", { visible: document.visibilityState === "visible" }).catch(err);
+  });
+  sendBounds();
+  inv("browser_set_visible", { visible: true }).then(refresh).catch(err);
+  setInterval(refresh, 800);
+})();
+</script>
+</body>
+</html>

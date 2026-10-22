@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sessions — ConductLoop</title>
+  <link rel="stylesheet" href="/sessions.css" />
+  <script src="/provider-errors.js" defer></script>
+  <script src="/sessions.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1 data-i18n="title">Agent sessions</h1>
+      <p class="sub" data-i18n="subtitle">Parallel coding sessions on their own worktrees. Nothing is merged or pushed automatically.</p>
+    </div>
+    <nav class="nav">
+      <a href="/" data-i18n="nav_home">Dashboard</a>
+      <a href="/ai" data-i18n="nav_ai">Connect AI</a>
+      <a href="/runs" data-i18n="nav_runs">Runs</a>
+    </nav>
+  </header>
+  <div id="global-error" class="error" hidden></div>
+
+  <main class="grid">
+    <section class="col-side">
+      <div class="card" id="repos-card">
+        <h2 data-i18n="repos">Marked repositories</h2>
+        <ul id="repos" class="list"></ul>
+        <form id="repo-form" class="row">
+          <input id="repo-path" required data-i18n-ph="repo_path_ph" placeholder="/path/to/repo" />
+          <button type="submit" data-i18n="mark">Mark</button>
+        </form>
+        <div class="error" id="repo-error" hidden></div>
+      </div>
+
+      <div class="card" id="prices-card">
+        <h2 data-i18n="prices">Prices per model (EUR / 1M tokens)</h2>
+        <table class="tbl"><thead><tr>
+          <th data-i18n="provider">Provider</th><th data-i18n="model">Model</th>
+          <th data-i18n="price_in">In</th><th data-i18n="price_out">Out</th></tr></thead>
+          <tbody id="prices"></tbody></table>
+        <form id="price-form" class="stack">
+          <div class="row">
+            <select id="price-provider"></select>
+            <input id="price-model" required data-i18n-ph="model" placeholder="model" />
+          </div>
+          <div class="row">
+            <input id="price-in" type="number" min="0" step="0.01" required data-i18n-ph="price_in_ph" placeholder="EUR in" />
+            <input id="price-out" type="number" min="0" step="0.01" required data-i18n-ph="price_out_ph" placeholder="EUR out" />
+            <button type="submit" data-i18n="save">Save</button>
+          </div>
+        </form>
+        <div class="error" id="price-error" hidden></div>
+      </div>
+
+      <div class="card" id="create-card">
+        <h2 data-i18n="new_session">New session</h2>
+        <form id="session-form" class="stack">
+          <label><span data-i18n="role">Role</span><input id="s-role" required maxlength="60" /></label>
+          <div class="row">
+            <label><span data-i18n="provider">Provider</span><select id="s-provider"></select></label>
+            <label><span data-i18n="model">Model</span><input id="s-model" required maxlength="200" /></label>
+          </div>
+          <label><span data-i18n="key_ref">Key reference (key_ref)</span><input id="s-keyref" maxlength="96" placeholder="byok.openai.default" autocomplete="off" /></label>
+          <p class="hint" data-i18n="key_ref_hint">Name of a key saved in the keychain, never the key itself.</p>
+          <label><span data-i18n="repo">Repository</span><select id="s-repo" required></select></label>
+          <div class="row">
+            <label><span data-i18n="base">Base branch</span><input id="s-base" required value="main" maxlength="200" /></label>
+            <label><span data-i18n="budget_eur">Budget (EUR)</span><input id="s-budget" type="number" min="0.01" step="0.01" required /></label>
+            <label><span data-i18n="max_iter">Max iterations</span><input id="s-iters" type="number" min="1" step="1" /></label>
+          </div>
+          <button type="submit" data-i18n="create">Create</button>
+        </form>
+        <div class="error" id="session-error" hidden></div>
+      </div>
+
+      <div class="card">
+        <h2 data-i18n="inbox">Messages to you</h2>
+        <ul id="inbox" class="feed"></ul>
+        <button type="button" class="ghost" id="inbox-more" data-i18n="load_more" hidden>Load more</button>
+      </div>
+    </section>
+
+    <section class="col-main">
+      <div class="card">
+        <div class="row between">
+          <h2 data-i18n="sessions">Sessions</h2>
+          <span class="hint" id="running-count"></span>
+        </div>
+        <div class="error" id="action-error" hidden></div>
+        <div id="sessions" class="sessions"></div>
+      </div>
+
+      <div class="card" id="detail" hidden>
+        <div class="row between">
+          <h2 id="detail-title"></h2>
+          <span class="hint" id="detail-branch"></span>
+        </div>
+        <div class="error" id="detail-error" hidden></div>
+
+        <form id="resume-form" class="resume" hidden>
+          <strong data-i18n="resume_title">Resume session</strong>
+          <p class="hint" id="resume-reason"></p>
+          <div class="row">
+            <label><span data-i18n="new_budget">New budget (EUR)</span><input id="r-budget" type="number" min="0.01" step="0.01" /></label>
+            <label><span data-i18n="max_iter">Max iterations</span><input id="r-iters" type="number" min="1" step="1" /></label>
+          </div>
+          <label class="check" id="r-stalled-wrap" hidden><input type="checkbox" id="r-stalled" /> <span data-i18n="confirm_stalled">I checked the worktree: resume this stalled session</span></label>
+          <div class="row">
+            <button type="submit" data-i18n="resume">Resume</button>
+            <button type="button" class="ghost" id="resume-cancel" data-i18n="cancel">Cancel</button>
+          </div>
+        </form>
+
+        <h3 data-i18n="tasks">Task queue</h3>
+        <ul id="tasks" class="list tasks"></ul>
+        <button type="button" class="ghost" id="tasks-more" data-i18n="load_more" hidden>Load more</button>
+        <form id="task-form" class="stack">
+          <input id="t-title" required maxlength="200" data-i18n-ph="task_title" placeholder="Task title" />
+          <textarea id="t-prompt" rows="3" maxlength="20000" data-i18n-ph="task_prompt" placeholder="What should the session do?"></textarea>
+          <input id="t-paths" data-i18n-ph="task_paths" placeholder="paths (comma separated globs)" />
+          <button type="submit" data-i18n="add_task">Add task</button>
+        </form>
+
+        <div id="review" class="review" hidden>
+          <h3 data-i18n="review">Review</h3>
+          <p class="warn" data-i18n="accept_no_merge">Accepting does NOT merge anything: it only closes the task and frees the session. The branch stays for you to integrate.</p>
+          <textarea id="review-note" rows="2" maxlength="2000" data-i18n-ph="review_note" placeholder="Note (optional)"></textarea>
+          <div class="row">
+            <button type="button" id="review-accept" data-i18n="accept">Accept (no merge)</button>
+            <button type="button" class="danger" id="review-reject" data-i18n="reject">Reject</button>
+          </div>
+        </div>
+
+        <h3 data-i18n="diff">Diff vs base</h3>
+        <div class="row"><button type="button" class="ghost" id="diff-load" data-i18n="load_diff">Load diff</button><span class="hint" id="diff-meta"></span></div>
+        <pre id="diff-stat" class="stat" hidden></pre>
+        <pre id="diff" class="diff" hidden></pre>
+
+        <h3 data-i18n="claims">Path claims</h3>
+        <ul id="claims" class="list"></ul>
+        <button type="button" class="ghost" id="claims-release-all" data-i18n="release_all" hidden>Release all</button>
+
+        <h3 data-i18n="messages">Messages</h3>
+        <ul id="messages" class="feed"></ul>
+        <button type="button" class="ghost" id="messages-more" data-i18n="load_more" hidden>Load more</button>
+        <form id="message-form" class="row">
+          <input id="m-body" required maxlength="4000" data-i18n-ph="message_ph" placeholder="Message to the session" />
+          <button type="submit" data-i18n="send">Send</button>
+        </form>
+
+        <h3 data-i18n="events">Events</h3>
+        <ul id="events" class="feed events"></ul>
+        <button type="button" class="ghost" id="events-more" data-i18n="load_more" hidden>Load more</button>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

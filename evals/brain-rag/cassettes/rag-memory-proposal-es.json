@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "rag-memory-proposal-es",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "¿Qué base de datos usa ConductLoop?"
+      }
+    ]
+  },
+  "response": {
+    "text": "ConductLoop usa SQLite para guardar los datos en local [1].",
+    "usage": {
+      "output_tokens": 15
+    }
+  }
+}

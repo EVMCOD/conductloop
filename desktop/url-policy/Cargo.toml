@@ -1,0 +1,8 @@
+[package]
+name = "conductloop-url-policy"
+version = "0.1.0"
+edition = "2021"
+description = "Navigation/destination policy for ConductLoop's in-app browser tabs (no dependencies)"
+publish = false
+
+[dependencies]

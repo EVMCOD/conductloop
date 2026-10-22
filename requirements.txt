@@ -1,0 +1,14 @@
+# Full app runtime. `pip install -r requirements.txt` gives a working install:
+# core server + BYOK cloud providers + local semantic-search embeddings.
+#
+# NOTE: sentence-transformers pulls torch (~2GB). For a lean server-only install
+# (no semantic search), use requirements-core.txt instead. Voice/GA/JWT features
+# live in requirements-optional.txt.
+-r requirements-core.txt
+
+# BYOK cloud LLM providers (imported lazily; Ollama needs no package).
+anthropic>=0.111.0
+openai>=2.43.0
+
+# Local semantic search embeddings (all-MiniLM-L6-v2).
+sentence-transformers>=5.6.0

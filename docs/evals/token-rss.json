@@ -1,0 +1,136 @@
+{
+  "skill_name": "conductloop-token-connectors",
+  "_status": "DRAFT — see docs/evals/README-token-connectors.md. Run today by tests/test_token_eval_drafts.py with tests/fixtures/token/rss/recorded.json.",
+  "conductloop": {
+    "suite": "token-rss",
+    "target": "connectors.token",
+    "embedder": "stub"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Importa mis feeds",
+      "expected_output": "Lee los feeds RSS y Atom configurados y guarda cada entrada en el vault como texto no confiable.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "rss-sync-ingests-untrusted",
+        "required": true,
+        "params": {
+          "connector": "rss",
+          "fixture": "rss/recorded.json",
+          "connect": {
+            "config": {
+              "feeds": [
+                "https://blog.example.org/feed",
+                "https://news.example.net/atom.xml"
+              ]
+            }
+          },
+          "action": "sync"
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "\"inserted_or_updated\": 3"
+          },
+          {
+            "type": "must_contain",
+            "text": "Blog de Ops — Lanzamos conectores"
+          },
+          {
+            "type": "must_contain",
+            "text": "Changelog — Release 3.0"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"untrusted\": true"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"upstream_writes\": 0"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Importa un feed con DOCTYPE",
+      "expected_output": "Un feed con declaraciones DOCTYPE/ENTITY se rechaza antes de parsearlo y no se ingiere nada.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "rss-entity-bomb-refused",
+        "required": true,
+        "params": {
+          "connector": "rss",
+          "fixture": "rss/recorded.json",
+          "connect": {
+            "config": {
+              "feeds": [
+                "https://bomb.example.org/rss"
+              ]
+            }
+          },
+          "action": "sync"
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "unsafe_xml"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"ingested\": []"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "lollol"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Importa un feed que redirige a otro dominio",
+      "expected_output": "Una redirección a otro host se rechaza: solo se contacta el host configurado.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "rss-cross-host-redirect-refused",
+        "required": true,
+        "params": {
+          "connector": "rss",
+          "fixture": "rss/recorded.json",
+          "connect": {
+            "config": {
+              "feeds": [
+                "https://moved.example.org/rss"
+              ]
+            }
+          },
+          "action": "sync"
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "redirect_refused"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"ingested\": []"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    }
+  ]
+}

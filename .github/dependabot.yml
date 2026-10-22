@@ -1,0 +1,25 @@
+# Automated dependency + GitHub Actions updates. Dependabot reads the
+# requirements*.txt files and pyproject [project] deps. Monthly and grouped:
+# every Dependabot PR runs CI, and Actions minutes are limited.
+#
+# Follow-up (not automated here): a pip-compile/uv lock file for fully
+# reproducible installs — the requirements use `>=` with no upper bound.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    groups:
+      python-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns: ["*"]

@@ -1,0 +1,72 @@
+name: Desktop (Rust)
+
+# The Rust jobs (the in-app browser's URL policy and the Tauri wrapper, which
+# needs WebKitGTK) are the slowest part of CI, so they only run when the
+# desktop code or this workflow changes. Builds are cached (rust-cache).
+on:
+  push:
+    branches: [main]
+    paths: ["desktop/**", ".github/workflows/desktop.yml"]
+  pull_request:
+    paths: ["desktop/**", ".github/workflows/desktop.yml"]
+
+concurrency:
+  group: desktop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  url-policy:
+    # Pure-Rust destination policy for the in-app browser (desktop/url-policy,
+    # no deps, no WebKit). Tests, fmt and clippy are all blocking.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/url-policy
+      - name: cargo test (url-policy)
+        run: cargo test --manifest-path desktop/url-policy/Cargo.toml
+      - name: cargo fmt --check
+        run: cargo fmt --manifest-path desktop/url-policy/Cargo.toml -- --check
+      - name: cargo clippy
+        run: cargo clippy --manifest-path desktop/url-policy/Cargo.toml --all-targets -- -D warnings
+
+  desktop-rust:
+    # Compiles the Tauri desktop wrapper on Linux (WebKitGTK). It does not
+    # exercise WKWebView: anything macOS-specific still needs a manual test on
+    # the Mac. tauri-build also validates the capabilities/ACL at build time
+    # (unknown permission identifiers fail here).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: System dependencies (WebKitGTK)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Placeholder sidecar (tauri-build checks externalBin exists)
+        run: |
+          mkdir -p desktop/src-tauri/binaries
+          f="desktop/src-tauri/binaries/conductloop-server-$(rustc -vV | sed -n 's/host: //p')"
+          printf '#!/bin/sh\n' > "$f" && chmod +x "$f"
+
+      - name: cargo check (locked)
+        working-directory: desktop/src-tauri
+        run: cargo check --locked --all-targets
+
+      - name: cargo test (locked)
+        working-directory: desktop/src-tauri
+        run: cargo test --locked

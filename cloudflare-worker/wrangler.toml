@@ -1,0 +1,17 @@
+name = "status-page"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+[vars]
+OPS_DASHBOARD_URL = "https://your-dashboard.example.com"
+
+# To deploy:
+# 1. cd cloudflare-worker
+# 2. npx wrangler deploy
+# 3. npx wrangler route add status.yourdomain.com/* status-page
+#
+# Required env (set via `npx wrangler secret put NAME` or in dashboard):
+#   OPS_DASHBOARD_URL — full URL to the ops-dashboard backend
+#
+# Optional:
+#   CUSTOM_DOMAIN — set in [routes] below

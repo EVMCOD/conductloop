@@ -1,0 +1,24 @@
+# Local pre-commit hooks — catch what CI's ruff gate catches, before the commit
+# lands. Install once: `pip install pre-commit && pre-commit install`.
+#
+# Note: only the ruff *linter* runs, not ruff-format. The codebase uses compact
+# `if x: return` one-liners (E701/E702 are ignored in pyproject); ruff-format
+# would expand them all, so it's intentionally left out.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.22
+    hooks:
+      - id: ruff
+        args: [--fix]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+        exclude: '\.md$'
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=1024]

@@ -1,0 +1,195 @@
+{
+  "skill_name": "conductloop-search",
+  "conductloop": {
+    "suite": "search",
+    "target": "db.search",
+    "vault": "../fixtures/vault",
+    "embedder": "stub"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "plan Pro",
+      "expected_output": "Encuentra la nota de precios por contenido.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "search-content",
+        "required": true,
+        "checks": [
+          {
+            "type": "result_path",
+            "path": "decisions/2026-03-pricing.md"
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "PLAN PRO",
+      "expected_output": "Mayúsculas ASCII no afectan.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "search-case-insensitive",
+        "required": true,
+        "checks": [
+          {
+            "type": "result_path",
+            "path": "decisions/2026-03-pricing.md"
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Arquitectura local-first",
+      "expected_output": "Encuentra por título (H1).",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "search-title",
+        "required": true,
+        "checks": [
+          {
+            "type": "result_title",
+            "text": "Arquitectura local-first"
+          }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "prompt": "Arquitectrua local-first",
+      "expected_output": "Con fuzzy, una errata en el título sigue encontrando la nota.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "search-fuzzy-typo",
+        "required": true,
+        "checks": [
+          {
+            "type": "result_title",
+            "text": "Arquitectura local-first"
+          }
+        ],
+        "params": {
+          "fuzzy": true
+        }
+      }
+    },
+    {
+      "id": 5,
+      "prompt": "zzzinexistente",
+      "expected_output": "Sin coincidencias, lista vacía.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "search-no-match",
+        "required": true,
+        "checks": [
+          {
+            "type": "results_count",
+            "min": 0,
+            "max": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "prompt": "status: draft",
+      "expected_output": "El frontmatter no se indexa como contenido.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "search-frontmatter-excluded",
+        "required": true,
+        "checks": [
+          {
+            "type": "results_count",
+            "min": 0,
+            "max": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "prompt": "tickets el viernes",
+      "expected_output": "Nota sin H1: el título es el nombre del fichero.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "search-title-fallback",
+        "required": true,
+        "checks": [
+          {
+            "type": "result_title",
+            "text": "2026-10-01"
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "prompt": "plan Pro",
+      "expected_output": "El filtro por fuente se aplica a las coincidencias por contenido y por título.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "search-source-filter",
+        "required": true,
+        "checks": [
+          {
+            "type": "results_count",
+            "min": 0,
+            "max": 0
+          }
+        ],
+        "params": {
+          "source": "repo"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "prompt": "Arquitectrua local-first",
+      "expected_output": "El filtro por fuente también se aplica a las coincidencias aproximadas (fuzzy).",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "search-source-filter-fuzzy",
+        "required": true,
+        "checks": [
+          {
+            "type": "results_count",
+            "min": 0,
+            "max": 0
+          }
+        ],
+        "params": {
+          "fuzzy": true,
+          "source": "repo"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "prompt": "DECISIÓN DE PRECIOS",
+      "expected_output": "Mayúsculas con tilde deberían encontrar 'Decisión de precios'.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "search-accent-uppercase",
+        "required": true,
+        "checks": [
+          {
+            "type": "results_count",
+            "min": 1
+          }
+        ]
+      }
+    }
+  ]
+}

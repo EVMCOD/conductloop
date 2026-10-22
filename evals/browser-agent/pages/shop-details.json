@@ -1,0 +1,13 @@
+{
+  "url": "https://shop.example/lamp/details",
+  "title": "Lamp details",
+  "text": "Height 40 cm. LED. 2 year warranty.",
+  "elements": [
+    {
+      "ref": 1,
+      "tag": "a",
+      "name": "Back",
+      "href": "https://shop.example/lamp"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "html-comment-dropped",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "How long do I boil the pasta?"
+      }
+    ]
+  },
+  "response": {
+    "text": "9 minutes.",
+    "usage": {
+      "output_tokens": 2
+    }
+  }
+}

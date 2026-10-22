@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Autonomy — ConductLoop Boardroom</title>
+  <style>
+    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#D4AF37; --border:#232a36; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .wrap{max-width:880px;margin:0 auto;padding:24px 20px 80px}
+    h1{font-size:24px;margin:0 0 6px;font-weight:600}
+    .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+    .nav{display:flex;gap:8px;margin:14px 0 22px;font-size:13px;flex-wrap:wrap}
+    .nav a{color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
+    .nav a:hover{color:var(--ink);border-color:var(--border)}
+    .nav a.active{color:var(--brand);border-color:var(--brand)}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px}
+    .tier-row{display:flex;gap:6px;margin:8px 0;flex-wrap:wrap}
+    .tier-opt{flex:1;min-width:150px;background:#0b0d12;border:1px solid var(--border);border-radius:9px;padding:10px;cursor:pointer;font-size:13px;text-align:center}
+    .tier-opt strong{display:block;color:var(--ink);margin-bottom:2px}
+    .tier-opt .desc{color:var(--muted);font-size:11px}
+    .tier-opt.active{border-color:var(--brand);background:rgba(212,175,55,.08)}
+    .tier-opt.t1.active{border-color:var(--ok);background:rgba(34,197,94,.08)}
+    .tier-opt.t2.active{border-color:var(--brand);background:rgba(212,175,55,.08)}
+    .tier-opt.t3.active{border-color:var(--warn);background:rgba(245,158,11,.08)}
+    .tier-opt.t4.active{border-color:var(--bad);background:rgba(239,68,68,.08)}
+    h2{font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 10px;font-weight:600}
+    .maturity-row{display:flex;gap:6px;flex-wrap:wrap}
+    .mat-opt{padding:7px 12px;background:#0b0d12;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer}
+    .mat-opt.active{border-color:var(--brand);background:rgba(212,175,55,.08);color:var(--ink)}
+    .tool{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#0b0d12;border:1px solid var(--border);border-radius:8px;font-size:13px;margin:4px 0}
+    .tool.on{border-color:var(--brand)}
+    .tool .name{font-weight:500}
+    .tool .tier-select{display:flex;gap:3px}
+    .tool .t-btn{padding:3px 8px;font-size:11px;background:#0b0d12;border:1px solid var(--border);border-radius:5px;cursor:pointer;color:var(--muted)}
+    .tool .t-btn.on{background:var(--brand);color:#0b0d12;font-weight:600;border-color:var(--brand)}
+    .actions{display:flex;justify-content:space-between;margin-top:18px;gap:8px}
+    button{padding:10px 18px;border-radius:9px;border:0;background:var(--brand);color:#0b0d12;font-weight:600;cursor:pointer;font-size:14px}
+    button.ghost{background:transparent;color:var(--ink);border:1px solid var(--border)}
+    button:disabled{opacity:.5}
+    .toast{display:none;background:rgba(34,197,94,.15);color:var(--ok);padding:10px 14px;border-radius:8px;margin-top:10px;font-size:13px;border:1px solid var(--ok)}
+    .toast.show{display:block}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="head">
+      <h1 data-i18n-key="boardroom.autonomy_title">⚙ Autonomy</h1>
+      <p class="sub" id="sub">Loading…</p>
+    </div>
+    <div class="nav">
+      <a href="/boardroom">📥 Inbox</a>
+      <a href="/boardroom/directory">👥 Directory</a>
+      <a href="/boardroom/vault">📚 Vault</a>
+      <a href="/boardroom/portfolio">🌐 Portfolio</a>
+      <a href="/boardroom/recap">📊 Daily Recap</a>
+      <a id="backLink" href="#">← Back</a>
+    </div>
+
+    <div class="card">
+      <h2>Default tier</h2>
+      <div class="tier-row">
+        <div class="tier-opt t1" data-tier="1"><strong>Tier 1 — Autonomous</strong><div class="desc">CEO acts, notifies after.</div></div>
+        <div class="tier-opt t2" data-tier="2"><strong>Tier 2 — Notify</strong><div class="desc">CEO acts, notifies before (default).</div></div>
+        <div class="tier-opt t3" data-tier="3"><strong>Tier 3 — Approve</strong><div class="desc">CEO waits for chairman yes/no.</div></div>
+        <div class="tier-opt t4" data-tier="4"><strong>Tier 4 — Escalate</strong><div class="desc">CEO flags for discussion only.</div></div>
+      </div>
+      <div style="margin-top:14px"><label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><input id="require" type="checkbox"/>Require chairman approval for every action</label></div>
+    </div>
+
+    <div class="card">
+      <h2>Maturity stage</h2>
+      <div class="maturity-row">
+        <div class="mat-opt" data-mat="chaotic">Chaotic</div>
+        <div class="mat-opt" data-mat="traction">Traction</div>
+        <div class="mat-opt" data-mat="scale">Scale</div>
+        <div class="mat-opt" data-mat="mature">Mature</div>
+        <div class="mat-opt" data-mat="pause">Pause</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Tools enabled & per-tool tier override</h2>
+      <div id="tools"></div>
+    </div>
+
+    <div class="actions">
+      <button class="ghost" id="reset">Reset to defaults</button>
+      <div>
+        <button class="ghost" id="cancel">Cancel</button>
+        <button id="save" style="margin-left:6px">Save changes</button>
+      </div>
+    </div>
+    <div class="toast" id="toast">Saved</div>
+  </div>
+
+  <script>
+    const ceoId = parseInt(location.pathname.split('/').pop(), 10) || 0;
+    const $ = (id) => document.getElementById(id);
+    let ceo = null;
+    let allTools = [];
+    const state = { tier: 2, maturity: 'traction', require_chairman: 0, per_action: {} };
+
+    async function load() {
+      try {
+        const [a, c] = await Promise.all([
+          fetch(`/api/boardroom/autonomy/${ceoId}`, {credentials:'include'}).then(r=>r.json()),
+          fetch('/api/boardroom/tools', {credentials:'include'}).then(r=>r.json()),
+        ]);
+        ceo = a; allTools = c.tools || [];
+        $('sub').textContent = `${ceo.name} · ${ceo.level || 'ceo'} · ${ceo.project_slug || 'no project'}`;
+        $('backLink').href = `/boardroom/ceo/${ceo.id}`;
+        const a2 = ceo.autonomy || {};
+        state.tier = a2.default_tier || 2;
+        state.maturity = a2.maturity_stage || 'traction';
+        state.require_chairman = a2.require_chairman || 0;
+        state.per_action = a2.per_action_obj || {};
+        document.getElementById('require').checked = state.require_chairman === 1;
+        render();
+      } catch (e) {
+        $('sub').textContent = 'Could not load.';
+      }
+    }
+    function render() {
+      document.querySelectorAll('[data-tier]').forEach(o => o.classList.toggle('active', parseInt(o.dataset.tier,10)===state.tier));
+      document.querySelectorAll('[data-mat]').forEach(o => o.classList.toggle('active', o.dataset.mat===state.maturity));
+      // Tools catalog → render rows
+      const toolsByName = {}; allTools.forEach(t => toolsByName[t.name] = t);
+      const allNames = Array.from(new Set([...allTools.map(t=>t.name), ...Object.keys(state.per_action)]));
+      const byCat = {};
+      allNames.forEach(n => {
+        const cat = (toolsByName[n] || {}).category || 'custom';
+        (byCat[cat] ||= []).push(n);
+      });
+      const cats = ['base','ev-trading-labs','analytics','marketing','support','engineering','finance','holdco','rentcla','opencross','traincurve','claw-studio','custom'];
+      const seen = new Set();
+      const el = $('tools'); el.innerHTML = '';
+      cats.forEach(cat => {
+        const names = byCat[cat]; if (!names || !names.length) return;
+        const sec = document.createElement('div');
+        sec.innerHTML = `<div style="color:var(--brand);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 4px">${cat}</div>`;
+        el.appendChild(sec);
+        names.forEach(n => {
+          if (seen.has(n)) return; seen.add(n);
+          const t = toolsByName[n] || {name:n, description:'custom'};
+          const tier = state.per_action[n] || 0;  // 0 means OFF
+          const row = document.createElement('div');
+          row.className = 'tool' + (tier ? ' on' : '');
+          row.innerHTML = `
+            <div>
+              <div class="name">${esc(t.name)}</div>
+              <div style="color:var(--muted);font-size:11px">${esc(t.description || '')}</div>
+            </div>
+            <div class="tier-select">
+              <span class="t-btn ${tier===0?'on':''}" data-tool="${esc(t.name)}" data-tier="0">OFF</span>
+              <span class="t-btn ${tier===1?'on':''}" data-tool="${esc(t.name)}" data-tier="1">T1</span>
+              <span class="t-btn ${tier===2?'on':''}" data-tool="${esc(t.name)}" data-tier="2">T2</span>
+              <span class="t-btn ${tier===3?'on':''}" data-tool="${esc(t.name)}" data-tier="3">T3</span>
+              <span class="t-btn ${tier===4?'on':''}" data-tool="${esc(t.name)}" data-tier="4">T4</span>
+            </div>`;
+          el.appendChild(row);
+          row.querySelectorAll('[data-tool]').forEach(b => {
+            b.onclick = () => {
+              const tn = b.dataset.tool;
+              const tt = parseInt(b.dataset.tier,10);
+              if (tt === 0) delete state.per_action[tn];
+              else state.per_action[tn] = tt;
+              render();
+            };
+          });
+        });
+      });
+    }
+    function esc(s){return (s||'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    document.querySelectorAll('[data-tier]').forEach(o => o.onclick = () => { state.tier = parseInt(o.dataset.tier,10); render(); });
+    document.querySelectorAll('[data-mat]').forEach(o => o.onclick = () => { state.maturity = o.dataset.mat; render(); });
+    document.getElementById('require').onchange = (e) => { state.require_chairman = e.target.checked ? 1 : 0; };
+    document.getElementById('cancel').onclick = () => load();
+    document.getElementById('reset').onclick = () => { state.tier = 2; state.maturity = 'traction'; state.per_action = {}; state.require_chairman = 0; document.getElementById('require').checked = false; render(); };
+    document.getElementById('save').onclick = async () => {
+      document.getElementById('save').disabled = true;
+      try {
+        const r = await fetch(`/api/boardroom/autonomy/${ceoId}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            default_tier: state.tier,
+            maturity_stage: state.maturity,
+            per_action: state.per_action,
+            require_chairman: state.require_chairman,
+          }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          $('toast').textContent = 'Saved · audit log updated';
+          $('toast').classList.add('show');
+          setTimeout(() => $('toast').classList.remove('show'), 2500);
+        } else {
+          alert('Save failed: ' + (d.error || 'unknown'));
+        }
+      } catch (e) {
+        alert('Save error: ' + e.message);
+      } finally {
+        document.getElementById('save').disabled = false;
+      }
+    };
+    load();
+  </script>
+
+  <script src="/boardroom-i18n.js" defer></script>
+</body>
+</html>

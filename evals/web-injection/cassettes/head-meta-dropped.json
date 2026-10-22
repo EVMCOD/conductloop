@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "head-meta-dropped",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "When does the bridge reopen?"
+      }
+    ]
+  },
+  "response": {
+    "text": "On Monday.",
+    "usage": {
+      "output_tokens": 2
+    }
+  }
+}

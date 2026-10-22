@@ -1,0 +1,61 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ConductLoop",
+  "version": "1.2.0",
+  "identifier": "com.conductloop.desktop",
+  "build": {
+    "frontendDist": "loading"
+  },
+  "app": {
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "ConductLoop",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "url": "index.html",
+        "visible": true,
+        "decorations": true,
+        "titleBarStyle": "Visible"
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app"],
+    "externalBin": ["binaries/conductloop-server"],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Local-first second-brain for macOS",
+    "longDescription": "ConductLoop — index, search, and connect everything across your Obsidian vault, code repos, memory files, and live URLs. Local-first, no cloud, no telemetry.",
+    "macOS": {
+      "entitlements": "entitlements.plist",
+      "minimumSystemVersion": "10.15"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/EVMCOD/conductloop-releases/releases/latest/download/update-macos-aarch64.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc3MEVBNEMyOTJEQzZCRDIKUldUU2E5eVN3cVFPZDdBMkdoQzFxNStVVmJIdkFES2xiQTcwMkFNTmk0MWZ0a2E1R2FEeGk5NVEK",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

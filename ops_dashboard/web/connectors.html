@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Conectores — ConductLoop</title>
+  <link rel="stylesheet" href="/connectors.css" />
+  <script src="/connectors.js" defer></script>
+  <script src="/connectors-guide.js" defer></script>
+  <script src="/connectors-sync.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1 data-i18n="title">Conectores</h1>
+      <p class="sub" data-i18n="subtitle">Conecta tus servicios. Los tokens se guardan solo en el llavero de este Mac.</p>
+    </div>
+    <nav class="nav">
+      <a href="/" data-i18n="nav_home">Panel</a>
+    </nav>
+  </header>
+  <div id="global-error" class="error" role="alert" hidden></div>
+  <div id="keychain-warning" class="banner warn" hidden data-i18n="keychain_off">No hay llavero del sistema disponible: no se puede conectar nada (los tokens nunca se guardan en un fichero).</div>
+
+  <main class="grid">
+    <section class="col-side">
+      <div class="card" id="privacy-card">
+        <h2 data-i18n="privacy">Privacidad y permisos</h2>
+        <ul class="list compact">
+          <li data-i18n="p_keychain">Tokens solo en el llavero del sistema; nunca en la base de datos ni en ficheros.</li>
+          <li data-i18n="p_scopes">Se piden los permisos mínimos: solo lectura salvo que actives la escritura.</li>
+          <li data-i18n="p_confirm">Cualquier escritura (enviar un correo, publicar un mensaje…) espera a que la confirmes aquí.</li>
+          <li data-i18n="p_telemetry">Sin telemetría: el registro de auditoría se queda en este Mac.</li>
+        </ul>
+        <p class="hint" id="legacy-hint" hidden></p>
+      </div>
+
+      <div class="card" id="pending-card">
+        <h2><span data-i18n="pending">Pendiente de confirmar</span> <span class="badge" id="pending-count">0</span></h2>
+        <p class="hint" id="pending-empty" data-i18n="no_pending">No hay escrituras pendientes.</p>
+        <ul class="list" id="pending-list"></ul>
+      </div>
+    </section>
+
+    <section class="col-main">
+      <div class="card" id="connectors-card">
+        <h2 data-i18n="connectors">Conectores</h2>
+        <p class="hint" id="connectors-empty" hidden data-i18n="no_connectors">Aún no hay conectores instalados. El marco está listo; los conectores (Google, Microsoft, Slack, Notion…) llegarán en próximas versiones.</p>
+        <div id="connectors-list"></div>
+      </div>
+
+      <div class="card" id="mcp-card">
+        <h2 data-i18n="mcp_title">Servidores MCP</h2>
+        <p class="hint" data-i18n="mcp_hint">Las herramientas son de solo lectura por defecto. Las que escriben o tienen efectos esperan tu confirmación. Lo que devuelven se trata como contenido no confiable.</p>
+        <div id="mcp-list"></div>
+        <details id="mcp-add">
+          <summary data-i18n="mcp_add">Añadir o editar un servidor</summary>
+          <div class="form">
+            <label class="hint"><span data-i18n="mcp_name">Nombre</span><input type="text" id="mcp-name" autocomplete="off" /></label>
+            <label class="hint"><span data-i18n="mcp_transport">Transporte</span>
+              <select id="mcp-transport"><option value="stdio">stdio</option><option value="http">Streamable HTTP</option></select></label>
+            <label class="hint" id="mcp-command-row"><span data-i18n="mcp_command">Comando (programa y argumentos, sin shell)</span><input type="text" id="mcp-command" autocomplete="off" /></label>
+            <label class="hint" id="mcp-url-row" hidden><span data-i18n="mcp_url">URL (https)</span><input type="text" id="mcp-url" autocomplete="off" /></label>
+            <label class="hint" id="mcp-env-row"><span data-i18n="mcp_env">Variables no secretas (CLAVE=valor, una por línea)</span><textarea id="mcp-env" rows="3"></textarea></label>
+            <div class="row" id="mcp-secret-row">
+              <label class="hint"><span data-i18n="mcp_secret_name">Variable secreta (al llavero)</span><input type="text" id="mcp-secret-name" autocomplete="off" /></label>
+              <label class="hint"><span data-i18n="mcp_secret_value">Valor</span><input type="password" id="mcp-secret-value" autocomplete="off" /></label>
+            </div>
+            <label class="hint" id="mcp-token-row" hidden><span data-i18n="mcp_token">Token Bearer (al llavero)</span><input type="password" id="mcp-token" autocomplete="off" /></label>
+            <div class="row"><button type="button" id="mcp-save" data-i18n="save">Guardar</button></div>
+          </div>
+        </details>
+      </div>
+      <!-- BYOK guide (connectors-guide.js): how to create your own OAuth app per provider. -->
+      <div class="card" id="guide-card" data-testid="guide"></div>
+
+      <div class="card" id="audit-card">
+        <div class="row between">
+          <h2 data-i18n="audit">Registro de auditoría (local)</h2>
+          <button class="ghost small" id="audit-refresh" type="button" data-i18n="refresh">Actualizar</button>
+        </div>
+        <table class="table">
+          <thead><tr><th data-i18n="when">Cuándo</th><th data-i18n="connector">Conector</th><th data-i18n="event">Evento</th><th data-i18n="detail">Detalle</th></tr></thead>
+          <tbody id="audit-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <!-- Token / no-auth connectors (cards rendered through window.CLToken). -->
+  <script src="/connectors-token.js" defer></script>
+</body>
+</html>

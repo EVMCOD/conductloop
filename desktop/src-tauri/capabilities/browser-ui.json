@@ -1,0 +1,28 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "browser-ui",
+  "description": "Browser tab controls for the ConductLoop UI (webview `main`, served by the local server at http://localhost:7777). Remote-only (local: false). Only the browser_* commands. Browser tabs (tab-*) match no capability and get no IPC.",
+  "webviews": [
+    "main"
+  ],
+  "local": false,
+  "remote": {
+    "urls": [
+      "http://localhost:7777/*"
+    ]
+  },
+  "permissions": [
+    "allow-browser-open",
+    "allow-browser-navigate",
+    "allow-browser-back",
+    "allow-browser-forward",
+    "allow-browser-reload",
+    "allow-browser-close",
+    "allow-browser-activate",
+    "allow-browser-set-bounds",
+    "allow-browser-set-visible",
+    "allow-browser-list",
+    "allow-browser-extract",
+    "allow-browser-agent-control"
+  ]
+}

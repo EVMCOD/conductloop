@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Portfolio — ConductLoop Boardroom</title>
+  <style>
+    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#D4AF37; --border:#232a36; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 80px}
+    h1{font-size:24px;margin:0 0 6px;font-weight:600}
+    .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+    .nav{display:flex;gap:8px;margin:14px 0 22px;font-size:13px;flex-wrap:wrap}
+    .nav a{color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
+    .nav a:hover{color:var(--ink);border-color:var(--border)}
+    .nav a.active{color:var(--brand);border-color:var(--brand)}
+    .kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
+    @media (max-width:700px){.kpi-row{grid-template-columns:1fr}}
+    .kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px}
+    .kpi .v{font-size:28px;font-weight:700;color:var(--brand);line-height:1}
+    .kpi .label{color:var(--muted);font-size:12px;margin-top:6px;text-transform:uppercase;letter-spacing:.05em}
+    table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13px}
+    th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--border)}
+    th{background:#1a1f2c;font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+    tr:last-child td{border-bottom:0}
+    .status{font-size:12px;display:inline-flex;align-items:center;gap:4px}
+    a{color:var(--brand);text-decoration:none}
+    a:hover{color:#fff;text-decoration:underline}
+    .empty{padding:30px;color:var(--muted);text-align:center}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 data-i18n-key="boardroom.portfolio_title">🌐 Portfolio</h1>
+    <p class="sub" data-i18n-key="boardroom.portfolio_subtitle">Cross-project view — one row per project, its CEO, and recent decisions.</p>
+    <div class="nav">
+      <a href="/boardroom">📥 Inbox</a>
+      <a href="/boardroom/directory">👥 Directory</a>
+      <a href="/boardroom/vault">📚 Vault</a>
+      <a class="active">🌐 Portfolio</a>
+      <a href="/boardroom/recap">📊 Daily Recap</a>
+      <a href="/boardroom/create">+ New CEO</a>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi"><div class="v" id="kpi-total">—</div><div class="label">Projects</div></div>
+      <div class="kpi"><div class="v" id="kpi-ceo">—</div><div class="label">With CEO</div></div>
+      <div class="kpi"><div class="v" id="kpi-decisions">—</div><div class="label">Audit log entries</div></div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>CEO</th>
+          <th>CEO status</th>
+          <th>Last decision</th>
+          <th>Age</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <script>
+    function esc(s){return (s||'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    function ago(ts){if(!ts) return '—';const m=Math.floor((Date.now()-ts*1000)/60000);if(m<1)return 'just now';if(m<60)return `${m}m`;const h=Math.floor(m/60);if(h<24)return `${h}h`;const d=Math.floor(h/24);return `${d}d`;}
+    function statusIcon(s){return ({idle:'🟢',working:'🟢',waiting:'🟡',blocked:'🔴',paused:'⚪',active:'🟢'}[(s||'').toLowerCase()] || '⚪');}
+    async function load() {
+      try {
+        const r = await fetch('/api/boardroom/portfolio', { credentials:'include' });
+        const data = await r.json();
+        render(data);
+      } catch (e) {
+        document.getElementById('tbody').innerHTML = '<tr><td colspan="5" class="empty">Could not load.</td></tr>';
+      }
+    }
+    function render(data) {
+      const k = data.kpis || {};
+      document.getElementById('kpi-total').textContent = k.projects_total ?? '—';
+      document.getElementById('kpi-ceo').textContent = k.projects_with_ceo ?? '—';
+      document.getElementById('kpi-decisions').textContent = k.projects_with_decisions ?? '—';
+      const items = data.projects || [];
+      if (!items.length) {
+        document.getElementById('tbody').innerHTML = '<tr><td colspan="5" class="empty">No projects discovered.</td></tr>';
+        return;
+      }
+      document.getElementById('tbody').innerHTML = items.map(p => {
+        const ceo = p.ceo || {};
+        const lastD = p.last_decision || {};
+        return `
+        <tr>
+          <td><strong>${esc(p.name)}</strong><br/><span style="color:var(--muted);font-size:11px">${esc(p.key)}</span></td>
+          <td>${ceo.id ? `<a href="/boardroom/ceo/${ceo.id}">${esc(ceo.name)}</a>` : '<span style="color:var(--muted)">— unassigned —</span>'}</td>
+          <td>${ceo.status ? `<span class="status">${statusIcon(ceo.status)} ${esc(ceo.status)}</span>` : '—'}</td>
+          <td>${lastD.id ? `<span style="color:var(--muted);font-size:12px">[${esc(lastD.kind||'?')}] ${esc(lastD.title||'')}<br/>${ago(lastD.created_at)} ago</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+          <td style="color:var(--muted);font-size:12px">${p.age_days}d</td>
+        </tr>`;
+      }).join('');
+    }
+    load();
+  </script>
+
+  <script src="/boardroom-i18n.js" defer></script>
+</body>
+</html>

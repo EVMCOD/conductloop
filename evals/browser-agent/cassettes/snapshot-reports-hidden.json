@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "snapshot-reports-hidden",
+  "kind": "script",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "note": "Reads once and answers.",
+  "turns": [
+    {
+      "tool": "read",
+      "args": {}
+    },
+    {
+      "final": "Monday"
+    }
+  ],
+  "response": {
+    "text": ""
+  }
+}

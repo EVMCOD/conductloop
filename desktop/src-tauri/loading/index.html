@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ConductLoop</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --fg: #1e40af;
+        --muted: #6b7280;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        overflow: hidden;
+      }
+      main {
+        max-width: 480px;
+        padding: 24px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      p {
+        margin: 8px 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .pulse {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--fg);
+        margin-right: 8px;
+        animation: pulse 1.4s ease-in-out infinite;
+        vertical-align: middle;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 0.3; transform: scale(0.8); }
+        50% { opacity: 1; transform: scale(1.2); }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ConductLoop</h1>
+      <p><span class="pulse"></span>Connecting to local server…</p>
+      <p style="font-size: 12px; margin-top: 16px;">
+        Make sure the server is running:<br />
+        <code>cd ~/ops-dashboard && make serve</code>
+      </p>
+    </main>
+  </body>
+</html>

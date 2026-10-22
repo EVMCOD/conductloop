@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "rag-lean-build-guard",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "¿Qué escribí sobre la boda de mi prima en Sevilla?"
+      }
+    ]
+  },
+  "response": {
+    "text": "No tengo información sobre eso en tu vault.",
+    "usage": {
+      "output_tokens": 12
+    }
+  }
+}

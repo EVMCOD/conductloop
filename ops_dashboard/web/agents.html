@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agents — ConductLoop</title>
+  <style>
+    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#6366f1; --border:#232a36; --ok:#22c55e; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .wrap{max-width:560px;margin:0 auto;padding:32px 20px 64px}
+    h1{font-size:22px;margin:0 0 4px}
+    p.sub{color:var(--muted);margin:0 0 24px;font-size:14px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:16px}
+    label{display:block;font-size:12px;color:var(--muted);margin:12px 0 4px}
+    input,select,textarea{width:100%;background:#0b0d12;border:1px solid var(--border);color:var(--ink);border-radius:8px;padding:9px 11px;font-size:14px;font-family:inherit}
+    button{background:var(--brand);color:#fff;border:0;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;margin-top:16px}
+    button:disabled{opacity:.5}
+    .agent{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)}
+    .agent:last-child{border-bottom:0}
+    .pill{font-size:11px;color:var(--muted);background:#0b0d12;border:1px solid var(--border);border-radius:999px;padding:2px 8px}
+    .hint{font-size:12px;color:var(--muted);margin-top:10px}
+    a{color:var(--brand)}
+    .two{display:flex;gap:10px}.two>div{flex:1}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🤖 Agents</h1>
+    <p class="sub">Create an AI agent. It runs on your connected provider (<a href="/ai">Connect AI</a>), can use tools, and writes results back into your knowledge graph.</p>
+    <div style="display:flex;gap:14px;margin-bottom:18px;font-size:13px"><a href="/ai">Connect AI</a><a href="/agents">Agents</a><a href="/runs">Runs</a></div>
+
+    <div class="card">
+      <strong style="font-size:14px">Your agents</strong>
+      <div id="list" style="margin-top:10px"><span class="hint">Loading…</span></div>
+    </div>
+
+    <div class="card">
+      <strong style="font-size:14px">New agent</strong>
+      <label>Name</label>
+      <input id="name" placeholder="e.g. Weekly Brief Bot" />
+      <div class="two">
+        <div><label>Role</label><input id="role" value="agent" /></div>
+        <div><label>Model / provider</label><input id="model" value="minimax" /></div>
+      </div>
+      <label>Team</label>
+      <select id="team"></select>
+      <label>Capabilities <span style="opacity:.6">(what it can do)</span></label>
+      <input id="capabilities" placeholder="e.g. search vault, summarize, write weekly brief" />
+      <label>Schedule (cron) <span style="opacity:.6">(optional)</span></label>
+      <input id="cron" placeholder="0 9 * * 1   (Mondays 09:00)" />
+      <label>Task prompt <span style="opacity:.6">(runs on schedule)</span></label>
+      <textarea id="prompt" rows="3" placeholder="Search the vault for changes this week and write a 3-bullet brief. Call write_artifact when done."></textarea>
+      <button id="create">Create agent</button>
+      <div class="hint">With a cron + prompt, the scheduler wakes it automatically. Leave them blank for an on-demand agent.</div>
+    </div>
+  </div>
+
+  <script>
+    let teams = [];
+    async function load(){
+      try{
+        teams = await (await fetch('/api/teams')).json();
+        const sel = document.getElementById('team');
+        const squad = teams.find(t=>t.key==='ai-squad') || teams[0];
+        sel.innerHTML = teams.map(t=>'<option value="'+t.id+'"'+(squad&&t.id===squad.id?' selected':'')+'>'+t.name+'</option>').join('');
+      }catch(e){}
+      try{
+        const members = await (await fetch('/api/members')).json();
+        const agents = members.filter(m=>m.type==='ai_agent');
+        const el = document.getElementById('list');
+        el.innerHTML = agents.length ? agents.map(a=>
+          '<div class="agent"><div><strong>'+a.name+'</strong> <span class="hint">'+(a.capabilities||a.role||'')+'</span></div>'+
+          '<span class="pill">'+(a.model||'—')+'</span></div>').join('')
+          : '<span class="hint">No agents yet.</span>';
+      }catch(e){ document.getElementById('list').innerHTML='<span class="hint">Could not load.</span>'; }
+    }
+    document.getElementById('create').onclick = async () => {
+      const btn=document.getElementById('create'); btn.disabled=true; btn.textContent='Creating…';
+      try{
+        const body={
+          name: document.getElementById('name').value.trim(),
+          role: document.getElementById('role').value.trim()||'agent',
+          model: document.getElementById('model').value.trim()||'minimax',
+          team_id: Number(document.getElementById('team').value)||null,
+          capabilities: document.getElementById('capabilities').value.trim()||null,
+          trigger_cron: document.getElementById('cron').value.trim()||null,
+          prompt: document.getElementById('prompt').value.trim()||null,
+        };
+        if(!body.name){ alert('Name required'); return; }
+        const r=await fetch('/api/agents/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const d=await r.json();
+        if(!d.ok) throw new Error(d.error||'failed');
+        document.getElementById('name').value=''; document.getElementById('capabilities').value='';
+        document.getElementById('cron').value=''; document.getElementById('prompt').value='';
+        await load();
+        alert('Agent created.');
+      }catch(e){ alert('Error: '+e.message); }
+      finally{ btn.disabled=false; btn.textContent='Create agent'; }
+    };
+    load();
+  </script>
+</body>
+</html>

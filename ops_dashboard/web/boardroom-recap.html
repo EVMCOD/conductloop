@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Daily Recap — ConductLoop</title>
+  <style>
+    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#D4AF37; --border:#232a36; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .wrap{max-width:760px;margin:0 auto;padding:24px 20px 80px}
+    .head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px}
+    h1{font-size:24px;margin:0;font-weight:600}
+    .sub{color:var(--muted);font-size:13px;margin:2px 0 0}
+    .nav{display:flex;gap:8px;margin:18px 0;font-size:13px;flex-wrap:wrap}
+    .nav a{color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
+    .nav a:hover{color:var(--ink);border-color:var(--border)}
+    .nav a.active{color:var(--brand);border-color:var(--brand)}
+    section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}
+    h2{font-size:14px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin:0 0 10px;font-weight:600}
+    .kpi{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:14px}
+    .kpi:last-child{border-bottom:0}
+    .kpi .v{font-weight:600;color:var(--ink)}
+    .kpi .v.bad{color:var(--bad)}
+    .kpi .v.ok{color:var(--ok)}
+    .kpi .v.warn{color:var(--warn)}
+    .ceo-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--border);font-size:14px}
+    .ceo-row:last-child{border-bottom:0}
+    .ceo-row a{color:var(--ink);text-decoration:none}
+    .ceo-row a:hover{color:var(--brand)}
+    .icon{font-size:13px;width:18px;display:inline-block}
+    .empty{color:var(--muted);font-size:13px;padding:24px;text-align:center}
+    .note{background:#1a1f2c;border:1px solid #2a3142;border-radius:10px;padding:12px;font-size:13px;line-height:1.55;color:var(--ink)}
+    .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;margin-left:6px}
+    .badge.ok{background:rgba(34,197,94,.15);color:var(--ok)}
+    .badge.warn{background:rgba(245,158,11,.15);color:var(--warn)}
+    .badge.bad{background:rgba(239,68,68,.15);color:var(--bad)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <h1 data-i18n-key="boardroom.recap_title">📊 Daily Recap</h1>
+        <p class="sub" id="sub">—</p>
+      </div>
+      <a class="badge" href="/boardroom" style="color:var(--muted);text-decoration:none">← Inbox</a>
+    </div>
+
+    <div class="nav">
+      <a href="/boardroom">📥 Inbox</a>
+      <a href="/boardroom/directory">👥 Directory</a>
+      <a href="/boardroom/vault">📚 Vault</a>
+      <a href="/boardroom/portfolio">🌐 Portfolio</a>
+      <a class="active">📊 Daily Recap</a>
+      <a href="/boardroom/create">+ New CEO</a>
+    </div>
+
+    <section>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px">
+        <h2 style="margin:0" data-i18n-key="boardroom.recap_top_of_mind">🚨 Top of mind · Holding CEO synthesis</h2>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="source-badge" id="sourceBadge" style="display:none"></span>
+          <button class="ghost" id="refreshBtn" style="font-size:11px;padding:4px 10px">↻ Regenerate</button>
+        </div>
+      </div>
+      <div class="note" id="topOfMind" style="white-space:pre-wrap">Loading Holding CEO synthesis…</div>
+    </section>
+
+    <section>
+      <h2 data-i18n-key="boardroom.recap_ceo_rollup">📈 C-Suite rollup</h2>
+      <div id="ceos"><div class="empty">No CEOs yet.</div></div>
+    </section>
+
+    <section>
+      <h2 data-i18n-key="boardroom.recap_recent_threads">🗨️ Recent CEO threads (7d)</h2>
+      <div id="messages"><div class="empty">No recent messages.</div></div>
+    </section>
+
+    <section>
+      <h2 data-i18n-key="boardroom.recap_recommendations">🎯 Today · Holding CEO recommendations</h2>
+      <div class="note" id="recs">
+        <ul style="margin:0;padding-left:18px;color:var(--ink)">
+          <li>Triage any 🟡 waiting CEOs — they may be paused on a chairman decision.</li>
+          <li>Resolve any 🔴 blocked CEOs first — they cannot proceed without input.</li>
+          <li>Talk to Holding CEO about portfolio-level changes (one-off).</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2 data-i18n-key="boardroom.recap_projects_section">📚 Projects on file</h2>
+      <div id="projects"><div class="empty">No projects discovered.</div></div>
+    </section>
+  </div>
+
+  <script>
+    function escapeHtml(s) { return (s || '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function statusIcon(s) { const m = { idle:'🟢', working:'🟢', waiting:'🟡', blocked:'🔴', paused:'⚪', active:'🟢' }; return m[(s||'').toLowerCase()] || '⚪'; }
+    function statusClass(s) { const x=(s||'').toLowerCase(); if (x==='blocked') return 'bad'; if (x==='waiting') return 'warn'; if (x==='paused') return ''; return 'ok'; }
+    function ago(ts) {
+      const diff = Math.max(0, Date.now() - ts * 1000);
+      const m = Math.floor(diff / 60000);
+      if (m < 1) return 'just now';
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h}h ago`;
+      const d = Math.floor(h / 24);
+      return `${d}d ago`;
+    }
+    const $ = (id) => document.getElementById(id);
+    async function load() {
+      let data;
+      try {
+        const r = await fetch('/api/boardroom/recap', { credentials: 'include' });
+        data = await r.json();
+      } catch (e) {
+        document.body.insertAdjacentHTML('beforeend', '<div class="empty">Could not load recap.</div>');
+        return;
+      }
+      render(data);
+    }
+    function render(data) {
+      $('sub').textContent = `Generated ${ago(data.generated_at)}`;
+      // Top of mind: Holding CEO synthesis (LLM-cached)
+      const syn = data.synthesis || {};
+      const text = syn.text || '(no synthesis yet)';
+      $('topOfMind').textContent = text;
+      const badge = $('sourceBadge');
+      if (syn.source === 'llm') {
+        badge.textContent = 'LLM · ' + (syn.provider || '?') + (syn.cached ? ' · cached' : '');
+        badge.style.cssText = 'display:inline-block;padding:2px 7px;border-radius:5px;font-size:10px;background:rgba(34,197,94,.15);color:var(--ok);text-transform:uppercase;letter-spacing:.05em;font-weight:600';
+      } else if (syn.source === 'static') {
+        badge.textContent = 'STATIC (no BYOK provider)';
+        badge.style.cssText = 'display:inline-block;padding:2px 7px;border-radius:5px;font-size:10px;background:rgba(245,158,11,.15);color:var(--warn);text-transform:uppercase;letter-spacing:.05em;font-weight:600';
+      } else {
+        badge.style.display = 'none';
+      }
+      // CEOs
+      const ceosEl = $('ceos');
+      if (!data.ceos || !data.ceos.length) {
+        ceosEl.innerHTML = '<div class="empty">No CEOs yet. Create one to start.</div>';
+      } else {
+        ceosEl.innerHTML = data.ceos.map(c => `
+          <div class="ceo-row">
+            <a href="/boardroom/ceo/${c.id}">
+              <span class="icon">${statusIcon(c.status)}</span>${escapeHtml(c.name)}
+              <span class="badge ${statusClass(c.status)}">${escapeHtml(c.status || 'idle')}</span>
+            </a>
+            <span style="color:var(--muted);font-size:12px">${c.project_slug || c.role || ''}</span>
+          </div>
+        `).join('');
+      }
+      // Messages
+      const msgEl = $('messages');
+      if (!data.recent_messages || !data.recent_messages.length) {
+        msgEl.innerHTML = '<div class="empty">No chairman ⇄ CEO messages in the last 7 days.</div>';
+      } else {
+        msgEl.innerHTML = data.recent_messages.map(m => `
+          <div class="ceo-row">
+            <a href="/boardroom/ceo/${m.member_id || ''}" style="flex:1">
+              <strong>${escapeHtml(m.ceo_name || 'CEO')}</strong>: ${escapeHtml((m.content || '').slice(0,140))}
+            </a>
+            <span style="color:var(--muted);font-size:12px">${ago(m.created_at)}</span>
+          </div>
+        `).join('');
+      }
+      // Projects
+      const prEl = $('projects');
+      if (!data.projects || !data.projects.length) {
+        prEl.innerHTML = '<div class="empty">No projects discovered.</div>';
+      } else {
+        prEl.innerHTML = data.projects.map(p => `
+          <div class="ceo-row">
+            <span>${escapeHtml(p.name)}</span>
+            <span style="color:var(--muted);font-size:12px">${escapeHtml(p.key || '')}</span>
+          </div>
+        `).join('');
+      }
+    }
+    $('refreshBtn').onclick = async () => {
+      $('refreshBtn').disabled = true;
+      $('refreshBtn').textContent = '⟳ Regenerating...';
+      try {
+        const r = await fetch('/api/boardroom/recap/refresh', { method:'POST', credentials:'include' });
+        const d = await r.json();
+        if (d.synthesis && d.synthesis.text) {
+          // Reload the whole recap to get fresh data + the new synthesis
+          await load();
+        } else {
+          alert('Refresh failed');
+        }
+      } catch (e) {
+        alert('Refresh error: ' + e.message);
+      } finally {
+        $('refreshBtn').disabled = false;
+        $('refreshBtn').textContent = '↻ Regenerate';
+      }
+    };
+    load();
+  </script>
+
+  <script src="/boardroom-i18n.js" defer></script>
+</body>
+</html>
