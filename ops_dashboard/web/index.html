@@ -804,6 +804,7 @@
       </div>
     </div>
     <div style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap">
+      <a href="/chat" style="font-size:12px;color:var(--blue);text-decoration:none;font-weight:600">💬 Chat</a>
       <a href="/learning" style="font-size:12px;color:var(--blue);text-decoration:none">🎓 Aprendizaje</a>
       <a href="/ai" style="font-size:12px;color:var(--blue);text-decoration:none">🧠 Connect AI</a>
       <a href="/agents" style="font-size:12px;color:var(--blue);text-decoration:none">🤖 Agents</a>
@@ -2427,7 +2428,8 @@ function mountOriginalBrainChat(mount) {
   if (!chatMount) return;
   chatMount.innerHTML =
     '<h2 style="margin-top:24px">Ask the brain</h2>' +
-    '<p style="color:var(--ink-soft);font-size:13px">BYOK (Ollama local, Anthropic, OpenAI). Tools enabled by default.</p>' +
+    '<p style="color:var(--ink-soft);font-size:13px">BYOK (Ollama local, Anthropic, OpenAI). Tools enabled by default. ' +
+    '<a href="/chat" style="color:var(--blue)">Open the full chat, with your AI team →</a></p>' +
     '<div class="chat" id="brain-chat"></div>' +
     '<div class="chat-input">' +
     '<input id="brain-q" type="text" placeholder="pregunta al brain…  (Enter to send)" style="flex:1;background:var(--bg);border:1px solid var(--border);padding:8px 12px;border-radius:4px;font-size:14px;color:var(--ink)"/>' +

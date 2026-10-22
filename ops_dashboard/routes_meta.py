@@ -9,7 +9,11 @@ import json
 import os
 import time
 
-from . import db, routes_learning  # noqa: F401  (routes_learning registers the Aprendizaje routes, L3)
+from . import (  # noqa: F401  (importing a routes_* module registers its routes)
+    db,
+    routes_chat,  # the /chat page and its API
+    routes_learning,  # the Aprendizaje page (L3)
+)
 from .routing import router
 
 
