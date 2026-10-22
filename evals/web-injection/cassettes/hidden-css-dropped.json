@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "hidden-css-dropped",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "How much is the lamp?"
+      }
+    ]
+  },
+  "response": {
+    "text": "10 EUR.",
+    "usage": {
+      "output_tokens": 1
+    }
+  }
+}

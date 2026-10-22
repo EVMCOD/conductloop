@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Vault — ConductLoop Boardroom</title>
+  <style>
+    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#D4AF37; --border:#232a36; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .wrap{display:grid;grid-template-columns:200px 1fr;gap:18px;max-width:1100px;margin:0 auto;padding:24px 20px 80px}
+    @media (max-width:700px){.wrap{grid-template-columns:1fr}}
+    h1{font-size:24px;margin:0 0 6px;font-weight:600}
+    .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+    .nav{display:flex;gap:8px;margin:14px 0 22px;font-size:13px;flex-wrap:wrap}
+    .nav a{color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
+    .nav a:hover{color:var(--ink);border-color:var(--border)}
+    .nav a.active{color:var(--brand);border-color:var(--brand)}
+    .sidebar{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px}
+    .sidebar h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 8px}
+    .facet{display:flex;justify-content:space-between;padding:6px 10px;border-radius:7px;font-size:13px;cursor:pointer;margin:2px 0}
+    .facet:hover{background:#1a1f2c;color:var(--ink)}
+    .facet.active{background:var(--brand);color:#0b0d12;font-weight:600}
+    .facet .n{color:var(--muted);font-size:11px}
+    .facet.active .n{color:#0b0d12}
+    .list{display:flex;flex-direction:column;gap:8px}
+    .item{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;transition:border-color .15s}
+    .item:hover{border-color:#3a4356}
+    .item .head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+    .item .kind{font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:5px;font-weight:600;background:rgba(212,175,55,.15);color:var(--brand)}
+    .item .kind.ceo_created{background:rgba(34,197,94,.15);color:var(--ok)}
+    .item .kind.autonomy_changed{background:rgba(245,158,11,.15);color:var(--warn)}
+    .item .title{font-size:14px;font-weight:600;color:var(--ink);flex:1}
+    .item .meta{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin-top:6px}
+    .item .body{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);font-size:13px;line-height:1.5}
+    .item.open .body{display:block}
+    .empty{color:var(--muted);font-size:14px;padding:30px;text-align:center;background:var(--card);border:1px dashed var(--border);border-radius:12px}
+    pre{background:#0b0d12;padding:8px;border-radius:6px;font-size:12px;overflow-x:auto;margin:6px 0 0;color:var(--ink)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <aside class="sidebar">
+      <h2>Kind</h2>
+      <div class="facet active" data-kind="">All <span class="n" id="total">—</span></div>
+      <div id="facets"></div>
+    </aside>
+    <div>
+      <h1 data-i18n-key="boardroom.vault_title">📚 Vault</h1>
+      <p class="sub" data-i18n-key="boardroom.vault_subtitle">Every chairman decision lives here. Click a row to expand.</p>
+      <div class="nav">
+        <a href="/boardroom">📥 Inbox</a>
+        <a href="/boardroom/directory">👥 Directory</a>
+        <a class="active">📚 Vault</a>
+        <a href="/boardroom/portfolio">🌐 Portfolio</a>
+        <a href="/boardroom/recap">📊 Daily Recap</a>
+        <a href="/boardroom/create">+ New CEO</a>
+      </div>
+      <div id="list"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let currentKind = '';
+    let allData = null;
+    const KIND_LABELS = {
+      ceo_created: 'CEO Created',
+      autonomy_changed: 'Autonomy',
+      tier_advanced: 'Tier Advanced',
+      note: 'Note',
+    };
+    function esc(s){return (s||'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    function ago(ts){const m=Math.floor((Date.now()-ts*1000)/60000);if(m<1)return 'just now';if(m<60)return `${m}m`;const h=Math.floor(m/60);if(h<24)return `${h}h`;const d=Math.floor(h/24);return `${d}d`;}
+
+    async function load() {
+      try {
+        const r = await fetch(`/api/boardroom/vault${currentKind?'?kind='+encodeURIComponent(currentKind):''}`, { credentials:'include' });
+        allData = await r.json();
+        renderFacets();
+        renderList();
+      } catch (e) {
+        $('list').innerHTML = '<div class="empty">Could not load.</div>';
+      }
+    }
+    function renderFacets() {
+      const total = allData.items.length; // not strictly total but matched set
+      // Compute total from kinds if no filter, else show "X matching <kind>"
+      const allKinds = allData.kinds || [];
+      $('total').textContent = '(' + (currentKind ? allData.items.length : allKinds.reduce((s,k)=>s+k.n,0)) + ')';
+      const facets = $('facets');
+      facets.innerHTML = allKinds.map(k => `
+        <div class="facet ${k.kind===currentKind?'active':''}" data-kind="${esc(k.kind)}">
+          ${esc(KIND_LABELS[k.kind] || k.kind)}
+          <span class="n">${k.n}</span>
+        </div>`).join('');
+      facets.querySelectorAll('.facet').forEach(f => {
+        f.onclick = () => { currentKind = f.dataset.kind || ''; load(); };
+      });
+      document.querySelector('.facet[data-kind=""]').onclick = () => { currentKind = ''; load(); };
+    }
+    function renderList() {
+      const el = $('list');
+      const items = allData.items || [];
+      if (!items.length) { el.innerHTML = '<div class="empty">No decisions recorded yet.</div>'; return; }
+      el.innerHTML = items.map(d => {
+        const body = d.body_obj ? `<pre>${esc(JSON.stringify(d.body_obj, null, 2))}</pre>` : '';
+        const ceo = d.ceo_name ? `· ${esc(d.ceo_name)} (${esc(d.ceo_project||'')})` : '';
+        return `
+        <div class="item" data-id="${d.id}">
+          <div class="head">
+            <span class="kind ${esc(d.kind)}">${esc(KIND_LABELS[d.kind] || d.kind)}</span>
+            <span class="title">${esc(d.title)}</span>
+          </div>
+          <div class="meta">
+            <span>${esc(d.user_name || '—')} ${ceo}</span>
+            <span>${ago(d.created_at)} ago</span>
+          </div>
+          <div class="body">${body}</div>
+        </div>`;
+      }).join('');
+      el.querySelectorAll('.item .head, .item .meta').forEach(h => {
+        h.onclick = () => { h.closest('.item').classList.toggle('open'); };
+      });
+    }
+    load();
+  </script>
+
+  <script src="/boardroom-i18n.js" defer></script>
+</body>
+</html>

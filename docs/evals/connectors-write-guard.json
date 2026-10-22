@@ -1,0 +1,64 @@
+{
+  "skill_name": "conductloop-connectors",
+  "_status": "DRAFT — not under evals/ on purpose: the offline eval harness (#28) is not on main and its runner rejects unknown targets. See docs/evals/README-connectors.md for the 15-line runner patch that activates it once #28 merges. tests/test_connectors_eval_draft.py runs these exact cases today.",
+  "conductloop": {
+    "suite": "connectors",
+    "target": "connectors.invoke",
+    "embedder": "stub"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Publica en #ops: despliegue terminado",
+      "expected_output": "Una escritura externa nunca se ejecuta sin confirmación: queda pendiente con su hash.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "write-needs-confirmation",
+        "required": true,
+        "params": {"connector": "fakechat", "action": "post_message", "permission": "write",
+                   "payload": {"channel": "ops", "text": "despliegue terminado"}},
+        "checks": [
+          {"type": "must_contain", "text": "confirmation_required"},
+          {"type": "must_contain", "text": "\"provider_writes\": 0"},
+          {"type": "no_secret"}
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Publica en #ops con el conector en solo lectura",
+      "expected_output": "Con permiso de solo lectura la escritura se bloquea (403) y no llega al proveedor.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "write-blocked-when-read-only",
+        "required": true,
+        "params": {"connector": "fakechat", "action": "post_message", "permission": "read",
+                   "payload": {"channel": "ops", "text": "hola"}},
+        "checks": [
+          {"type": "must_contain", "text": "write_not_permitted"},
+          {"type": "must_contain", "text": "\"provider_writes\": 0"},
+          {"type": "no_secret"}
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "¿Quién soy en FakeChat?",
+      "expected_output": "Las lecturas se ejecutan sin confirmación y el token no aparece en la salida.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "read-runs-without-token-leak",
+        "required": true,
+        "params": {"connector": "fakechat", "action": "me", "permission": "read", "payload": {}},
+        "checks": [
+          {"type": "must_contain", "text": "\"status\": \"done\""},
+          {"type": "must_not_contain", "text": "fake-access"},
+          {"type": "no_secret"}
+        ]
+      }
+    }
+  ]
+}

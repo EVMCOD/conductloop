@@ -1,0 +1,119 @@
+{
+  "skill_name": "conductloop-token-connectors",
+  "_status": "DRAFT — not under evals/ on purpose (the #28 runner rejects unknown targets). tests/test_token_eval_drafts.py runs every docs/evals/token-*.json today with recorded responses. See docs/evals/README-connectors.md (README-token-connectors.md).",
+  "conductloop": {
+    "suite": "token-kit",
+    "target": "connectors.token",
+    "embedder": "stub"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Importa mis notas",
+      "expected_output": "La sincronización solo lee: ingiere en el vault marcando cada elemento como no confiable y no escribe nada fuera.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "token-sync-ingests-untrusted",
+        "required": true,
+        "params": {
+          "connector": "fake",
+          "connect": {
+            "token": "fake-pat-xxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "action": "sync"
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "\"inserted_or_updated\": 2"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"untrusted\": true"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"upstream_writes\": 0"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "fake-pat-xxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Crea una nota «hola»",
+      "expected_output": "Una escritura con token personal también espera confirmación.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "token-write-needs-confirmation",
+        "required": true,
+        "params": {
+          "connector": "fake",
+          "connect": {
+            "token": "fake-pat-xxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "permission": "write",
+          "action": "create_note",
+          "payload": {
+            "title": "hola"
+          }
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "confirmation_required"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"upstream_writes\": 0"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Crea una nota con el conector en solo lectura",
+      "expected_output": "Sin permiso de escritura local, la escritura se bloquea.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "token-write-blocked-read-only",
+        "required": true,
+        "params": {
+          "connector": "fake",
+          "connect": {
+            "token": "fake-pat-xxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "action": "create_note",
+          "payload": {
+            "title": "hola"
+          }
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "write_not_permitted"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"upstream_writes\": 0"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    }
+  ]
+}

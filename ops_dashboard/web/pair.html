@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pair a phone — ConductLoop</title>
+  <style>
+    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#6366f1; --border:#232a36; --ok:#22c55e; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }
+    .wrap { max-width:520px; margin:0 auto; padding:32px 20px 64px; }
+    h1 { font-size:22px; margin:0 0 4px; }
+    p.sub { color:var(--muted); margin:0 0 24px; font-size:14px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; margin-bottom:18px; }
+    button { background:var(--brand); color:#fff; border:0; border-radius:9px; padding:11px 18px; font-size:14px; font-weight:600; cursor:pointer; }
+    button.ghost { background:transparent; border:1px solid var(--border); color:var(--ink); padding:6px 12px; font-size:12px; }
+    button:disabled { opacity:.5; cursor:default; }
+    .qr { background:#fff; border-radius:12px; padding:14px; display:inline-block; }
+    .qr img { display:block; width:220px; height:220px; }
+    label { display:block; font-size:12px; color:var(--muted); margin:14px 0 4px; }
+    code { background:#0b0d12; border:1px solid var(--border); border-radius:6px; padding:2px 6px; font-size:12px; word-break:break-all; }
+    .hosts { font-size:13px; }
+    .hosts div { padding:2px 0; }
+    .warn { color:#fbbf24; font-size:12px; margin-top:10px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th,td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--border); }
+    th { color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+    .muted { color:var(--muted); }
+    .row { display:flex; gap:10px; align-items:center; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>📱 Pair a phone</h1>
+    <p class="sub">Generate a one-time code, scan it from the ConductLoop iOS app. The phone then connects to this machine over your network. Your data never leaves this device.</p>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <label style="margin:0">Device name</label>
+          <input id="dev-name" placeholder="iPhone" style="background:#0b0d12;border:1px solid var(--border);color:var(--ink);border-radius:8px;padding:8px 10px;font-size:14px;margin-top:4px" />
+        </div>
+        <button id="gen" style="align-self:flex-end">Generate QR</button>
+      </div>
+      <div id="result" style="display:none;margin-top:18px">
+        <div class="qr"><img id="qr-img" alt="pairing QR" /></div>
+        <label>Connect URLs (same Wi-Fi)</label>
+        <div class="hosts" id="hosts"></div>
+        <label>Token (shown once)</label>
+        <div><code id="tok"></code></div>
+        <p class="warn">⚠ Mobile access requires the server bound to your LAN. Start it with <code>OPS_ALLOW_MOBILE=1</code>. Otherwise the phone can't reach it.</p>
+        <p class="warn" style="color:#34d399">🌐 Remote access (outside your Wi-Fi): install <a href="https://tailscale.com" style="color:#34d399">Tailscale</a> on this computer and your phone (same account). The QR already includes your Tailscale address, so the app connects from anywhere — no ports, no cloud.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <strong style="font-size:14px">Paired devices</strong>
+        <button class="ghost" id="refresh">Refresh</button>
+      </div>
+      <table>
+        <thead><tr><th>Name</th><th>Paired</th><th>Last seen</th><th></th></tr></thead>
+        <tbody id="devices"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const fmt = (ts) => ts ? new Date(ts*1000).toLocaleString() : '—';
+
+    async function generate() {
+      const btn = document.getElementById('gen');
+      btn.disabled = true; btn.textContent = 'Generating…';
+      try {
+        const name = document.getElementById('dev-name').value || 'device';
+        const r = await fetch('/api/pair/start', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ name })
+        });
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'failed');
+        document.getElementById('qr-img').src = '/api/pair/qr.svg?data=' + encodeURIComponent(d.qr_payload);
+        document.getElementById('tok').textContent = d.token;
+        const hosts = document.getElementById('hosts');
+        hosts.innerHTML = (d.hosts && d.hosts.length)
+          ? d.hosts.map(h => '<div>'+h+'</div>').join('')
+          : '<div class="muted">No LAN address detected — is OPS_ALLOW_MOBILE=1 set?</div>';
+        document.getElementById('result').style.display = 'block';
+        loadDevices();
+      } catch (e) {
+        alert('Could not generate: ' + e.message);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Generate QR';
+      }
+    }
+
+    async function loadDevices() {
+      const tb = document.getElementById('devices');
+      try {
+        const r = await fetch('/api/pair/devices');
+        const list = await r.json();
+        if (!Array.isArray(list) || !list.length) {
+          tb.innerHTML = '<tr><td colspan="4" class="muted">No devices paired yet.</td></tr>';
+          return;
+        }
+        tb.innerHTML = list.map(d => {
+          const status = d.revoked ? '<span class="muted">revoked</span>'
+            : '<button class="ghost" data-revoke="'+d.id+'">Revoke</button>';
+          return '<tr><td>'+(d.name||'device')+'</td><td>'+fmt(d.created_at)+'</td><td>'+fmt(d.last_seen_at)+'</td><td>'+status+'</td></tr>';
+        }).join('');
+        tb.querySelectorAll('[data-revoke]').forEach(b => b.onclick = () => revoke(b.dataset.revoke));
+      } catch (e) {
+        tb.innerHTML = '<tr><td colspan="4" class="muted">Could not load.</td></tr>';
+      }
+    }
+
+    async function revoke(id) {
+      if (!confirm('Revoke this device? It will lose access immediately.')) return;
+      await fetch('/api/pair/revoke', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ id: Number(id) })
+      });
+      loadDevices();
+    }
+
+    document.getElementById('gen').onclick = generate;
+    document.getElementById('refresh').onclick = loadDevices;
+    loadDevices();
+  </script>
+</body>
+</html>

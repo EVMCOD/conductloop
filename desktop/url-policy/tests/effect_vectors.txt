@@ -1,0 +1,28 @@
+# Shared test vectors for the effect classifier (Rust: tests/effects.rs,
+# Python: tests/test_browser_act.py). One per line:
+# action | tag | type | role | name | autocomplete | in_form | href | payment | page_host | page_password | page_payment => expected
+# action: click | type | type+submit ; booleans: 0/1 ; empty field = empty string ; href "-" = none
+click | a |  |  | Docs |  | 0 | https://example.com/docs | 0 | www.example.com | 0 | 0 => allow
+click | a |  |  | Other site |  | 0 | https://evil.example/x | 0 | example.com | 0 | 0 => confirm:cross_domain
+click | a |  |  | js |  | 0 | javascript:alert(1) | 0 | example.com | 0 | 0 => confirm:non_http_link
+click | a |  |  | Anchor |  | 0 | - | 0 | example.com | 0 | 0 => allow
+click | button |  |  | Search |  | 1 | - | 0 | example.com | 0 | 0 => confirm:submit
+click | button | button |  | Show more |  | 1 | - | 0 | example.com | 0 | 0 => allow
+click | input | submit |  | Go |  | 1 | - | 0 | example.com | 0 | 0 => confirm:submit
+click | button | button |  | Comprar ahora |  | 0 | - | 0 | example.com | 0 | 0 => confirm:effect_verb
+click | div |  | button | Delete account |  | 0 | - | 0 | example.com | 0 | 0 => confirm:effect_verb
+click | button | button |  | Next |  | 0 | - | 0 | example.com | 1 | 0 => confirm:sensitive_page
+click | button | button |  | Next |  | 0 | - | 0 | example.com | 0 | 1 => confirm:sensitive_page
+click | button | button |  | Siguiente |  | 0 | - | 0 | example.com | 0 | 0 => allow
+click | input | password |  | Password |  | 1 | - | 0 | example.com | 1 | 0 => deny:password_field
+click | input | file |  | Upload |  | 1 | - | 0 | example.com | 0 | 0 => deny:password_field
+type | input | text |  | Search |  | 1 | - | 0 | example.com | 0 | 0 => allow
+type | input | search |  | Search |  | 0 | - | 0 | example.com | 0 | 0 => allow
+type+submit | input | text |  | Search |  | 1 | - | 0 | example.com | 0 | 0 => confirm:submit
+type | input | password |  | Password |  | 1 | - | 0 | example.com | 1 | 0 => deny:password_field
+type | input | text |  | Pass | current-password | 1 | - | 0 | example.com | 1 | 0 => deny:password_field
+type | input | text |  | Card | cc-number | 1 | - | 1 | example.com | 0 | 1 => confirm:payment_field
+type | input | email |  | Email |  | 1 | - | 0 | example.com | 1 | 0 => confirm:sensitive_page
+type | textarea |  |  | Comment |  | 1 | - | 0 | example.com | 0 | 0 => allow
+type | button |  |  | Buy |  | 0 | - | 0 | example.com | 0 | 0 => deny:not_a_text_field
+type | input | checkbox |  | Agree |  | 1 | - | 0 | example.com | 0 | 0 => deny:not_a_text_field

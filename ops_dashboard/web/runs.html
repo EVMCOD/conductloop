@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Runs — ConductLoop</title>
+  <style>
+    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#6366f1; --border:#232a36; --ok:#22c55e; --err:#ef4444; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .wrap{max-width:640px;margin:0 auto;padding:32px 20px 64px}
+    h1{font-size:22px;margin:0 0 4px}
+    p.sub{color:var(--muted);margin:0 0 20px;font-size:14px}
+    .nav{display:flex;gap:14px;margin-bottom:18px;font-size:13px}
+    .nav a{color:var(--brand);text-decoration:none}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}
+    .agent{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+    .agent:last-child{border-bottom:0}
+    button{background:var(--brand);color:#fff;border:0;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:600;cursor:pointer}
+    button:disabled{opacity:.5}
+    .pill{font-size:11px;color:var(--muted);background:#0b0d12;border:1px solid var(--border);border-radius:999px;padding:2px 8px}
+    .run{padding:10px 0;border-bottom:1px solid var(--border)}
+    .run:last-child{border-bottom:0}
+    .run .meta{font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center}
+    .run .body{font-size:13px;margin-top:4px;white-space:pre-wrap;color:var(--ink)}
+    .act{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:999px}
+    .a-wake{background:rgba(99,102,241,.15);color:var(--brand)}
+    .a-run_complete{background:rgba(34,197,94,.15);color:var(--ok)}
+    .a-error{background:rgba(239,68,68,.15);color:var(--err)}
+    .hint{font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🔁 Runs</h1>
+    <p class="sub">The loop: trigger an agent → it executes on your provider with tools → the result lands back here and in your knowledge graph.</p>
+    <div class="nav"><a href="/ai">Connect AI</a><a href="/agents">Agents</a><a href="/runs">Runs</a></div>
+
+    <div class="card" id="approvals-card" style="display:none">
+      <strong style="font-size:14px">⏳ Pending approvals</strong>
+      <p class="hint" style="margin:4px 0 8px">Agents proposed these writes. Approve to let them land in your graph.</p>
+      <div id="approvals"></div>
+    </div>
+
+    <div class="card">
+      <strong style="font-size:14px">Run an agent now</strong>
+      <div id="agents" style="margin-top:10px"><span class="hint">Loading…</span></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong style="font-size:14px">Recent activity</strong>
+        <button onclick="loadFeed()" style="background:transparent;border:1px solid var(--border);color:var(--ink)">Refresh</button>
+      </div>
+      <div id="feed" style="margin-top:8px"><span class="hint">Loading…</span></div>
+    </div>
+  </div>
+
+  <script src="/provider-errors.js"></script>
+  <script>
+    const fmt = ts => ts ? new Date(ts*1000).toLocaleString() : '';
+    const esc = s => (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+    async function loadAgents(){
+      const el=document.getElementById('agents');
+      try{
+        const members=await (await fetch('/api/members')).json();
+        const agents=members.filter(m=>m.type==='ai_agent');
+        el.innerHTML = agents.length ? agents.map(a=>
+          '<div class="agent"><div><strong>'+esc(a.name)+'</strong> <span class="pill">'+esc(a.model||'—')+'</span></div>'+
+          '<button data-run="'+a.id+'">Run now</button></div>').join('')
+          : '<span class="hint">No agents yet. <a href="/agents">Create one →</a></span>';
+        el.querySelectorAll('[data-run]').forEach(b=>b.onclick=()=>run(b.dataset.run,b));
+      }catch(e){ el.innerHTML='<span class="hint">Could not load.</span>'; }
+    }
+
+    async function run(id,btn){
+      btn.disabled=true; const t=btn.textContent; btn.textContent='Running…';
+      try{
+        const r=await fetch('/api/agents/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:Number(id)})});
+        const d=await r.json();
+        if(ProviderErrors.providerOf(d)){ alert(ProviderErrors.friendly(d)); await loadFeed(); return; }
+        if(!d.ok) throw new Error(d.error||'failed');
+        await loadFeed();
+      }catch(e){ alert('Run failed: '+e.message); }
+      finally{ btn.disabled=false; btn.textContent=t; }
+    }
+
+    async function loadFeed(){
+      const el=document.getElementById('feed');
+      try{
+        const d=await (await fetch('/api/agents/activity?hours=168')).json();
+        const rows=d.rows||[];
+        el.innerHTML = rows.length ? rows.map(r=>{
+          const act=esc(r.action||'');
+          const who=esc(r.agent_name||r.name||('agent '+(r.agent_id||'')));
+          const body=esc(ProviderErrors.friendly(r.content||r.response||r.error||(ProviderErrors.providerOf(r.summary)?r.summary:'')).slice(0,400));
+          const dur=r.duration_ms?(' · '+r.duration_ms+'ms'):'';
+          return '<div class="run"><div class="meta"><span class="act a-'+act+'">'+act+'</span>'+
+                 '<span>'+who+'</span><span>'+fmt(r.created_at)+dur+'</span></div>'+
+                 (body?'<div class="body">'+body+'</div>':'')+'</div>';
+        }).join('') : '<span class="hint">No runs yet. Hit “Run now” above.</span>';
+      }catch(e){ el.innerHTML='<span class="hint">Could not load.</span>'; }
+    }
+
+    async function loadApprovals(){
+      const card=document.getElementById('approvals-card'), el=document.getElementById('approvals');
+      try{
+        const d=await (await fetch('/api/approvals')).json();
+        const rows=Array.isArray(d)?d:(d.rows||[]);
+        if(!rows.length){ card.style.display='none'; return; }
+        card.style.display='block';
+        el.innerHTML=rows.map(r=>{
+          const who=esc(r.agent_name||('agent '+(r.agent_id||'')));
+          const act=esc(r.approval_action||(r.details&&r.details.approval_action)||'write');
+          const pay=r.approval_payload||(r.details&&r.details.approval_payload)||{};
+          const title=esc((pay.title||pay.path||r.summary||'').toString().slice(0,80));
+          return '<div class="run"><div class="meta"><span class="act a-wake">'+act+'</span><span>'+who+'</span><span>'+fmt(r.created_at)+'</span></div>'+
+            (title?'<div class="body">'+title+'</div>':'')+
+            '<div style="margin-top:6px;display:flex;gap:8px">'+
+            '<button data-ok="'+r.id+'">Approve</button>'+
+            '<button data-no="'+r.id+'" style="background:transparent;border:1px solid var(--border);color:var(--ink)">Reject</button></div></div>';
+        }).join('');
+        el.querySelectorAll('[data-ok]').forEach(b=>b.onclick=()=>decide(b.dataset.ok,'approve',b));
+        el.querySelectorAll('[data-no]').forEach(b=>b.onclick=()=>decide(b.dataset.no,'reject',b));
+      }catch(e){ card.style.display='none'; }
+    }
+    async function decide(id,action,btn){
+      btn.disabled=true;
+      try{
+        const r=await fetch('/api/approvals/'+Number(id)+'/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        await loadApprovals(); await loadFeed();
+      }catch(e){ alert('Failed: '+e.message); btn.disabled=false; }
+    }
+
+    loadAgents(); loadFeed(); loadApprovals();
+  </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "url": "https://docs.example/",
+  "title": "Docs",
+  "text": "Lamp manual: 40 cm, LED.",
+  "elements": [
+    {
+      "ref": 1,
+      "tag": "a",
+      "name": "Page 2",
+      "href": "https://docs.example/2"
+    }
+  ]
+}

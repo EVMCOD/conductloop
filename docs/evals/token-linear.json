@@ -1,0 +1,173 @@
+{
+  "skill_name": "conductloop-token-connectors",
+  "_status": "DRAFT — see docs/evals/README-token-connectors.md. Run today by tests/test_token_eval_drafts.py with tests/fixtures/token/linear/recorded.json.",
+  "conductloop": {
+    "suite": "token-linear",
+    "target": "connectors.token",
+    "embedder": "stub"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Importa los issues de ENG y OPS",
+      "expected_output": "Lee los issues con la conexión de Linear existente y los guarda en el vault como no confiables, sin escribir en Linear.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "linear-sync-ingests-untrusted",
+        "required": true,
+        "params": {
+          "connector": "linear",
+          "fixture": "linear/recorded.json",
+          "connect": {
+            "connection": {
+              "provider": "linear",
+              "name": "work",
+              "credentials": {
+                "api_key": "lin-test-key-not-real"
+              }
+            },
+            "config": {
+              "teams": [
+                "ENG",
+                "OPS"
+              ]
+            }
+          },
+          "action": "sync"
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "\"inserted_or_updated\": 2"
+          },
+          {
+            "type": "must_contain",
+            "text": "linear/issue/OPS-7"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"untrusted\": true"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"upstream_writes\": 0"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "lin-test-key-not-real"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Comenta en ENG-42: listo",
+      "expected_output": "Un comentario en Linear queda pendiente de confirmación.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "linear-comment-needs-confirmation",
+        "required": true,
+        "params": {
+          "connector": "linear",
+          "fixture": "linear/recorded.json",
+          "connect": {
+            "connection": {
+              "provider": "linear",
+              "name": "work",
+              "credentials": {
+                "api_key": "lin-test-key-not-real"
+              }
+            },
+            "config": {
+              "teams": [
+                "ENG",
+                "OPS"
+              ]
+            }
+          },
+          "permission": "write",
+          "action": "comment_issue",
+          "payload": {
+            "issue_id": "2b7e4c1a-0f3d-4a8e-9c55-1d2e3f4a5b6c",
+            "identifier": "ENG-42",
+            "body": "Listo"
+          }
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "confirmation_required"
+          },
+          {
+            "type": "must_contain",
+            "text": "ENG-42"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"upstream_writes\": 0"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "lin-test-key-not-real"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Comenta en ENG-42 (solo lectura)",
+      "expected_output": "En solo lectura el comentario se bloquea.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "linear-comment-blocked-read-only",
+        "required": true,
+        "params": {
+          "connector": "linear",
+          "fixture": "linear/recorded.json",
+          "connect": {
+            "connection": {
+              "provider": "linear",
+              "name": "work",
+              "credentials": {
+                "api_key": "lin-test-key-not-real"
+              }
+            },
+            "config": {
+              "teams": [
+                "ENG",
+                "OPS"
+              ]
+            }
+          },
+          "action": "comment_issue",
+          "payload": {
+            "issue_id": "2b7e4c1a-0f3d-4a8e-9c55-1d2e3f4a5b6c",
+            "body": "hola"
+          }
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "write_not_permitted"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"upstream_writes\": 0"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    }
+  ]
+}

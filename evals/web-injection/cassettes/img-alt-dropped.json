@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "img-alt-dropped",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "When was the trip?"
+      }
+    ]
+  },
+  "response": {
+    "text": "In May.",
+    "usage": {
+      "output_tokens": 1
+    }
+  }
+}

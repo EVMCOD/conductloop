@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>CEO Thread — ConductLoop</title>
+  <style>
+    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#D4AF37; --border:#232a36; --ok:#22c55e; --bad:#ef4444; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.92);color:#fff;padding:12px 18px;border-radius:9px;font-size:14px;font-weight:500;z-index:100;display:none;max-width:90vw;border:1px solid var(--border)}
+    .toast.show{display:block;animation:toast-in .25s ease-out}
+    @keyframes toast-in{from{opacity:0;transform:translate(-50%,-10px)}to{opacity:1;transform:translate(-50%,0)}}
+    .toast.err{background:rgba(239,68,68,.15);border-color:var(--bad);color:var(--bad)}
+    .btn-loading{position:relative;color:transparent !important}
+    .btn-loading::after{content:"";position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .wrap{max-width:760px;margin:0 auto;padding:24px 20px 120px}
+    .head{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+    .back{color:var(--muted);text-decoration:none;font-size:13px}
+    .back:hover{color:var(--ink)}
+    .name{font-size:22px;font-weight:600;flex:1}
+    .role{color:var(--muted);font-size:13px;margin-top:2px}
+    .pill{font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px;background:var(--card);border:1px solid var(--border);color:var(--muted)}
+    .autonomy{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:18px;font-size:13px}
+    .autonomy strong{color:var(--ink)}
+    .autonomy .row{display:flex;justify-content:space-between;padding:4px 0;color:var(--muted)}
+    .autonomy .row .v{color:var(--ink);font-weight:600}
+    .messages{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:18px;min-height:200px;max-height:60vh;overflow-y:auto}
+    .msg{margin:10px 0;display:flex;gap:10px;font-size:14px;line-height:1.45}
+    .msg .who{font-weight:600;font-size:12px;color:var(--muted);min-width:80px}
+    .msg .body{flex:1}
+    .msg.you{justify-content:flex-end}
+    .msg.you .who{color:var(--brand);text-align:right}
+    .msg.you .body{background:var(--brand);color:#0b0d12;padding:8px 12px;border-radius:10px;max-width:80%}
+    .msg.system{font-style:italic;color:var(--muted);font-size:13px}
+    .msg .ts{color:var(--muted);font-size:11px;margin-top:4px}
+    .thinking{display:flex;align-items:center;gap:4px;padding:8px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:12px;width:fit-content}
+    .thinking .dot{width:6px;height:6px;border-radius:50%;background:var(--brand);animation:blink 1.2s infinite both}
+    .thinking .dot:nth-child(2){animation-delay:.2s}
+    .thinking .dot:nth-child(3){animation-delay:.4s}
+    @keyframes blink{0%,80%,100%{opacity:.3}40%{opacity:1}}
+    .composer{position:fixed;bottom:0;left:0;right:0;background:linear-gradient(180deg,transparent,var(--bg) 30%);padding:14px 20px 20px;display:flex;justify-content:center}
+    .composer-inner{max-width:760px;width:100%;display:flex;gap:8px}
+    .composer textarea{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--ink);font-family:inherit;font-size:14px;resize:none;min-height:50px;max-height:140px}
+    .composer button{background:var(--brand);color:#0b0d12;border:0;border-radius:10px;padding:0 20px;font-weight:600;cursor:pointer}
+    .composer button:disabled{opacity:.5}
+    .nav{display:flex;gap:8px;margin:14px 0;font-size:13px;flex-wrap:wrap}
+    .nav a{color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
+    .nav a:hover{color:var(--ink);border-color:var(--border)}
+    .nav a.active{color:var(--brand);border-color:var(--brand)}
+
+    .channels-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:18px;font-size:13px}
+    .channels-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+    .channels-head strong{color:var(--ink)}
+    .ch-btn{background:var(--brand);color:#0b0d12;border:0;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
+    .ch-btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--border)}
+    .ch-btn.sm{padding:4px 8px;font-size:11px}
+    .ch-row{display:flex;gap:10px;align-items:center;padding:8px 6px;border-top:1px solid var(--border);flex-wrap:wrap}
+    .ch-row:first-child{border-top:0}
+    .ch-icon{font-weight:700;color:var(--brand);font-size:13px;width:24px;text-align:center}
+    .ch-meta{flex:1;min-width:180px}
+    .ch-name{font-weight:600;color:var(--ink);font-size:13px;word-break:break-all}
+    .ch-sub{color:var(--muted);font-size:11px;margin-top:2px}
+    .ch-err{color:var(--bad);font-weight:600}
+    .ch-empty{color:var(--muted);font-size:12px;padding:10px 0;text-align:center;font-style:italic}
+    .channels-form{display:flex;flex-direction:column;gap:8px;margin-top:12px;padding:12px;background:#0f1218;border-radius:10px;border:1px solid var(--border)}
+    .channels-form select,.channels-form input{background:var(--bg);border:1px solid var(--border);color:var(--ink);padding:7px 10px;border-radius:7px;font-family:inherit;font-size:13px}
+    .channels-form-actions{display:flex;gap:8px;margin-top:4px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back" href="/boardroom">← Inbox</a>
+    <div class="head">
+      <div style="flex:1">
+        <div class="name" id="name">Loading…</div>
+        <div class="role" id="role">—</div>
+      </div>
+      <span class="pill" id="status">—</span>
+      <a class="pill" id="cfg" href="#" style="text-decoration:none">⚙ Configure</a>
+    </div>
+
+    <div class="nav">
+      <a href="/boardroom">📥 Inbox</a>
+      <a href="/boardroom/directory">👥 Directory</a>
+      <a href="/boardroom/vault">📚 Vault</a>
+      <a href="/boardroom/portfolio">🌐 Portfolio</a>
+      <a class="active" id="navThread">💬 Thread</a>
+      <a id="navAutonomy" href="#">⚙ Autonomy</a>
+      <a href="/boardroom/recap">📊 Daily Recap</a>
+      <a href="/boardroom/create">+ New CEO</a>
+    </div>
+
+    <div class="autonomy" id="autonomy">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <strong>Autonomy</strong>
+        <span id="tierPill" class="pill">Tier —</span>
+      </div>
+      <div class="row"><span>Maturity</span><span class="v" id="maturity">—</span></div>
+      <div class="row"><span>Tools enabled</span><span class="v" id="toolsN">—</span></div>
+      <div class="row"><span>Chairman approval</span><span class="v" id="require">—</span></div>
+    </div>
+    <div class="channels-panel" id="channelsPanel">
+      <div class="channels-head">
+        <strong>📡 Channels</strong>
+        <div>
+          <button class="ch-btn ghost" id="testChannelBtn" title="Send a test message to all bound channels">📤 Test</button>
+          <button class="ch-btn ghost" id="bindChannelBtn">+ Bind channel</button>
+        </div>
+      </div>
+      <div class="channels-list" id="channelsList">
+        <div class="ch-empty">No channels bound yet. Bind a Telegram chat or Discord channel to receive this CEO's replies automatically.</div>
+      </div>
+      <div class="channels-form" id="channelsForm" style="display:none">
+        <select id="chPlatform">
+          <option value="telegram">Telegram (chat_id)</option>
+          <option value="discord">Discord (webhook URL or channel_id)</option>
+          <option value="slack">Slack (webhook URL or channel_id)</option>
+        </select>
+        <input id="chTargetId" placeholder="e.g. 123456789 (Telegram), https://discord.com/api/webhooks/... (Discord), or https://hooks.slack.com/services/... (Slack)" />
+        <input id="chTargetName" placeholder="Friendly name (optional, e.g. @my_main)" />
+        <select id="chDirection" title="outbound = CEO → channel; inbound = channel → CEO; both">
+          <option value="both">Both directions</option>
+          <option value="outbound">Outbound only (CEO → channel)</option>
+          <option value="inbound">Inbound only (channel → CEO)</option>
+        </select>
+        <div class="channels-form-actions">
+          <button class="ch-btn" id="chSaveBtn">Bind</button>
+          <button class="ch-btn ghost" id="chCancelBtn">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="channels-panel" id="channelsPanel">
+      <div class="channels-head">
+        <strong>📡 Channels</strong>
+        <button class="ch-btn ghost" id="bindChannelBtn">+ Bind channel</button>
+        <button class="ch-btn ghost" id="testChannelBtn" title="Send a test message to all bound channels">📤 Test</button>
+      </div>
+      <div class="channels-list" id="channelsList">
+        <div class="ch-empty">No channels bound yet. Bind a Telegram chat or Discord channel to receive this CEO's replies automatically.</div>
+      </div>
+      <div class="channels-form" id="channelsForm" style="display:none">
+        <select id="chPlatform">
+          <option value="telegram">Telegram (chat_id)</option>
+          <option value="discord">Discord (webhook URL or channel_id)</option>
+          <option value="slack">Slack (webhook URL or channel_id)</option>
+        </select>
+        <input id="chTargetId" placeholder="e.g. 123456789 (Telegram), https://discord.com/api/webhooks/... (Discord), or https://hooks.slack.com/services/... (Slack)" />
+        <input id="chTargetName" placeholder="Friendly name (optional, e.g. @my_main)" />
+        <select id="chDirection" title="outbound = CEO→channel; inbound = channel→CEO; both">
+          <option value="both">Both directions</option>
+          <option value="outbound">Outbound only (CEO → channel)</option>
+          <option value="inbound">Inbound only (channel → CEO)</option>
+        </select>
+        <div class="channels-form-actions">
+          <button class="ch-btn primary" id="chSaveBtn">Bind</button>
+          <button class="ch-btn ghost" id="chCancelBtn">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="messages" id="messages"></div>
+    <div id="thinking" class="thinking" style="display:none">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span style="color:var(--muted);font-size:12px;margin-left:8px">CEO is composing…</span>
+    </div>
+
+    <div class="composer">
+      <div class="composer-inner">
+        <textarea id="input" placeholder="Message this CEO…" rows="2"></textarea>
+        <button id="send">Send</button>
+      </div>
+    </div>
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <script>
+    const ceoId = parseInt(location.pathname.split('/').pop(), 10) || 0;
+    const $ = (id) => document.getElementById(id);
+    let ceo = null;
+
+    async function load() {
+      try {
+        const r = await fetch(`/api/boardroom/ceo/${ceoId}`, { credentials: 'include' });
+        if (!r.ok) {
+          $('name').textContent = 'CEO not found';
+          return;
+        }
+        ceo = await r.json();
+        document.title = `${ceo.name} — Boardroom`;
+        $('name').textContent = ceo.name;
+        $('role').textContent = (ceo.role || ceo.level || '') + (ceo.project_slug ? ' · ' + ceo.project_slug : '');
+        $('status').textContent = `${statusIcon(ceo.status)} ${ceo.status || 'idle'}`;
+        $('cfg').href = `/boardroom/autonomy/${ceo.id}`;
+        $('navAutonomy').href = `/boardroom/autonomy/${ceo.id}`;
+        const a = ceo.autonomy || {};
+        $('tierPill').textContent = `Tier ${a.default_tier || 2}`;
+        $('maturity').textContent = a.maturity_stage || '—';
+        const pa = a.per_action_obj || (typeof a.per_action === 'string' ? safeJson(a.per_action) : a.per_action) || {};
+        $('toolsN').textContent = Object.keys(pa).length;
+        $('require').textContent = a.require_chairman ? 'Required for every action' : 'Per-tier rules';
+        renderMessages();
+      } catch (e) {
+        $('name').textContent = 'Could not load';
+      }
+    }
+
+    function renderMessages() {
+      const box = $('messages');
+      const list = ceo.messages || [];
+      if (!list.length) {
+        box.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">No messages yet. Say hi 👋</div>';
+        return;
+      }
+      box.innerHTML = list.map(m => {
+        const isUser = m.role === 'chairman';
+        const isSys = m.role === 'system';
+        return `
+          <div class="msg ${isUser ? 'you' : isSys ? 'system' : ''}">
+            <div class="who">${isUser ? 'You' : (ceo.name)}</div>
+            <div class="body">${escapeHtml(m.content)}
+              <div class="ts">${formatTs(m.created_at)}</div>
+            </div>
+          </div>`;
+      }).join('');
+      box.scrollTop = box.scrollHeight;
+    }
+
+    $('send').onclick = async () => {
+      const txt = $('input').value.trim();
+      if (!txt) return;
+      $('send').disabled = true;
+      $('send').classList.add('btn-loading');
+      try {
+        const r = await fetch(`/api/boardroom/ceo/${ceoId}/chat`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: txt }),
+        });
+        const d = await r.json();
+        if (d.ok && d.message) {
+          ceo.messages.push(d.message);
+          $('input').value = '';
+          renderMessages();
+          // If accepted (background LLM is generating), show thinking + subscribe to SSE.
+          if (r.status === 202) {
+            $('thinking').style.display = '';
+            subscribeToStream(d.message.id);
+          } else {
+            showToast('Sent', false);
+          }
+        } else {
+          showToast('Send failed: ' + (d.error || 'unknown'), true);
+        }
+      } catch (e) {
+        showToast('Send error: ' + e.message, true);
+      } finally {
+        $('send').disabled = false;
+        $('send').classList.remove('btn-loading');
+        $('input').focus();
+      }
+    };
+    let evtSource = null;
+    function subscribeToStream(sinceId) {
+      try { if (evtSource) evtSource.close(); } catch (_) {}
+      evtSource = new EventSource(`/api/boardroom/ceo/${ceoId}/events?from_id=${sinceId}`, { withCredentials: true });
+      evtSource.addEventListener('message', (ev) => {
+        try {
+          const m = JSON.parse(ev.data);
+          if (m && ceo.messages.find(x => x.id === m.id)) return;  // dedupe
+          ceo.messages.push(m);
+          renderMessages();
+          $('thinking').style.display = 'none';
+        } catch (_) {}
+      });
+      evtSource.addEventListener('error', () => {
+        // SSE connection closed or failed — silently stop. UI can re-poll
+        // on demand if needed; we don't auto-retry to avoid runaway loops.
+        try { if (evtSource) evtSource.close(); } catch (_) {}
+        evtSource = null;
+        $('thinking').style.display = 'none';
+      });
+    }
+    $('input').addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') $('send').click();
+    });
+
+    function showToast(msg, isErr) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show' + (isErr ? ' err' : '');
+      clearTimeout(showToast._h);
+      showToast._h = setTimeout(() => { t.className = 'toast'; }, 3500);
+    }
+    function statusIcon(s) {
+      const m = { idle: '🟢', working: '🟢', waiting: '🟡', blocked: '🔴', paused: '⚪' };
+      return m[(s || '').toLowerCase()] || '⚪';
+    }
+    function escapeHtml(s) { return (s || '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function formatTs(ts) { return new Date(ts * 1000).toLocaleString(); }
+    function safeJson(s) { try { return JSON.parse(s); } catch (_) { return {}; } }
+    load();
+    loadChannels();
+
+    // Channels panel (2026-07-16)
+    async function loadChannels() {
+      try {
+        const r = await fetch(`/api/boardroom/ceo/${ceoId}/channels`, { credentials: 'include' });
+        const d = await r.json();
+        renderChannels(d.items || []);
+      } catch (e) {
+        $('channelsList').innerHTML = '<div class="ch-empty">Failed to load channels.</div>';
+      }
+    }
+    function renderChannels(items) {
+      const box = $('channelsList');
+      if (!items.length) {
+        box.innerHTML = '<div class="ch-empty">No channels bound yet. Bind a Telegram chat or Discord channel to receive this CEO\'s replies automatically.</div>';
+        return;
+      }
+      const iconFor = p => p === 'telegram' ? 'T' : p === 'discord' ? 'D' : '?';
+      box.innerHTML = items.map(c => `
+        <div class="ch-row" data-cid="${c.id}">
+          <span class="ch-icon">${iconFor(c.platform)}</span>
+          <div class="ch-meta">
+            <div class="ch-name">${escapeHtml(c.target_name || c.target_id)}</div>
+            <div class="ch-sub">${escapeHtml(c.platform)} - ${escapeHtml(c.direction)} - ${c.enabled ? 'enabled' : 'disabled'}${c.last_error ? ' - <span class="ch-err" title=\'' + escapeHtml(c.last_error) + '\'>[err]</span>' : ''}</div>
+          </div>
+          <button class="ch-btn ghost sm" data-act="toggle" data-cid="${c.id}" data-en="${c.enabled ? 0 : 1}">${c.enabled ? 'Disable' : 'Enable'}</button>
+          <button class="ch-btn ghost sm" data-act="delete" data-cid="${c.id}">Remove</button>
+        </div>`).join('');
+    }
+    document.addEventListener('click', async (e) => {
+      const t = e.target;
+      const act = t.dataset && t.dataset.act;
+      if (act === 'toggle' || act === 'delete') {
+        const cid = parseInt(t.dataset.cid, 10);
+        if (act === 'delete' && !confirm('Unbind this channel?')) return;
+        const method = act === 'delete' ? 'DELETE' : 'POST';
+        const body = act === 'toggle' ? JSON.stringify({enabled: !!parseInt(t.dataset.en, 10)}) : null;
+        const r = await fetch(`/api/boardroom/ceo/${ceoId}/channels/${cid}`, {
+          method, credentials: 'include',
+          headers: body ? {'Content-Type': 'application/json'} : undefined,
+          body,
+        });
+        const d = await r.json();
+        if (r.ok) loadChannels(); else showToast(d.error || 'Failed', true);
+        return;
+      }
+      if (t.id === 'bindChannelBtn') {
+        $('channelsForm').style.display = $('channelsForm').style.display === 'none' ? '' : 'none';
+        return;
+      }
+      if (t.id === 'chCancelBtn') { $('channelsForm').style.display = 'none'; return; }
+      if (t.id === 'chSaveBtn') {
+        const platform = $('chPlatform').value.trim();
+        const target_id = $('chTargetId').value.trim();
+        const target_name = $('chTargetName').value.trim();
+        const direction = $('chDirection').value;
+        if (!platform || !target_id) { showToast('platform + target_id required', true); return; }
+        const r = await fetch(`/api/boardroom/ceo/${ceoId}/channels`, {
+          method: 'POST', credentials: 'include',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({platform, target_id, target_name, direction}),
+        });
+        const d = await r.json();
+        if (r.ok) {
+          showToast('Bound OK');
+          $('channelsForm').style.display = 'none';
+          $('chTargetId').value = ''; $('chTargetName').value = '';
+          loadChannels();
+        } else showToast(d.error || 'Failed', true);
+        return;
+      }
+      if (t.id === 'testChannelBtn') {
+        t.disabled = true; t.textContent = '...';
+        try {
+          const r = await fetch(`/api/boardroom/ceo/${ceoId}/channels/test`, {
+            method: 'POST', credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text: 'test from ' + (ceo && ceo.name || 'CEO')}),
+          });
+          const d = await r.json();
+          const ok = (d.deliveries || []).filter(x => x.ok).length;
+          const total = (d.deliveries || []).length;
+          const note = total === 0 ? 'No channels bound yet' : 'Sent ' + ok + '/' + total + ' OK';
+          showToast(note, ok !== total);
+          loadChannels();
+        } finally {
+          t.disabled = false; t.textContent = 'Test';
+        }
+        return;
+      }
+    });
+  </script>
+
+  <script src="/boardroom-i18n.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "rag-architecture-cite",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "¿Dónde guarda ConductLoop los datos y las claves?"
+      }
+    ]
+  },
+  "response": {
+    "text": "Los datos van a una base SQLite dentro de tu Mac y las claves al llavero de macOS [1].",
+    "usage": {
+      "output_tokens": 24
+    }
+  }
+}

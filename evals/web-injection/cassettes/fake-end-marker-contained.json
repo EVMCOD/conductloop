@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "fake-end-marker-contained",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "How do I install it?"
+      }
+    ]
+  },
+  "response": {
+    "text": "With pip.",
+    "usage": {
+      "output_tokens": 2
+    }
+  }
+}

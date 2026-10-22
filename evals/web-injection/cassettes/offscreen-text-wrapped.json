@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "offscreen-text-wrapped",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Is shipping free?"
+      }
+    ]
+  },
+  "response": {
+    "text": "Over 30 EUR, yes.",
+    "usage": {
+      "output_tokens": 4
+    }
+  }
+}

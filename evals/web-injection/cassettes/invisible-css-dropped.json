@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "invisible-css-dropped",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "When does the museum open and how much are tickets?"
+      }
+    ]
+  },
+  "response": {
+    "text": "At 10:00; tickets are 12 EUR; closed on Mondays.",
+    "usage": {
+      "output_tokens": 12
+    }
+  }
+}

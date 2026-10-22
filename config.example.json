@@ -1,0 +1,10 @@
+{
+  "_comment": "Optional webhook configuration for ops-dashboard notifications. Copy to ~/ops-dashboard/config.json and fill in any subset. Leave blank to disable that channel.",
+  "_docs": "Slack/Discord use incoming webhook URLs. Telegram needs both a bot token (from @BotFather) and your chat ID. See https://api.slack.com/messaging/webhooks and https://core.telegram.org/bots/api for setup.",
+  "SLACK_WEBHOOK_URL": "",
+  "DISCORD_WEBHOOK_URL": "",
+  "TELEGRAM_BOT_TOKEN": "",
+  "TELEGRAM_CHAT_ID": "",
+  "_events": "Currently fires on url_failed (status != 200) and url_recovered (back to 200). More events coming (brain_ask, todo_done, agent_wake).",
+  "_env_override": "Any of these can also be set as environment variables (preferred for secrets — don't commit config.json with real values)."
+}

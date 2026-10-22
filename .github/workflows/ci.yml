@@ -1,0 +1,199 @@
+name: CI
+
+# Saving Actions minutes (private repo, 2,000 min/month on GitHub Free):
+# docs-only changes don't run CI, a newer push cancels the older run of the
+# same branch/PR, and the Rust/Tauri jobs live in desktop.yml, which only runs
+# when desktop/ changes.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**", "LICENSE", ".gitignore", ".github/dependabot.yml"]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**", "LICENSE", ".gitignore", ".github/dependabot.yml"]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dev dependencies
+        # requirements-dev.txt pulls the lean core runtime + ruff/mypy/pytest/
+        # pytest-cov. requests is needed to collect the live-worker test module.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Updater pubkey matches pinned key id — blocking
+        # The app only accepts updates signed by the key embedded in
+        # tauri.conf.json. desktop/UPDATER_KEY_ID pins that key id (public, no
+        # secrets); a drift here means installed apps can no longer update.
+        run: python scripts/check_updater_pubkey.py --expected-file desktop/UPDATER_KEY_ID
+
+      - name: Lint (ruff) — blocking
+        run: ruff check ops_dashboard tests
+
+      - name: Security lint (ruff S / bandit rules) — advisory
+        continue-on-error: true
+        # S608 audited safe (parameterized values, whitelisted structure — see
+        # tests/test_sql_injection.py); S110 is idempotent-ALTER try/except-pass.
+        run: ruff check --select S --ignore S608,S110 ops_dashboard
+
+      - name: Type check (mypy) — advisory (whole tree)
+        continue-on-error: true
+        run: mypy ops_dashboard
+
+      - name: Type check (mypy) — blocking (typed-module ratchet)
+        # These modules are type-clean and must stay clean. Add modules here as
+        # they are annotated — the strict set grows over time toward the goal of
+        # a blocking whole-tree check.
+        run: >
+          mypy --follow-imports=silent
+          ops_dashboard/routing.py
+          ops_dashboard/origin_guard.py
+          ops_dashboard/logging_setup.py
+          ops_dashboard/secrets_store.py
+          ops_dashboard/byok_keys.py
+          ops_dashboard/migrations.py
+          ops_dashboard/sessions/__init__.py
+          ops_dashboard/sessions/limits.py
+          ops_dashboard/sessions/paths.py
+          ops_dashboard/sessions/store.py
+          ops_dashboard/sessions/worktrees.py
+          ops_dashboard/sessions/sandbox.py
+          ops_dashboard/sessions/code_tools.py
+          ops_dashboard/sessions/providers.py
+          ops_dashboard/sessions/runner.py
+          ops_dashboard/sessions/supervisor.py
+          ops_dashboard/routes_sessions.py
+          ops_dashboard/routes_meta.py
+          ops_dashboard/db_approvals.py
+          ops_dashboard/db_fts.py
+          ops_dashboard/db_costs.py
+          ops_dashboard/db_decisions.py
+          ops_dashboard/db_github.py
+          ops_dashboard/db_mcp.py
+          ops_dashboard/db_notelinks.py
+          ops_dashboard/db_tasktemplates.py
+          ops_dashboard/db_todos.py
+          ops_dashboard/db_voice.py
+          ops_dashboard/obsidian_sync.py
+          ops_dashboard/onboarding.py
+          ops_dashboard/host_guard.py
+          ops_dashboard/capture.py
+          ops_dashboard/calendar_sync.py
+          ops_dashboard/briefing.py
+          ops_dashboard/memory_ai.py
+          ops_dashboard/learning/__init__.py
+          ops_dashboard/learning/store.py
+          ops_dashboard/routes_learning.py
+          ops_dashboard/routes_skills.py
+          ops_dashboard/routes_lessons.py
+          ops_dashboard/learning/lessons.py
+          ops_dashboard/routes_skill_proposals.py
+          ops_dashboard/skills/propose.py
+          ops_dashboard/skills/lint.py
+          ops_dashboard/skills/store.py
+          ops_dashboard/learning/evals_view.py
+          ops_dashboard/learning/metrics.py
+          ops_dashboard/skills/__init__.py
+          ops_dashboard/skills/parse.py
+          ops_dashboard/skills/validate.py
+          ops_dashboard/skills/catalog.py
+          ops_dashboard/indexers/skills.py
+          ops_dashboard/brain_analytics.py
+          ops_dashboard/voice_autofile.py
+          ops_dashboard/sync_bundle.py
+          ops_dashboard/mcp_server.py
+          ops_dashboard/connector_registry.py
+          ops_dashboard/connector_tokens.py
+          ops_dashboard/connectors_token
+          ops_dashboard/routes_connectors_token.py
+          ops_dashboard/connector_store.py
+          ops_dashboard/connector_oauth.py
+          ops_dashboard/connector_actions.py
+          ops_dashboard/routes_connectors.py
+          ops_dashboard/mcp_client.py
+          ops_dashboard/mcp_hub.py
+          ops_dashboard/routes_mcp.py
+          ops_dashboard/mcp.py
+          ops_dashboard/db_auth.py
+          ops_dashboard/db_brainmem.py
+          ops_dashboard/db_graph.py
+          ops_dashboard/db_playbook.py
+          ops_dashboard/db_snapshots.py
+          ops_dashboard/db_tasks.py
+          ops_dashboard/db_urlchanges.py
+          ops_dashboard/evals/__init__.py
+          ops_dashboard/evals/__main__.py
+          ops_dashboard/evals/cassette.py
+          ops_dashboard/evals/checks.py
+          ops_dashboard/evals/netguard.py
+          ops_dashboard/evals/record.py
+          ops_dashboard/evals/runner.py
+          ops_dashboard/redact.py
+          ops_dashboard/app_token_guard.py
+
+      - name: Evals (offline) — blocking
+        # Replays synthetic cassettes through brain.ask / db.search with the
+        # network blocked and no keys. Fails if any required case fails or a
+        # score drops > 5 points vs evals/baseline.json (D10). Recording is
+        # maintainer-only and refuses to run here (D9).
+        run: python -m ops_dashboard.evals run --report evals-report.json
+
+      - name: Dependency vulnerability scan (pip-audit) — advisory
+        continue-on-error: true
+        run: pip-audit --strict || pip-audit
+
+      - name: Browser test (headless Chrome) — "Conectores" page
+        # Runs before the main pytest step and uninstalls Playwright afterwards,
+        # so the main run keeps skipping every browser test (no change for the
+        # other browser tests). Uses the runner's preinstalled Google Chrome; the
+        # test only talks to its in-process server on 127.0.0.1.
+        env:
+          CONNECTORS_BROWSER_REQUIRED: "1"
+        run: |
+          pip install "playwright>=1.47"
+          pytest -q -p no:cacheprovider tests/test_connectors_ui_browser.py tests/test_token_ui_browser.py
+          pip uninstall -y playwright
+
+      - name: Package builds (pip install .)
+        run: pip install . --no-deps
+
+      - name: Install bubblewrap (OS sandbox for sessions code tools)
+        # tests/test_sessions_code_tools.py proves network/write isolation for
+        # real; CONDUCTLOOP_REQUIRE_SANDBOX makes it fail instead of skipping.
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends bubblewrap
+          # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          bwrap --unshare-net --ro-bind / / --dev /dev --proc /proc true
+
+      - name: Test (pytest + coverage)
+        env:
+          CONDUCTLOOP_REQUIRE_SANDBOX: "1"
+        # Floor prevents regressions; ratchet it up as server.py routes migrate
+        # to the (testable) registry. Currently ~26%.
+        run: pytest -m "not live" --cov=ops_dashboard --cov-report=term-missing:skip-covered --cov-fail-under=25
+
+      - name: Browser tests (headless Chrome) — every tests/test_*ui_browser.py
+        # Separate step so the main pytest run keeps skipping browser tests.
+        # Uses the runner's preinstalled Google Chrome (no browser download);
+        # the tests only talk to their in-process server on 127.0.0.1.
+        env:
+          LEARNING_BROWSER_REQUIRED: "1"
+          CONNECTORS_BROWSER_REQUIRED: "1"
+        run: |
+          pip install "playwright>=1.47"
+          pytest -q -p no:cacheprovider tests/test_*ui_browser.py

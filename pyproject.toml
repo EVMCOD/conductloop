@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "conductloop"
+version = "1.2.0"
+description = "ConductLoop — local-first AI-native second brain + ops cockpit"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.13"
+# Core runtime only; heavy/optional extras (embeddings, providers, voice, GA)
+# live in requirements*.txt so a lean install / CI stays fast.
+dependencies = [
+    "typer>=0.25.1",
+    "rich>=15.0.0",
+    "httpx>=0.28.1",
+    "segno>=1.6.6",
+    "bcrypt>=5.0.0",
+    "cryptography>=49.0.0",
+    "rapidfuzz>=3.14.5",
+    "PyYAML>=6.0.2",
+]
+
+[project.optional-dependencies]
+ai = ["anthropic>=0.111.0", "openai>=2.43.0", "sentence-transformers>=5.6.0"]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11", "pytest-cov>=5.0", "requests>=2.31"]
+
+[project.scripts]
+ops = "ops_dashboard.cli:main"
+
+[tool.setuptools]
+# Every ops_dashboard subpackage (sessions, learning, skills, …) except the
+# dev-only offline evals harness. Same line on every branch that needs it.
+packages = {find = {include = ["ops_dashboard*"], exclude = ["ops_dashboard.evals*"]}}
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+extend-exclude = ["build", "dist", "desktop", "desktop-demo", ".venv"]
+
+[tool.ruff.lint]
+# F = pyflakes (unused imports/names), E/W = pycodestyle, I = isort, B = bugbear,
+# UP = pyupgrade. Line-length (E501) is off — the code has long inline SQL.
+select = ["E", "F", "W", "I", "B", "UP"]
+# E701/E702: the codebase pervasively uses `if x: return` one-liners (author
+# style, ~1000 sites) — not worth the churn. E501 off (long inline SQL).
+ignore = ["E501", "E741", "E701", "E702", "B008", "B905", "UP038", "E402", "S608"]
+
+# S608 (SQL built with f-strings) — audited 2026-07-21: every site parameterizes
+# values with `?` and only interpolates developer-controlled structure
+# (whitelisted column names from `allowed` sets, WHERE fragments from literals,
+# `?`-placeholder strings, hard-coded table names). No user input reaches SQL as
+# a string. See tests/test_sql_injection.py for the whitelist regression guard.
+
+# Legacy baseline (ratchet): pre-existing violations grandfathered per file so
+# the rules stay ON for new code. Remove entries as the code is cleaned up.
+# The round-3 fixes cleared cli.py/anomalies/digest/ga and the server.py F821
+# (dead/orphaned code). Remaining are cosmetic (unused locals, raise-from).
+[tool.ruff.lint.per-file-ignores]
+"ops_dashboard/server.py" = ["F841"]
+"ops_dashboard/boardroom.py" = ["B904"]
+"ops_dashboard/brain.py" = ["B904", "B007"]
+"ops_dashboard/db.py" = ["B007"]
+"ops_dashboard/voice.py" = ["B904"]
+
+[tool.mypy]
+python_version = "3.13"
+# Lenient baseline: 20k LOC of mostly-untyped code. Catch import/name errors and
+# obvious mistakes without drowning in missing-annotation noise. Tighten later.
+ignore_missing_imports = true
+warn_unused_ignores = false
+check_untyped_defs = false
+disable_error_code = ["annotation-unchecked"]
+exclude = ["(^|/)(build|dist|desktop|desktop-demo|scripts)/", "conductloop_server_entry\\.py"]

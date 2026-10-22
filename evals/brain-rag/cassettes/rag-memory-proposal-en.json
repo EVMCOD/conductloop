@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "rag-memory-proposal-en",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "What database does ConductLoop use?"
+      }
+    ]
+  },
+  "response": {
+    "text": "ConductLoop uses SQLite for local-first storage on the Mac [1].",
+    "usage": {
+      "output_tokens": 14
+    }
+  }
+}

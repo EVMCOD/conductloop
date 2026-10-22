@@ -1,0 +1,139 @@
+{
+  "skill_name": "conductloop-token-connectors",
+  "_status": "DRAFT — see docs/evals/README-token-connectors.md. Run today by tests/test_token_eval_drafts.py with tests/fixtures/token/readwise/recorded.json.",
+  "conductloop": {
+    "suite": "token-readwise",
+    "target": "connectors.token",
+    "embedder": "stub"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Importa mis subrayados de Readwise",
+      "expected_output": "Importa libros y subrayados (sin los descartados) al vault como no confiables, sin escribir en Readwise.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "readwise-sync-ingests-untrusted",
+        "required": true,
+        "params": {
+          "connector": "readwise",
+          "fixture": "readwise/recorded.json",
+          "connect": {
+            "token": "readwise-test-token-not-real"
+          },
+          "action": "sync"
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "\"inserted_or_updated\": 2"
+          },
+          {
+            "type": "must_contain",
+            "text": "readwise/book/111"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"untrusted\": true"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"upstream_writes\": 0"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "Solo descartados"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "readwise-test-token-not-real"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Guarda este subrayado en Readwise",
+      "expected_output": "Guardar un subrayado queda pendiente de confirmación.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "readwise-highlight-needs-confirmation",
+        "required": true,
+        "params": {
+          "connector": "readwise",
+          "fixture": "readwise/recorded.json",
+          "connect": {
+            "token": "readwise-test-token-not-real"
+          },
+          "permission": "write",
+          "action": "create_highlight",
+          "payload": {
+            "text": "Los conectores leen primero.",
+            "title": "Notas de ConductLoop"
+          }
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "confirmation_required"
+          },
+          {
+            "type": "must_contain",
+            "text": "guardar subrayado"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"upstream_writes\": 0"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "readwise-test-token-not-real"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Guarda un subrayado (solo lectura)",
+      "expected_output": "En solo lectura, guardar un subrayado se bloquea.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "readwise-highlight-blocked-read-only",
+        "required": true,
+        "params": {
+          "connector": "readwise",
+          "fixture": "readwise/recorded.json",
+          "connect": {
+            "token": "readwise-test-token-not-real"
+          },
+          "action": "create_highlight",
+          "payload": {
+            "text": "hola"
+          }
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "write_not_permitted"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"upstream_writes\": 0"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    }
+  ]
+}

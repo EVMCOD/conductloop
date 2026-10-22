@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Agents Directory — ConductLoop Boardroom</title>
+  <style>
+    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#D4AF37; --border:#232a36; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 80px}
+    h1{font-size:24px;margin:0 0 6px;font-weight:600}
+    .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+    .nav{display:flex;gap:8px;margin:14px 0 22px;font-size:13px;flex-wrap:wrap}
+    .nav a{color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
+    .nav a:hover{color:var(--ink);border-color:var(--border)}
+    .nav a.active{color:var(--brand);border-color:var(--brand)}
+    .filter{margin-bottom:14px;display:flex;gap:8px;align-items:center}
+    .filter input{background:var(--card);border:1px solid var(--border);color:var(--ink);border-radius:8px;padding:8px 12px;font-size:13px;flex:1;max-width:300px}
+    table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13px}
+    th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
+    th{background:#1a1f2c;font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+    tr:last-child td{border-bottom:0}
+    tr:hover td{background:#1a1f2c}
+    a{color:var(--brand);text-decoration:none}
+    a:hover{color:#fff}
+    .pill{font-size:11px;padding:2px 8px;border-radius:5px;background:#0b0d12;border:1px solid var(--border);color:var(--muted)}
+    .pill.tier1{background:rgba(34,197,94,.15);color:var(--ok);border-color:transparent}
+    .pill.tier2{background:rgba(212,175,55,.15);color:var(--brand);border-color:transparent}
+    .pill.tier3{background:rgba(245,158,11,.15);color:var(--warn);border-color:transparent}
+    .pill.tier4{background:rgba(239,68,68,.15);color:var(--bad);border-color:transparent}
+    .status{display:inline-flex;align-items:center;gap:4px;font-size:12px}
+    .empty{padding:30px;color:var(--muted);text-align:center}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 data-i18n-key="boardroom.directory_title">👥 Agents Directory</h1>
+    <p class="sub" data-i18n-key="boardroom.directory_subtitle">All CEOs at a glance — click a row to open thread, ⚙ to configure autonomy.</p>
+    <div class="nav">
+      <a href="/boardroom">📥 Inbox</a>
+      <a class="active">👥 Directory</a>
+      <a href="/boardroom/vault">📚 Vault</a>
+      <a href="/boardroom/portfolio">🌐 Portfolio</a>
+      <a href="/boardroom/recap">📊 Daily Recap</a>
+      <a href="/boardroom/create">+ New CEO</a>
+    </div>
+    <div class="filter">
+      <input id="q" type="search" placeholder="Filter by name, project, role…" autocomplete="off" />
+      <span style="color:var(--muted);font-size:12px" id="count">— CEOs</span>
+    </div>
+    <table id="table">
+      <thead>
+        <tr>
+          <th>CEO</th>
+          <th>Project</th>
+          <th>Tier</th>
+          <th>Maturity</th>
+          <th>Tools</th>
+          <th>Status</th>
+          <th>Messages</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let items = [];
+    function esc(s){return (s||'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    function ago(ts){if(!ts) return '—';const m=Math.floor((Date.now()-ts*1000)/60000);if(m<1)return 'just now';if(m<60)return `${m}m`;const h=Math.floor(m/60);if(h<24)return `${h}h`;const d=Math.floor(h/24);return `${d}d`;}
+    function statusIcon(s){return ({idle:'🟢',working:'🟢',waiting:'🟡',blocked:'🔴',paused:'⚪',active:'🟢'}[(s||'').toLowerCase()] || '⚪');}
+
+    async function load() {
+      try {
+        const r = await fetch('/api/boardroom/directory', { credentials:'include' });
+        const data = await r.json();
+        items = data.items || [];
+        render();
+      } catch (e) {
+        $('tbody').innerHTML = '<tr><td colspan="8" class="empty">Could not load.</td></tr>';
+      }
+    }
+    function render() {
+      const q = $('q').value.trim().toLowerCase();
+      const list = q ? items.filter(c => (c.name+c.role+c.level+(c.project_slug||'')+(c.capabilities||'')).toLowerCase().includes(q)) : items;
+      $('count').textContent = `${list.length} CEO${list.length===1?'':'s'}`;
+      if (!list.length) { $('tbody').innerHTML = '<tr><td colspan="8" class="empty">No CEOs match.</td></tr>'; return; }
+      $('tbody').innerHTML = list.map(c => {
+        const tier = c.default_tier || '—';
+        return `
+        <tr>
+          <td><a href="/boardroom/ceo/${c.id}"><strong>${esc(c.name)}</strong></a><br/><span style="color:var(--muted);font-size:11px">${esc(c.role || c.level || '')}</span></td>
+          <td>${esc(c.project_slug || '—')}</td>
+          <td><span class="pill tier${tier}">Tier ${tier}</span></td>
+          <td>${esc(c.maturity_stage || '—')}</td>
+          <td>${c.tools_count || 0}</td>
+          <td><span class="status">${statusIcon(c.status)} ${esc(c.status||'—')}</span><br/><span style="color:var(--muted);font-size:11px">${ago(c.last_active_at)}</span></td>
+          <td>${c.message_count || 0}</td>
+          <td>
+            <a href="/boardroom/ceo/${c.id}" title="Open thread">💬</a>
+            &nbsp;
+            <a href="/boardroom/autonomy/${c.id}" title="Configure autonomy">⚙</a>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+    $('q').addEventListener('input', render);
+    load();
+  </script>
+
+  <script src="/boardroom-i18n.js" defer></script>
+</body>
+</html>

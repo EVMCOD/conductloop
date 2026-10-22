@@ -1,0 +1,39 @@
+[package]
+name = "conductloop-desktop"
+version = "1.2.0"
+description = "ConductLoop — local-first second-brain for macOS, Windows, and Linux"
+authors = ["ConductLoop"]
+edition = "2021"
+
+[lib]
+name = "conductloop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+# Minor pinned (~): the browser tab (design B2) will use the `unstable`
+# multiwebview API, which may break in minor releases. Bump deliberately.
+tauri-build = { version = "~2.7", features = [] }
+
+[dependencies]
+# `unstable`: multiwebview (Window::add_child) for the in-app browser tabs.
+# `macos-proxy`: WebviewBuilder::proxy_url on macOS (14+; see build.rs for the
+# weak link that keeps the app launching on 10.15-13).
+tauri = { version = "~2.12", features = ["unstable", "macos-proxy"] }
+conductloop-url-policy = { path = "../url-policy" }
+tauri-plugin-shell = "2"
+tauri-plugin-updater = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Title bar height for positioning browser tabs (browser.rs measure_title_bar).
+# Already in the tree through tao/wry: no new crate.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSWindow"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
