@@ -48,6 +48,7 @@ def is_parent(project: Project) -> bool:
 # the source. Load order:
 #   1. OPS_PROJECTS_FILE  — path to a JSON list of project dicts
 #   2. projects.local.json next to the repo root (gitignored)
+#   3. projects.local.json in ~/ops-dashboard if it exists, else the data dir
 # Each dict: {key, name, aliases[], repo_paths[], url_names[], color, parent,
 #             github_repo, obsidian_globs[]}
 def _project_from_dict(d: dict) -> Project:
@@ -81,6 +82,10 @@ def _load_projects() -> list[Project]:
     if env:
         candidates.append(Path(env).expanduser())
     candidates.append(Path(__file__).resolve().parent.parent / "projects.local.json")
+    # The desktop app's code lives inside its bundle: look in the data dir too
+    # (or ~/ops-dashboard, where an existing setup keeps it).
+    from .app_paths import path as _app_path
+    candidates.append(_app_path("projects.local.json"))
     for path in candidates:
         try:
             if path.exists():

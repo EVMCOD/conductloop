@@ -14,28 +14,32 @@ import sys
 from pathlib import Path
 
 LEGACY_HOME = Path.home() / "ops-dashboard"
+_REPO_DATA = Path(__file__).resolve().parent.parent / "data"
 
 
 def data_dir() -> Path:
-    """The data directory (holds ops.db). Three-tier lookup:
+    """The data directory (holds ops.db). Four-tier lookup:
       1. $OPS_DATA_DIR                  — explicit override
       2. <repo>/data                    — dev checkout, if that folder exists
-      3. macOS ~/Library/Application Support/com.conductloop.desktop/data
+      3. ~/ops-dashboard/data           — if it already holds an ops.db, so the
+         desktop app opens the same library as an older install or `make serve`
+      4. macOS ~/Library/Application Support/com.conductloop.desktop/data
          Linux ~/.local/share/conductloop/data · Windows %LOCALAPPDATA%/ConductLoop/data
     """
     env = os.environ.get("OPS_DATA_DIR")
     if env:
         return Path(env)
-    here = Path(__file__).resolve().parent.parent / "data"
-    if here.exists() and here.is_dir():
-        return here
+    if _REPO_DATA.is_dir():
+        return _REPO_DATA
+    if (LEGACY_HOME / "data" / "ops.db").is_file():
+        return LEGACY_HOME / "data"
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Application Support" / "com.conductloop.desktop" / "data"
     if sys.platform.startswith("linux"):
         return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "conductloop" / "data"
     if sys.platform.startswith("win"):
         return Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "ConductLoop" / "data"
-    return here
+    return _REPO_DATA
 
 
 def path(rel: str, legacy_rel: str | None = None) -> Path:

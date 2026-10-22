@@ -13,10 +13,15 @@ Output: list of {kind, severity, project, message, current, baseline, zscore}
 """
 from __future__ import annotations
 
+import datetime as dt
 import statistics
 import time
 
 from .. import db
+
+# The same alert is written to the activity feed at most once per this window
+# (detection runs on every dashboard load, digest and briefing).
+FEED_DEDUPE_SECONDS = 24 * 3600
 
 
 def _rolling_stats(values: list[float], window: int = 7) -> tuple[float, float]:
@@ -29,8 +34,23 @@ def _rolling_stats(values: list[float], window: int = 7) -> tuple[float, float]:
     return statistics.mean(nonzero), max(statistics.stdev(nonzero), 1.0)
 
 
+def _complete_days(series: list[dict]) -> list[dict]:
+    """Drop trailing points for a day that has not ended yet.
+
+    Today's GA users or revenue are a fraction of a full day, so comparing them
+    with full days flagged a big "drop" every morning. Revenue dates are UTC and
+    GA dates are local, so a day counts as finished only once it has ended in both.
+    """
+    first_open = min(dt.date.today(), dt.datetime.now(dt.UTC).date()).isoformat()
+    end = len(series)
+    while end and str(series[end - 1].get("date") or "") >= first_open:
+        end -= 1
+    return series[:end]
+
+
 def _check_series(series: list[dict], value_key: str, label: str, project: str) -> list[dict]:
-    """Given a list of {date, x, y} points, check the latest vs baseline."""
+    """Given a list of {date, x, y} points, check the latest complete day vs baseline."""
+    series = _complete_days(series)
     if len(series) < 3:
         return []
     current = series[-1].get(value_key, 0) or 0
@@ -53,6 +73,21 @@ def _check_series(series: list[dict], value_key: str, label: str, project: str) 
             "message": f"{label} {'↑' if z > 0 else '↓'} {pct:+.0f}% vs 7d baseline ({int(current)} vs avg {int(base)})"
         })
     return anomalies
+
+
+def _log_to_feed(anomalies) -> None:
+    """Add each alert to the activity feed unless the same one is already there
+    from the last FEED_DEDUPE_SECONDS (it was logged on every page load)."""
+    since = int(time.time()) - FEED_DEDUPE_SECONDS
+    for a in anomalies:
+        summary = a.get("message") or a.get("kind", "?")
+        with db.db() as conn:
+            seen = conn.execute(
+                "SELECT 1 FROM activity_feed WHERE kind = 'anomaly_detected' AND summary = ? AND created_at >= ? LIMIT 1",
+                (summary, since),
+            ).fetchone()
+        if not seen:
+            db.add_activity("anomaly_detected", summary, project_key=a.get("project"))
 
 
 def detect_recent_anomalies() -> dict:
@@ -111,10 +146,7 @@ def detect_recent_anomalies() -> dict:
     anomalies.sort(key=lambda a: sev_order.get(a.get("severity", "info"), 9))
     # Log high/medium to activity feed (skip info)
     try:
-        from .. import db as _db
-        for a in anomalies:
-            if a.get("severity") in ("high", "medium"):
-                _db.add_activity("anomaly_detected", a.get("message") or a.get("kind", "?"), project_key=a.get("project"))
+        _log_to_feed(a for a in anomalies if a.get("severity") in ("high", "medium"))
     except Exception:
         pass
     return {
