@@ -163,7 +163,10 @@ def seed_default_teams() -> dict:
             existing_teams[key] = cur.lastrowid
             created["teams"] += 1
         # Dedupe by (team_id, name): only add if not already there
-        existing_members = {(r[1], r[0]) for r in conn.execute("SELECT team_id, name FROM team_members").fetchall()}
+        # (team_id, name), the same order as the check below. It was stored the other
+        # way round, so the check never matched and every GET /api/teams added
+        # another copy of the squad (one library had 33).
+        existing_members = {(r[0], r[1]) for r in conn.execute("SELECT team_id, name FROM team_members").fetchall()}
         for team_key, name, type_, role, status, contact, *rest in default_members:
             capabilities = rest[0] if rest else None
             model = rest[1] if len(rest) > 1 else None

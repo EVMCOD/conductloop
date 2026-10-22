@@ -62,6 +62,17 @@ def test_seed_reuses_an_existing_team(fresh_db):
     assert [t["key"] for t in teams] == ["ai-squad"]
 
 
+def test_default_teams_seed_is_idempotent(fresh_db):
+    # GET /api/teams calls it on every load of the Teams view
+    first = fresh_db.seed_default_teams()
+    assert first["members"] == 5
+    for _ in range(3):
+        assert fresh_db.seed_default_teams() == {"teams": 0, "members": 0}
+    with fresh_db.get_connection() as c:
+        n, distinct = c.execute("SELECT COUNT(*), COUNT(DISTINCT name) FROM team_members").fetchone()
+    assert n == distinct == 5
+
+
 def test_seed_starter_endpoint_on_empty_db(fresh_db):
     from ops_dashboard.server import DashboardHandler
 
