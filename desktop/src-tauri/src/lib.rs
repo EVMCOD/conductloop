@@ -9,12 +9,39 @@ use std::sync::Mutex;
 mod agent_bridge;
 mod browser;
 
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::webview::PageLoadEvent;
 use tauri::Manager;
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_updater::UpdaterExt;
 
 const BACKEND_URL: &str = "http://localhost:7777";
+
+/// Back / Home controls for the app's own pages (nav.js): the window has no
+/// browser chrome, so most pages had no way back to the dashboard.
+const NAV_JS: &str = include_str!("nav.js");
+
+/// The default macOS menu plus a Go menu (Back ⌘[, Forward ⌘], Home ⇧⌘H),
+/// placed after View like in Safari and Finder.
+fn app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let menu = Menu::default(handle)?;
+    let go = Submenu::with_items(
+        handle,
+        "Go",
+        true,
+        &[
+            &MenuItem::with_id(handle, "go-back", "Back", true, Some("CmdOrCtrl+["))?,
+            &MenuItem::with_id(handle, "go-forward", "Forward", true, Some("CmdOrCtrl+]"))?,
+            &PredefinedMenuItem::separator(handle)?,
+            &MenuItem::with_id(handle, "go-home", "Home", true, Some("CmdOrCtrl+Shift+H"))?,
+        ],
+    )?;
+    // The default menu ends with Window and Help.
+    let pos = menu.items()?.len().saturating_sub(2);
+    menu.insert(&go, pos)?;
+    Ok(menu)
+}
 
 struct ServerProcess(Mutex<Option<CommandChild>>);
 
@@ -119,6 +146,24 @@ pub fn run() {
             browser::browser_extract,
             browser::browser_agent_control
         ])
+        .menu(app_menu)
+        .on_menu_event(|app, event| {
+            let js = match event.id().as_ref() {
+                "go-back" => "history.back()",
+                "go-forward" => "history.forward()",
+                "go-home" => "location.assign('/')",
+                _ => return,
+            };
+            // The main webview only: browser tabs keep their own back/forward.
+            if let Some(view) = app.get_webview("main") {
+                let _ = view.eval(js);
+            }
+        })
+        .on_page_load(|webview, payload| {
+            if webview.label() == "main" && payload.event() == PageLoadEvent::Finished {
+                let _ = webview.eval(NAV_JS.replace("__CL_ORIGIN__", BACKEND_URL));
+            }
+        })
         .setup(|app| {
             // 0. In-app browser state + filtering proxy (browser design PR 4/5).
             app.manage(browser::BrowserState::new(browser::start_proxy()));
