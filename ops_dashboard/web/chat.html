@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chat — ConductLoop</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/chat.css" />
+  <script src="/provider-errors.js" defer></script>
+  <script src="/chat.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail" id="rail">
+      <div class="rail-top">
+        <a class="back" href="/">← ConductLoop</a>
+        <button class="icon-btn" id="theme" type="button" title="Toggle theme" aria-label="Toggle theme">◐</button>
+      </div>
+      <button class="new-chat" id="new-chat" type="button"><span>＋</span> New chat</button>
+
+      <div class="rail-section">
+        <div class="rail-label">Agents</div>
+        <ul class="agent-list" id="agents-main"></ul>
+      </div>
+      <div class="rail-section" id="team-section" hidden>
+        <div class="rail-label">Team <span class="rail-hint" id="team-hint"></span></div>
+        <ul class="agent-list" id="agents-team"></ul>
+      </div>
+      <div class="rail-section grow">
+        <div class="rail-label">Recent</div>
+        <ul class="thread-list" id="threads"></ul>
+        <p class="rail-empty" id="threads-empty" hidden>No conversations yet.</p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn only-narrow" id="rail-toggle" type="button" aria-label="Agents">☰</button>
+        <div class="who" id="who"></div>
+        <div class="controls">
+          <label class="team-toggle" id="team-toggle-wrap" hidden>
+            <input type="checkbox" id="team-toggle" checked />
+            <span class="switch" aria-hidden="true"></span>
+            <span>Team mode</span>
+          </label>
+          <select id="provider" aria-label="Model provider"></select>
+        </div>
+      </header>
+
+      <section class="scroll" id="scroll">
+        <div class="column" id="messages"></div>
+      </section>
+
+      <footer class="composer-wrap">
+        <form class="composer" id="composer">
+          <textarea id="input" rows="1" placeholder="Message…" aria-label="Message"></textarea>
+          <button class="send" id="send" type="submit" aria-label="Send">↑</button>
+        </form>
+        <p class="composer-hint" id="hint"></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
