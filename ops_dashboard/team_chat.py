@@ -39,6 +39,9 @@ AGENT_DEADLINE_SECONDS = 120      # whole parallel phase
 PLAN_DEADLINE_SECONDS = 45
 HISTORY_TURNS = 12
 BRAIN_KEY = "brain"
+# Provider failures that every following call would repeat: stop the turn with
+# one message instead of sending each agent into the same wall.
+FATAL_PROVIDER_CODES = {"insufficient_credit", "invalid_key", "model_unavailable"}
 
 _RULES = (
     "Rules:\n"
@@ -356,20 +359,26 @@ _WORD = re.compile(r"[a-záéíóúñü0-9]{4,}")
 
 
 def heuristic_plan(message: str, team: list[dict]) -> tuple[str, list[dict]]:
-    """Fallback when the model gives no usable plan: the two best skill matches."""
+    """Fallback when the model gives no usable plan: the two best skill matches,
+    or nobody (the CEO answers alone) when nothing in the message matches."""
     words = set(_WORD.findall(message.lower()))
 
     def score(a: dict) -> int:
         text = f"{a['title']} {a['skills']} {a.get('description', '')}".lower()
         return sum(1 for w in words if w in text)
 
-    ranked = sorted(team, key=lambda a: -score(a))
-    picked = [a for a in ranked if score(a) > 0][:2] or ranked[:2]
+    picked = [a for a in sorted(team, key=lambda a: -score(a)) if score(a) > 0][:2]
     note = "Asking " + " and ".join(a["name"] for a in picked) + "." if picked else ""
     return note, [{"agent": a["key"], "task": message[:600]} for a in picked]
 
 
 # ---------- running a turn ----------
+
+class _ProviderFailed(Exception):
+    def __init__(self, err) -> None:
+        super().__init__(err.message)
+        self.err = err
+
 
 class ChatTurn:
     """One user message to one agent. ``prepare`` resolves everything that can
@@ -437,6 +446,9 @@ class ChatTurn:
         yield from self._stream_answer(system, messages)
 
     def _plan(self, lead: dict, team: list[dict], history: list[dict]) -> tuple[str, list[dict]]:
+        """The CEO's plan; the keyword fallback when the model gives no usable one.
+        Raises _ProviderFailed when the provider itself can't answer (no credit,
+        bad key, retired model): the agents and the synthesis would fail the same way."""
         if self.provider.name != "mock":
             try:
                 raw = brain.ask_with_deadline(
@@ -445,14 +457,22 @@ class ChatTurn:
                 parsed = parse_plan(raw, team)
                 if parsed is not None:
                     return parsed
-            except Exception:
+            except TimeoutError:
                 pass
+            except Exception as e:
+                err = brain._translate_provider_error(e, self.provider.name)
+                if err.code in FATAL_PROVIDER_CODES:
+                    raise _ProviderFailed(err) from e
         return heuristic_plan(self.message, team)
 
     def _team(self, history: list[dict], context: str, web_rules: str) -> Iterator[dict]:
         lead = self.agent
         team = team_of(lead, self.agents)
-        note, assignments = self._plan(lead, team, history) if team else ("", [])
+        try:
+            note, assignments = self._plan(lead, team, history) if team else ("", [])
+        except _ProviderFailed as failed:
+            yield {"type": "error", "code": failed.err.code, "message": failed.err.message}
+            return
         cards = []
         for a in assignments:
             ag = _find(team, a["agent"])

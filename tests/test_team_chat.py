@@ -179,3 +179,41 @@ def test_send_route_streams_sse(team):
         assert err.value.code == 404
     finally:
         srv.shutdown()
+
+
+def test_small_talk_gets_no_agents(team):
+    members = [a for a in team_chat.roster()["agents"] if a["kind"] == "member" and not a["lead"]]
+    assert team_chat.heuristic_plan("hye", members) == ("", [])
+    saved_plan = FakeProvider.plan
+    FakeProvider.plan = "hi there, no json"            # the model gives no usable plan
+    try:
+        events = list(team_chat.ChatTurn(team["ceo"], "hola").events())
+    finally:
+        FakeProvider.plan = saved_plan
+    plan = next(e for e in events if e["type"] == "plan")
+    assert plan["assignments"] == [] and not any(e["type"] == "agent_start" for e in events)
+    assert "".join(e["content"] for e in events if e["type"] == "delta") == "Hello world"
+
+
+class RetiredModel(FakeProvider):
+    def ask(self, system, messages, **kwargs):
+        raise RuntimeError("Error code: 404 - {'type': 'error', 'error': {'type': 'not_found_error', "
+                           "'message': 'The model \"MiniMax-M2.7\" is no longer available. (2069)', 'http_code': '404'}}")
+
+
+def test_a_provider_that_cannot_answer_stops_the_turn_once(team, monkeypatch):
+    monkeypatch.setattr(team_chat.brain, "resolve_provider", lambda *a, **k: RetiredModel())
+    events = list(team_chat.ChatTurn(team["ceo"], "How do we launch?").events())
+    assert [e["type"] for e in events] == ["start", "context", "error", "done"]
+    assert events[2]["code"] == "model_unavailable" and "MiniMax-M2.7" in events[2]["message"]
+    assert not any(kind == "stream" for kind, *_ in FakeProvider.calls)   # no agent, no synthesis
+
+
+def test_retired_model_error_is_translated():
+    raw = ("Error code: 404 - {'type': 'error', 'error': {'type': 'not_found_error', 'message': "
+           "'The model \"MiniMax-M2.7\" is no longer available. (2069)', 'http_code': '404'}}")
+    err = brain._classify_provider_error(RuntimeError(raw), "minimax")
+    assert err.code == "model_unavailable" and "«MiniMax-M2.7»" in err.message and "{" not in err.message
+    assert brain._classify_provider_error(RuntimeError("Error code: 402 - insufficient_balance"), "minimax").code \
+        == "insufficient_credit"
+    assert brain.DEFAULT_MODELS["minimax"] == "MiniMax-M3"
