@@ -163,6 +163,14 @@ class Provider:
     def base_url(self) -> str:
         return str(self.get("base_url", "") or "").strip().rstrip("/")
 
+    def effective_base_url(self) -> str:
+        """The url this provider really talks to, after the fallbacks.
+
+        A provider may inherit it from the product's own configuration; the
+        page shows this one, because that is where the work really goes.
+        """
+        return self.base_url
+
     @property
     def identity(self) -> str:
         """The name this provider is recorded under.
@@ -442,8 +450,24 @@ def catalogue() -> list[dict[str, Any]]:
             **entry["default_config"],
             **{k: v for k, v in config.items() if k not in ("api_key", "token")},
         }
+        entry["effective_base_url"] = _effective_base_url(spec, config)
         out.append(entry)
     return out
+
+
+def _effective_base_url(spec: ProviderSpec, config: dict[str, Any]) -> str:
+    """Where this provider really sends its work.
+
+    A provider may inherit the url from the product's own configuration, so
+    what is stored is not always where the work goes. The page shows this
+    one, because that is the answer to "who is doing the work".
+    """
+    if not any(f.get("key") == "base_url" for f in spec.config_fields):
+        return ""
+    try:
+        return build(spec.key).effective_base_url()
+    except Exception:
+        return str(config.get("base_url") or "")
 
 
 def set_enabled(key: str, enabled: bool) -> None:
@@ -598,6 +622,7 @@ def describe_all() -> list[dict[str, Any]]:
             **entry["default_config"],
             **{k: v for k, v in stored.items() if k not in ("api_key", "token")},
         }
+        entry["effective_base_url"] = _effective_base_url(spec, stored)
         if entry["enabled"]:
             try:
                 provider = build(spec.key)
