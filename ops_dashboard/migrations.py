@@ -673,5 +673,92 @@ def _mig_20_browser_sessions(conn: sqlite3.Connection) -> None:
             conn.execute("PRAGMA foreign_keys = ON")
 
 
+def _mig_21_documents_project_key(conn: sqlite3.Connection) -> None:
+    """documents.project_key — the business a document belongs to.
+
+    Until now the RAG searched every document of every project, so a
+    question about one business answered with another business's files (and
+    cited them). 2026-10-23.
+    """
+    row = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' "
+                       "AND name = 'documents'").fetchone()
+    if row is None:
+        return  # no documents table in this DB (partial install): nothing to do
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(documents)")]
+    if "project_key" not in cols:
+        conn.execute("ALTER TABLE documents ADD COLUMN project_key TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_project_key "
+                 "ON documents(project_key)")
+
+
 MIGRATIONS.append((20, "browser sessions: agent_sessions.browser_mode, repo optional (B11)",
                    _mig_20_browser_sessions))
+def _mig_22_mcp_server_trust(conn: sqlite3.Connection) -> None:
+    """mcp_servers.trust_readonly — the user opts in to trusting a server's
+    own read-only annotations.
+
+    Until now, an MCP server decided for itself whether its tool was a read
+    or a write (``readOnlyHint``), so a server labelling a destructive tool
+    as read-only ran it without approval. Now ``auto`` means "needs
+    approval" unless the user explicitly trusts this server. 2026-10-23.
+    """
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(mcp_servers)")]
+    if "trust_readonly" not in cols:
+        row = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' "
+                           "AND name = 'mcp_servers'").fetchone()
+        if row is None:
+            return  # connectors framework not installed in this DB
+        conn.execute("ALTER TABLE mcp_servers ADD COLUMN trust_readonly INTEGER NOT NULL DEFAULT 0")
+
+
+MIGRATIONS.append((21, "documents.project_key: RAG isolated per project (2026-10-23)",
+                   _mig_21_documents_project_key))
+MIGRATIONS.append((22, "mcp_servers.trust_readonly: MCP write gating (2026-10-23)",
+                   _mig_22_mcp_server_trust))
+
+
+def _mig_23_media_providers(conn: sqlite3.Connection) -> None:
+    """media_providers — who does the work, and with what credentials.
+
+    The media engine used to be one vendor. Now a provider declares the
+    capabilities it serves and this table holds its configuration, so the
+    product can ask for "an image" without knowing whether it comes from a
+    cloud API, a local ComfyUI or an OpenAI-compatible server on this Mac.
+    2026-10-23.
+    """
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS media_providers (
+               key TEXT PRIMARY KEY,
+               enabled INTEGER NOT NULL DEFAULT 0,
+               priority INTEGER NOT NULL DEFAULT 100,
+               config_json TEXT NOT NULL DEFAULT '{}',
+               last_error TEXT,
+               checked_at INTEGER,
+               updated_at INTEGER NOT NULL
+           )""")
+
+
+MIGRATIONS.append((23, "media_providers: vendor-agnostic media backends (2026-10-23)",
+                   _mig_23_media_providers))
+
+
+def _mig_24_media_provider_usage(conn: sqlite3.Connection) -> None:
+    """media_provider_usage — who did the work, how often, and what it cost.
+
+    A provider that silently burns money is worse than one that refuses:
+    the cap is the brake, and the counters are how the user sees it coming.
+    2026-10-23.
+    """
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS media_provider_usage (
+               provider_key TEXT NOT NULL,
+               day TEXT NOT NULL,
+               calls INTEGER NOT NULL DEFAULT 0,
+               errors INTEGER NOT NULL DEFAULT 0,
+               updated_at INTEGER NOT NULL,
+               PRIMARY KEY (provider_key, day)
+           )""")
+
+
+MIGRATIONS.append((24, "media_provider_usage: per-provider counters and daily caps (2026-10-23)",
+                   _mig_24_media_provider_usage))
