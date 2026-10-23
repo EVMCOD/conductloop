@@ -253,3 +253,66 @@ def test_the_prune_only_touches_its_own_folder(env, tmp_path):
     with _db.db() as conn:
         paths = [r["path"] for r in conn.execute("SELECT path FROM documents")]
     assert paths == [str(other / "b.md")]
+
+
+# ── the agent is told to read the map ─────────────────────────────────────
+
+def test_the_agent_instructions_point_at_the_map(env, tmp_path):
+    """An agent that follows its startup list has to find the map."""
+    import ops_dashboard.library as lib
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "AGENTS.md").write_text(
+        "# AGENTS.md\n\n## Session Startup\n\n1. Read SOUL.md\n2. Read MEMORY.md\n",
+        encoding="utf-8")
+    original = lib.memory_workspace
+    try:
+        lib.memory_workspace = lambda: workspace
+        notes_structure.write_agent_map()
+    finally:
+        lib.memory_workspace = original
+    text = (workspace / "AGENTS.md").read_text(encoding="utf-8")
+    assert "PROJECTS.md" in text
+    assert notes_structure.POINTER_BEGIN in text
+    # The user's own text is untouched.
+    assert "Read SOUL.md" in text
+    assert "Read MEMORY.md" in text
+
+
+def test_the_pointer_is_refreshed_without_touching_the_rest(env, tmp_path):
+    import ops_dashboard.library as lib
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    agents = workspace / "AGENTS.md"
+    agents.write_text(
+        "# AGENTS.md\n\n## Session Startup\n\n1. Read SOUL.md\n",
+        encoding="utf-8")
+    original = lib.memory_workspace
+    try:
+        lib.memory_workspace = lambda: workspace
+        notes_structure.write_agent_map()
+        first = agents.read_text(encoding="utf-8")
+        notes_structure.write_agent_map()
+        second = agents.read_text(encoding="utf-8")
+    finally:
+        lib.memory_workspace = original
+    assert first == second, "writing it twice must not double the block"
+    assert second.count(notes_structure.POINTER_BEGIN) == 1
+
+
+def test_the_map_is_not_written_into_the_workspace_unless_it_is_already_there(env, tmp_path):
+    """The product does not start writing into the agent's workspace just
+    because it happened to run."""
+    import ops_dashboard.library as lib
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    original = lib.memory_workspace
+    try:
+        lib.memory_workspace = lambda: workspace
+        assert notes_structure.refresh_agent_map() is None
+        assert not (workspace / "PROJECTS.md").exists()
+    finally:
+        lib.memory_workspace = original
