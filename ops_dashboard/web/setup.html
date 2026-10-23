@@ -238,6 +238,36 @@
           });
         }
 
+        const drift = d.drift || {};
+        const missing = drift.missing_from_index || [];
+        const broken = drift.links_to_nothing || [];
+        if (missing.length || broken.length) {
+          const body = mapGroup('Where your index and the vault disagree');
+          if (missing.length) {
+            const row = el('div', 'detail');
+            row.textContent = missing.length + ' project notes are in the vault but in no index: ' +
+              missing.slice(0, 12).join(', ') + (missing.length > 12 ? '…' : '');
+            body.appendChild(row);
+          }
+          if (broken.length) {
+            const row = el('div', 'detail');
+            row.textContent = broken.length + ' links point to nothing: ' +
+              broken.slice(0, 8).join(', ');
+            body.appendChild(row);
+          }
+        }
+
+        const unlinked = d.unlinked || [];
+        if (unlinked.length) {
+          const body = mapGroup('Notes a project page does not link');
+          unlinked.forEach(u => {
+            const row = el('div', 'detail');
+            row.textContent = u.title + ' — ' + u.count + ' note(s) in its folder: ' +
+              u.orphans.slice(0, 6).join(', ');
+            body.appendChild(row);
+          });
+        }
+
         const topics = d.topics || [];
         if (topics.length) {
           const body = mapGroup('Themes in the loose notes', topics.length);

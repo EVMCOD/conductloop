@@ -178,6 +178,170 @@ def _vault_roots() -> list[Path]:
     return [r for r in roots if r.exists()]
 
 
+# ── the vault's own convention ────────────────────────────────────────────
+
+_WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
+_FM_KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_ -]*)\s*:\s*(.+?)\s*$")
+
+
+def _frontmatter(text: str) -> dict[str, str]:
+    """The frontmatter of a note, as plain strings.
+
+    Deliberately not a YAML parser: the values here are a status, a type,
+    a tag list. A note that does not fit is not broken by it.
+    """
+    if not text.startswith("---"):
+        return {}
+    end = text.find("\n---", 3)
+    if end == -1:
+        return {}
+    out: dict[str, str] = {}
+    for line in text[4:end].splitlines():
+        m = _FM_KEY_RE.match(line)
+        if m:
+            out[m.group(1).strip().lower()] = m.group(2).strip().strip("\"'")
+    return out
+
+
+def _link_targets(text: str) -> set[str]:
+    """The note names a piece of text links to."""
+    out: set[str] = set()
+    for m in _WIKILINK_RE.finditer(text):
+        target = m.group(1).strip().rstrip("\\")
+        if not target or target.startswith("#"):
+            continue
+        out.add(target.split("/")[-1].removesuffix(".md"))
+    return out
+
+
+def _read_notes(roots: list[Path]) -> list[dict[str, Any]]:
+    """Every note of the vault, with what its frontmatter says about it."""
+    out: list[dict[str, Any]] = []
+    for root in roots:
+        for path in root.rglob("*.md"):
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            fm = _frontmatter(text)
+            try:
+                rel = str(path.relative_to(root))
+            except ValueError:
+                rel = path.name
+            out.append({
+                "stem": path.stem,
+                "rel": rel,
+                "path": str(path),
+                "frontmatter": fm,
+                "type": (fm.get("type") or "").lower(),
+                "status": (fm.get("status") or "").lower(),
+                "title": fm.get("title") or path.stem,
+                "links": _link_targets(text),
+                "mtime": int(path.stat().st_mtime),
+                "in_projects": rel.startswith("projects/"),
+            })
+    return out
+
+
+def index_drift(*, roots: list[Path] | None = None) -> dict[str, Any]:
+    """Where the vault's own index and the vault disagree.
+
+    The index is written by hand, so it drifts: a project note appears and
+    the index does not mention it, or the index counts thirty-three active
+    projects and there are fifty. This reads the convention from the notes
+    themselves — a project says what it is in its frontmatter, and the
+    index says which notes belong — and reports the difference.
+    """
+    roots = roots if roots is not None else _vault_roots()
+    notes = _read_notes(roots)
+    by_stem: dict[str, list[dict[str, Any]]] = {}
+    for note in notes:
+        by_stem.setdefault(note["stem"], []).append(note)
+
+    # The hubs: the notes that are indexes of other notes.
+    hubs = sorted((n for n in notes if n["type"] == "hub"),
+                  key=lambda n: -len(n["links"]))
+
+    # A project says so in its frontmatter. The other notes in the projects
+    # folder are its documentation — not projects — and they are what the
+    # "unlinked" report is about.
+    project_notes = [n for n in notes if n["type"] == "project"]
+    project_notes.sort(key=lambda n: n["stem"])
+
+    listed: set[str] = set()
+    for hub in hubs:
+        listed |= hub["links"]
+
+    by_status: dict[str, list[str]] = {}
+    for note in project_notes:
+        by_status.setdefault(note["status"] or "(no status)", []).append(note["stem"])
+
+    missing = sorted(n["stem"] for n in project_notes if n["stem"] not in listed)
+    ghosts = sorted(t for t in listed if t not in by_stem)
+
+    # The ideas: the project notes that are waiting for a decision.
+    ideas = sorted(by_status.get("idea", []) + by_status.get("open-decision", []))
+
+    return {
+        "notes": len(notes),
+        "projects": len(project_notes),
+        "by_status": {k: len(v) for k, v in sorted(by_status.items())},
+        "hubs": [{"stem": h["stem"], "rel": h["rel"], "links": len(h["links"])}
+                 for h in hubs],
+        "listed": len(listed),
+        "missing_from_index": missing,
+        "links_to_nothing": ghosts,
+        "ideas": ideas,
+        "ideas_not_listed": sorted(i for i in ideas if i not in listed),
+    }
+
+
+def unlinked_notes(*, roots: list[Path] | None = None, limit: int = 12) -> list[dict[str, Any]]:
+    """The notes of a project that its own page does not link.
+
+    A project keeps its documentation in its own folder — that is the
+    convention — and its page links the notes that matter. The ones the
+    page forgot are in the vault, the search finds them, and nobody sees
+    them when they open the project.
+
+    (A note that merely mentions the project is not one of its notes: a
+    daily note that says "rentcla" is a daily note. What counts is the
+    note that lives in the project's own folder.)
+    """
+    roots = roots if roots is not None else _vault_roots()
+    out: list[dict[str, Any]] = []
+    for root in roots:
+        projects_dir = root / "projects"
+        if not projects_dir.is_dir():
+            continue
+        for page in sorted(projects_dir.glob("*.md")):
+            if page.stem == "_index":
+                continue
+            try:
+                text = page.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            fm = _frontmatter(text)
+            if fm.get("type", "").lower() not in ("project", ""):
+                continue
+            folder = projects_dir / page.stem
+            if not folder.is_dir():
+                continue
+            linked = _link_targets(text)
+            orphans = sorted(p.stem for p in folder.glob("*.md") if p.stem not in linked)
+            if orphans:
+                out.append({
+                    "project": page.stem,
+                    "title": fm.get("title") or page.stem,
+                    "path": str(page),
+                    "folder": str(folder),
+                    "orphans": orphans[:limit],
+                    "count": len(orphans),
+                })
+    out.sort(key=lambda item: -item["count"])
+    return out
+
+
 def structure(*, attribute: bool = True) -> dict[str, Any]:
     """The map: projects with their notes, ideas with no project, suggestions.
 
@@ -238,6 +402,8 @@ def structure(*, attribute: bool = True) -> dict[str, Any]:
 
     return {
         "projects": sorted(out_projects, key=lambda p: (-p["notes"], p["name"].lower())),
+        "drift": index_drift(roots=roots),
+        "unlinked": unlinked_notes(roots=roots),
         "ideas": [
             {"area": area, "notes": notes[:50], "count": len(notes),
              "ids": sorted(n["id"] for n in notes)}
@@ -328,6 +494,35 @@ def export_markdown(structure_map: dict[str, Any] | None = None) -> str:
             for note in group["notes"][:20]:
                 lines.append(f"- {note['title']} — {note['path']}")
             lines.append("")
+    drift = data.get("drift") or {}
+    missing = drift.get("missing_from_index") or []
+    broken = drift.get("links_to_nothing") or []
+    if missing or broken:
+        lines.append("## Where the index and the vault disagree")
+        lines.append("")
+        if missing:
+            lines.append(f"{len(missing)} project notes are not in any index — "
+                         "the index is written by hand and it drifts:")
+            lines.append("")
+            for stem in missing[:25]:
+                lines.append(f"- {stem}")
+            if len(missing) > 25:
+                lines.append(f"- … and {len(missing) - 25} more")
+            lines.append("")
+        if broken:
+            lines.append("Links that point to nothing:")
+            lines.append("")
+            for stem in broken[:12]:
+                lines.append(f"- {stem}")
+            lines.append("")
+    unlinked = data.get("unlinked") or []
+    if unlinked:
+        lines.append("## Notes of a project that its page does not link")
+        lines.append("")
+        for row in unlinked:
+            lines.append(f"- **{row['title']}** — {row['count']} note(s) in its folder "
+                         f"that its page does not link: {', '.join(row['orphans'][:5])}")
+        lines.append("")
     suggestions_out = data.get("suggestions") or []
     if suggestions_out:
         lines.append("## Possible projects (not registered yet)")
