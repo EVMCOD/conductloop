@@ -41,7 +41,7 @@ HISTORY_TURNS = 12
 BRAIN_KEY = "brain"
 # Provider failures that every following call would repeat: stop the turn with
 # one message instead of sending each agent into the same wall.
-FATAL_PROVIDER_CODES = {"insufficient_credit", "invalid_key", "model_unavailable"}
+FATAL_PROVIDER_CODES = {"insufficient_credit", "invalid_key", "model_unavailable", "internal"}
 
 _RULES = (
     "Rules:\n"
