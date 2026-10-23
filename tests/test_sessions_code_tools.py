@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
@@ -320,17 +321,21 @@ def test_run_env_has_no_keys_proxies_or_real_home(env, monkeypatch):
 def test_run_timeout_kills_the_process_group(env):
     t = env["make"]("a")
     t.timeout_s = 2
-    _test_file(t, "test_slow.py", """
+    # A duration of its own: the check below reads the whole process table,
+    # so a plain "sleep 120" would also catch a stranger's sleep and fail
+    # the test for a reason that has nothing to do with the code under test.
+    seconds = 100 + (os.getpid() + int(time.time())) % 800
+    _test_file(t, "test_slow.py", f"""
         import subprocess, time
         def test_slow():
-            subprocess.Popen(["sleep", "120"])
-            time.sleep(120)
+            subprocess.Popen(["sleep", "{seconds}"])
+            time.sleep({seconds})
     """)
     r = t.run(["pytest", "-q", "test_slow.py"])
     assert r["timed_out"] is True and r["exit_code"] is None
     assert r["duration_ms"] < 30_000
     out = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
-    assert "sleep 120" not in out
+    assert f"sleep {seconds}" not in out
 
 
 def test_run_huge_output_is_capped(env):
