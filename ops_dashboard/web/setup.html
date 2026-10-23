@@ -54,6 +54,9 @@
       <textarea id="lib-folders" rows="3" spellcheck="false" placeholder="~/Documents/Obsidian/MyVault"></textarea>
       <label class="lib-label" for="lib-workspace">Memory folder (MEMORY.md, memory/*.md)</label>
       <input id="lib-workspace" spellcheck="false" placeholder="~/agent-workspace" />
+      <label class="lib-label" for="lib-mapfolder">Map export folder (optional)</label>
+      <input id="lib-mapfolder" spellcheck="false" placeholder="~/Documents/Obsidian/MyVault/ConductLoop" />
+      <div class="hint">Where the map is also written as markdown, so it travels with your notes. The agent's own workspace always gets it too.</div>
       <div style="margin-top:12px">
         <button id="lib-save">Save folders</button>
         <button id="lib-index" class="ghost">Index now</button>
@@ -140,6 +143,7 @@
         document.getElementById('lib-write').textContent = d.write_vault;
         document.getElementById('lib-folders').value = (d.index_folders || []).join('\n');
         document.getElementById('lib-workspace').value = d.memory_workspace || '';
+        document.getElementById('lib-mapfolder').value = d.map_export_folder || '';
         const docs = d.documents || {}, last = d.last_indexed || {};
         document.getElementById('lib-status').textContent =
           (d.indexing ? 'Indexing… · ' : '') +
@@ -154,6 +158,7 @@
       const body = {
         index_folders: document.getElementById('lib-folders').value.split('\n').map(s => s.trim()).filter(Boolean),
         memory_workspace: document.getElementById('lib-workspace').value.trim(),
+        map_export_folder: document.getElementById('lib-mapfolder').value.trim(),
       };
       try {
         const r = await fetch('/api/library', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
@@ -258,7 +263,8 @@
         const r = await fetch('/api/library/export', {method: 'POST'});
         const d = await r.json();
         if (!d.ok) throw new Error(d.message || d.error || 'failed');
-        note.textContent = '✓ Written to ' + d.path;
+        const copies = (d.copies || []).map(p => ' · ' + p).join('');
+        note.textContent = (d.changed ? '✓ Written to ' : '✓ Nothing changed — already up to date at ') + d.path + copies;
       } catch (e) { note.textContent = '✗ ' + e.message; }
     };
 

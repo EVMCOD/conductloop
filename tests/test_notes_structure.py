@@ -292,13 +292,16 @@ def test_the_pointer_is_refreshed_without_touching_the_rest(env, tmp_path):
     original = lib.memory_workspace
     try:
         lib.memory_workspace = lambda: workspace
+        # The first draw has nothing to compare against; the second settles
+        # the summary. From then on the file is not touched again.
+        notes_structure.write_agent_map()
         notes_structure.write_agent_map()
         first = agents.read_text(encoding="utf-8")
         notes_structure.write_agent_map()
         second = agents.read_text(encoding="utf-8")
     finally:
         lib.memory_workspace = original
-    assert first == second, "writing it twice must not double the block"
+    assert first == second, "writing it again must not change the block"
     assert second.count(notes_structure.POINTER_BEGIN) == 1
 
 
@@ -316,3 +319,100 @@ def test_the_map_is_not_written_into_the_workspace_unless_it_is_already_there(en
         assert not (workspace / "PROJECTS.md").exists()
     finally:
         lib.memory_workspace = original
+
+
+# ── the map only moves when something moves ───────────────────────────────
+
+def test_writing_the_map_twice_changes_nothing_the_second_time(env, tmp_path):
+    """A file rewritten with the same thing every hour is a file that
+    changes every hour."""
+    import ops_dashboard.library as lib
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    original = lib.memory_workspace
+    try:
+        lib.memory_workspace = lambda: workspace
+        first = notes_structure.write_agent_map()
+        second = notes_structure.write_agent_map()
+    finally:
+        lib.memory_workspace = original
+    assert first["changed"] is True
+    assert second["changed"] is False
+    assert first["path"] == second["path"]
+
+
+def test_the_agents_file_is_not_touched_when_nothing_changed(env, tmp_path):
+    import ops_dashboard.library as lib
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    agents = workspace / "AGENTS.md"
+    agents.write_text("# AGENTS.md\n\n## Session Startup\n\n1. Read SOUL.md\n",
+                      encoding="utf-8")
+    original = lib.memory_workspace
+    try:
+        lib.memory_workspace = lambda: workspace
+        # Twice: the first draw and the settling of the summary. After that
+        # the file must not be touched again.
+        notes_structure.write_agent_map()
+        notes_structure.write_agent_map()
+        before = agents.stat().st_mtime_ns
+        notes_structure.write_agent_map()
+        after = agents.stat().st_mtime_ns
+    finally:
+        lib.memory_workspace = original
+    assert before == after, "the user's own file must not be touched every hour"
+
+
+def test_the_pointer_says_what_changed(env, tmp_path):
+    """The agent gets one line about what moved, not 39 KB to re-read."""
+    import ops_dashboard.library as lib
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    original = lib.memory_workspace
+    try:
+        lib.memory_workspace = lambda: workspace
+        notes_structure.write_agent_map()
+        _note("/vault/deepwick/new.md", "deepwick deepwick deepwick")
+        notes_structure.write_agent_map()
+    finally:
+        lib.memory_workspace = original
+    text = (workspace / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Last change" in text
+    assert "DeepWick" in text
+
+
+def test_the_map_also_goes_where_the_notes_are(env, tmp_path):
+    import ops_dashboard.library as lib
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    original = lib.memory_workspace
+    try:
+        lib.memory_workspace = lambda: workspace
+        written = notes_structure.write_agent_map(also_to=[vault])
+    finally:
+        lib.memory_workspace = original
+    assert written["copies"] == [str(vault / "PROJECTS.md")]
+    assert (vault / "PROJECTS.md").exists()
+    assert "Projects and ideas" in (vault / "PROJECTS.md").read_text(encoding="utf-8")
+
+
+def test_the_state_file_is_what_makes_the_change_knowable(env, tmp_path):
+    import ops_dashboard.library as lib
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    original = lib.memory_workspace
+    try:
+        lib.memory_workspace = lambda: workspace
+        notes_structure.write_agent_map()
+    finally:
+        lib.memory_workspace = original
+    state = json.loads((workspace / "PROJECTS.state.json").read_text(encoding="utf-8"))
+    assert "fingerprint" in state
+    assert state["fingerprint"]["projects"]

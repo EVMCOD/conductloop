@@ -159,8 +159,16 @@ def _run_one(vault_root: Path) -> dict:
     print(f"obsidian: scanning {len(md_files)} markdown files under {vault_root}")
     seen: set[str] = set()
 
+    # The map the product writes names every project; indexing it would put
+    # one synthetic note among the real ones (2026-10-24).
+    from ..library import map_files
+
+    skip_files = map_files()
+
     for i, path in enumerate(md_files, 1):
         if any(part in SKIP_DIRS for part in path.parts):
+            continue
+        if str(path.resolve()) in skip_files:
             continue
         seen.add(str(path))
         c = index_path(path)
