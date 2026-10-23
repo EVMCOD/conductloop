@@ -13,7 +13,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from ops_dashboard import brain
+# The tool-calling loop is proven against the real client, so it cannot run
+# without the SDK. The CI installs it (see requirements-dev.txt); a lean
+# checkout skips it.
+pytest.importorskip("openai")
+
+from ops_dashboard import brain  # noqa: E402
 
 
 class _OpenAIHandler(BaseHTTPRequestHandler):
