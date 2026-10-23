@@ -333,17 +333,88 @@ def export_markdown(structure_map: dict[str, Any] | None = None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_agent_map(*, filename: str = "PROJECTS.md") -> dict[str, Any]:
+MAP_FILENAME = "PROJECTS.md"
+POINTER_BEGIN = "<!-- conductloop:map -->"
+POINTER_END = "<!-- /conductloop:map -->"
+
+POINTER_BLOCK = f"""{POINTER_BEGIN}
+> **The map of the work** — `MAP_FILENAME` in this folder. Which project each
+> note belongs to, which ideas belong to nobody yet, and the projects your
+> notes know about but the registry does not. Read it before answering
+> anything about a project: it is the same for every agent, which is the
+> point of writing it down.
+{POINTER_END}
+"""
+
+
+def write_agent_map(*, filename: str = MAP_FILENAME, pointer: bool = True) -> dict[str, Any]:
     """Write the map where the next agent will find it.
 
     This is the part that makes changing agents a non-event: the map is a
-    file, not a memory.
+    file, not a memory. With ``pointer``, the agent's own instructions point
+    at it, so an agent that follows its startup list reads the map before
+    it answers anything.
     """
     from . import library
 
     workspace = library.memory_workspace()
     workspace.mkdir(parents=True, exist_ok=True)
     path = workspace / filename
+    text = export_markdown()
+    path.write_text(text, encoding="utf-8")
+    out = {"path": str(path), "bytes": len(text.encode("utf-8"))}
+    if pointer:
+        out["pointer"] = write_agent_pointer(workspace)
+    return out
+
+
+def write_agent_pointer(workspace: Path | None = None) -> dict[str, Any]:
+    """Make the agent's own instructions point at the map.
+
+    The block is marked, so it can be refreshed without touching the rest
+    of the file: the user writes AGENTS.md, this only owns the two markers.
+    """
+    if workspace is None:
+        from . import library
+
+        workspace = library.memory_workspace()
+    path = workspace / "AGENTS.md"
+    block = POINTER_BLOCK.replace("MAP_FILENAME", MAP_FILENAME)
+    try:
+        current = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        current = ""
+    if POINTER_BEGIN in current and POINTER_END in current:
+        start = current.index(POINTER_BEGIN)
+        end = current.index(POINTER_END) + len(POINTER_END)
+        updated = current[:start] + block.rstrip("\n") + current[end:]
+    elif current:
+        # Right after the startup heading, where an agent looks first.
+        marker = "## Session Startup"
+        if marker in current:
+            at = current.index(marker) + len(marker)
+            updated = current[:at] + "\n\n" + block + current[at:]
+        else:
+            updated = block + "\n" + current
+    else:
+        updated = block
+    path.write_text(updated, encoding="utf-8")
+    return {"path": str(path), "bytes": len(updated.encode("utf-8"))}
+
+
+def refresh_agent_map(*, filename: str = MAP_FILENAME) -> dict[str, Any] | None:
+    """Keep the map fresh, without touching the agent's instructions.
+
+    The hourly re-index calls this. It only rewrites a map that is already
+    there: the product does not start writing into the agent's workspace
+    because it happened to run.
+    """
+    from . import library
+
+    workspace = library.memory_workspace()
+    path = workspace / filename
+    if not path.exists():
+        return None
     text = export_markdown()
     path.write_text(text, encoding="utf-8")
     return {"path": str(path), "bytes": len(text.encode("utf-8"))}

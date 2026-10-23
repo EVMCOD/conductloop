@@ -100,6 +100,12 @@ def refresh(*, embed: bool = True) -> dict:
         from . import notes_structure
 
         out["structure"] = notes_structure.attribute_documents()
+        # Keep the map fresh for whoever reads it next. It only rewrites a
+        # map that is already there: the product does not start writing
+        # into the agent's workspace just because it happened to run.
+        refreshed = notes_structure.refresh_agent_map()
+        if refreshed:
+            out["map"] = refreshed
     except Exception as e:
         out["structure"] = {"skipped": type(e).__name__}
     if embed:

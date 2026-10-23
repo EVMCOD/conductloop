@@ -1488,6 +1488,10 @@ def _filter_by_project(rows: list[dict], project_key: str | None) -> list[dict]:
         if doc_id not in owner:
             continue  # unknown document: leave it out, it is not ours
         pkey = owner[doc_id]
+        # A note that belongs to nobody is an idea, and an idea is welcome
+        # everywhere. A note that belongs to another project stays out:
+        # the notes that talk about this project are attributed to it by
+        # notes_structure, so nothing is lost by keeping the line here.
         if pkey == project_key or pkey is None:
             keep.add(doc_id)
     if not keep:
