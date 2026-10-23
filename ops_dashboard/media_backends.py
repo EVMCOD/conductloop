@@ -785,6 +785,12 @@ def _multipart(fields: dict[str, str], file_field: str = "") -> bytes:
 
 # ── local embeddings ───────────────────────────────────────────────────────
 
+# Remembered for ten minutes when fastembed is missing, so the import is not
+# retried on every single embedding.
+_FASTEMBED_UNTIL = 0.0
+_FASTEMBED_MESSAGE = ""
+
+
 class LocalEmbedProvider(Provider):
     """Embeddings computed on this machine, with ONNX.
 
@@ -803,13 +809,24 @@ class LocalEmbedProvider(Provider):
         cached = getattr(self, "_model", None)
         if cached is not None:
             return cached
+        # A missing package is remembered for a while: without this, every
+        # embedding call in the packaged app would retry the import and walk
+        # a path that holds 175 MB of packages it does not have. The memory
+        # expires so installing fastembed later is picked up without a
+        # restart.
+        global _FASTEMBED_UNTIL
+        now = time.time()
+        if now < _FASTEMBED_UNTIL:
+            raise MediaError(_FASTEMBED_MESSAGE)
         try:
             from fastembed import TextEmbedding
         except Exception as e:
-            raise MediaError(
+            _FASTEMBED_UNTIL = now + 600
+            _FASTEMBED_MESSAGE = (
                 "the local embedding model needs fastembed and onnxruntime; "
                 f"they are not installed ({e})"
-            ) from e
+            )
+            raise MediaError(_FASTEMBED_MESSAGE) from e
         from . import app_paths
 
         cache = str(app_paths.path("models", "data/models"))

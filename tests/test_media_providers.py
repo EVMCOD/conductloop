@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -373,3 +374,24 @@ def test_no_cap_means_no_limit():
     provider = mp.build("uncapped")
     provider.config["daily_cap"] = "0"
     mp.guard_spend(provider)          # must not raise
+
+
+def test_a_missing_fastembed_is_not_retried_on_every_call():
+    """The packaged app has no fastembed: remembering that keeps every
+    embedding call from walking a 175 MB path it does not have."""
+    from ops_dashboard import media_backends
+
+    media_backends._FASTEMBED_UNTIL = 0.0
+    media_backends._FASTEMBED_MESSAGE = ""
+    provider = mp.build("local_onnx")
+    try:
+        provider.embed(["hola"])
+        return  # fastembed is installed here; there is nothing to remember
+    except Exception:
+        pass
+    assert media_backends._FASTEMBED_UNTIL > time.time()
+    started = time.time()
+    for _ in range(10):
+        with pytest.raises(Exception):
+            provider.embed(["hola"])
+    assert time.time() - started < 1.0
