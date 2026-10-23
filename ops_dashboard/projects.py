@@ -120,6 +120,72 @@ def find_project(query: str) -> Project | None:
     return None
 
 
+def project_for_path(path: str) -> str | None:
+    """Which project owns a document path? ``None`` when it belongs to none.
+
+    Used to isolate the RAG per business: without it, a question about one
+    project answers with another project's files (and cites them). 2026-10-23.
+    """
+    if not path:
+        return None
+    p = str(path)
+    pl = p.lower()
+    # 1. Inside a registered repo path (most specific: longest match wins).
+    best: tuple[int, str] | None = None
+    for proj in PROJECTS:
+        for repo in proj.repo_paths or []:
+            rp = str(repo).rstrip("/").lower()
+            if rp and (pl == rp or pl.startswith(rp + "/")):
+                if best is None or len(rp) > best[0]:
+                    best = (len(rp), proj.key)
+    if best:
+        return best[1]
+    # 2. A vault glob mentions the project (obsidian notes).
+    for proj in PROJECTS:
+        for glob in proj.obsidian_globs or []:
+            g = str(glob).lower()
+            if not g:
+                continue
+            if g.endswith("*"):
+                if g[:-1] in pl:
+                    return proj.key
+            elif g in pl:
+                return proj.key
+    # 3. The path contains the project key or one of its aliases as a segment.
+    for proj in PROJECTS:
+        needles = [proj.key.lower(), proj.name.lower()] + [
+            a.lower() for a in (proj.aliases or [])
+        ]
+        for needle in needles:
+            if not needle or len(needle) < 3:
+                continue
+            if f"/{needle}/" in pl or pl.endswith(f"/{needle}"):
+                return proj.key
+    return None
+
+
+def backfill_document_project_keys() -> int:
+    """Fill ``documents.project_key`` for the rows that do not have one yet.
+
+    Idempotent and cheap: it only touches rows with a NULL project_key.
+    Returns how many rows were updated.
+    """
+    updated = 0
+    with db.db() as conn:
+        rows = conn.execute(
+            "SELECT id, path FROM documents WHERE project_key IS NULL"
+        ).fetchall()
+    for r in rows:
+        key = project_for_path(r["path"])
+        if not key:
+            continue
+        with db.db() as conn:
+            conn.execute("UPDATE documents SET project_key = ? WHERE id = ?",
+                         (key, r["id"]))
+        updated += 1
+    return updated
+
+
 def _matching_docs(project: Project, limit: int = 10) -> list[dict]:
     """Find documents whose path or content mentions any of the project's aliases."""
     patterns = project.aliases + [project.name.lower(), project.key]

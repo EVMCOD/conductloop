@@ -1308,6 +1308,47 @@ def _keyword_retrieve(question: str, *, limit: int = 16) -> list[dict]:
     return out
 
 
+def _filter_by_project(rows: list[dict], project_key: str | None) -> list[dict]:
+    """Keep only the documents that belong to this project (plus shared ones).
+
+    The RAG used to search every document of every project, so a question
+    about one business answered with another business's files — and cited
+    them. Now a question about a project only sees that project (and the
+    documents no project owns). 2026-10-23.
+    """
+    if not project_key or not rows:
+        return rows
+    ids = [r["doc_id"] for r in rows if r.get("doc_id") is not None]
+    if not ids:
+        return rows
+    owner: dict[int, str | None] = {}
+    try:
+        with db.db() as conn:
+            marks = ",".join("?" * len(ids))
+            for r in conn.execute(
+                f"SELECT id, project_key FROM documents WHERE id IN ({marks})", ids  # noqa: S608 - fixed placeholders
+            ):
+                owner[r["id"]] = r["project_key"]
+    except Exception:
+        # No project_key column yet (older DB): keep the old behaviour.
+        return rows
+    if not owner:
+        return rows
+    keep: set[int] = set()
+    for r in rows:
+        doc_id = r.get("doc_id")
+        if doc_id not in owner:
+            continue  # unknown document: leave it out, it is not ours
+        pkey = owner[doc_id]
+        if pkey == project_key or pkey is None:
+            keep.add(doc_id)
+    if not keep:
+        # Nothing of this project (and nothing shared): an honest empty
+        # answer beats another business's files.
+        return []
+    return [r for r in rows if r.get("doc_id") in keep]
+
+
 def _retrieve(question: str, *, k: int = 8, project_key: str | None = None) -> list[dict]:
     """Retrieve top-K most relevant documents.
 
@@ -1315,7 +1356,9 @@ def _retrieve(question: str, *, k: int = 8, project_key: str | None = None) -> l
       1. Semantic search via embeddings (cosine).
       1b. If that yields nothing (lean desktop build without the embedding
           model, or nothing embedded yet), fall back to keyword search.
-      2. If a project_key is detected/forced, boost docs from that project.
+      2. If a project_key is detected/forced, keep only that project's
+         documents (and the shared ones), then boost the ones that mention
+         the project.
       3. Return top-K with metadata for citations.
     """
     # Try semantic
@@ -1325,17 +1368,25 @@ def _retrieve(question: str, *, k: int = 8, project_key: str | None = None) -> l
         rows = []
     if not rows:
         rows = _keyword_retrieve(question, limit=k * 2)
-    # The detected project's own notes go first. Appended after the similarity
-    # hits (as this used to do) they never made the top K, and similarity alone
-    # ranks look-alike words above them ("ConductLoop" → "Code of Conduct").
+    # Isolate by project: never answer about business A with business B's
+    # files (2026-10-23). And the detected project's own documents go first:
+    # appended after the similarity hits they never made the top K, and
+    # similarity alone ranks look-alike words above them ("ConductLoop" →
+    # "Code of Conduct").
+    rows = _filter_by_project(rows, project_key)
     if project_key:
         needle = f"%{project_key.lower()}%"
         with db.db() as conn:
             proj_docs = conn.execute(
-                "SELECT id, source, path, title FROM documents "
-                "WHERE lower(path) LIKE ? OR lower(coalesce(title, '')) LIKE ? "
-                "ORDER BY mtime DESC LIMIT ?",
-                (needle, needle, max(2, k // 2)),
+                # The column that says who owns a document is what decides.
+                # The path and title are a second way in, but only for a
+                # document that no project owns yet: matching the path of
+                # another project's file would put it back in the answer.
+                "SELECT id, source, path, title, mtime FROM documents "
+                "WHERE project_key = ? OR (project_key IS NULL AND "
+                "(lower(path) LIKE ? OR lower(coalesce(title, '')) LIKE ?)) "
+                "ORDER BY mtime DESC LIMIT 200",
+                (project_key, needle, needle),
             ).fetchall()
         ids = {d["id"] for d in proj_docs}
         rows = [{"doc_id": d["id"], "source": d["source"], "path": d["path"], "title": d["title"],
@@ -1435,14 +1486,19 @@ def _log_broken_citations(answer_text: str, citations: list[dict], provider: Pro
 
 
 def ask(question: str, *, conversation_id: int | None = None,
-        provider_name: str | None = None, k: int = 8, use_tools: bool = False) -> BrainAnswer:
+        provider_name: str | None = None, k: int = 8, use_tools: bool = False,
+        project_key: str | None = None) -> BrainAnswer:
     """Ask the brain a question. Optionally continue a conversation.
 
     If use_tools is True and the provider supports function calling, the brain
     can invoke tools to fetch live data (URLs, TODOs, project status, etc.).
+
+    ``project_key`` scopes the question to one business: it overrides the
+    detection from the question text, and the RAG then only cites that
+    project's documents (2026-10-23).
     """
     t0 = time.perf_counter()
-    project_key = _detect_project(question)
+    project_key = project_key or _detect_project(question)
     docs = _retrieve(question, k=k, project_key=project_key)
     # Web clips (browser PR 6) are third-party text: wrap them as untrusted,
     # and keep them out of tool-using turns entirely.
