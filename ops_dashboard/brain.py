@@ -170,6 +170,44 @@ DEFAULT_MODELS = {
     "mock":      "mock-1",
 }
 
+# Which models an OpenAI-compatible server has, asked once and remembered.
+_OPENAI_MODELS_CACHE: dict[str, tuple[float, list[str] | None]] = {}
+_OPENAI_MODELS_TTL = 60.0
+
+
+# The order the brain tries providers in when nobody chose one. Local first.
+_AUTO_ORDER = ("ollama", "anthropic", "openai", "gateway", "minimax", "mock")
+
+
+def _auto_order(cfg: dict | None = None) -> list[str]:
+    """The order the providers are tried in when nobody chose one.
+
+    Local first: Ollama, then an OpenAI-compatible server on this machine,
+    then the cloud providers, and the mock as a safe floor. The same rule
+    the media providers follow — work done here is free and private.
+    """
+    cfg = cfg if cfg is not None else {}
+    order = list(_AUTO_ORDER)
+    openai_base = os.environ.get("OPENAI_BASE_URL") or cfg.get("openai_base_url")
+    if _local_endpoint(openai_base):
+        order.remove("openai")
+        order.insert(1, "openai")
+    return order
+
+
+def _local_endpoint(base_url: str | None) -> bool:
+    """Is this endpoint on this machine?
+
+    Local work is free, private and has no rate limit, so a local server is
+    used before a cloud one — the same rule the media providers follow.
+    """
+    if not base_url:
+        return False
+    host = base_url.split("//")[-1].split("/")[0].split(":")[0].strip().lower()
+    if not host:
+        return False
+    return host in ("localhost", "127.0.0.1", "0.0.0.0", "::1") or host.endswith(".local")
+
 SYSTEM_PROMPT_BASE = """\
 You are the user's ops brain. You have access to their personal knowledge base:
 - Their projects and the work that rolls up under each.
@@ -424,19 +462,75 @@ class AnthropicProvider(Provider):
 
 
 class OpenAIProvider(Provider):
+    """Any server that speaks the OpenAI API.
+
+    OpenAI itself is the default, but the same code reaches DeepSeek, Groq,
+    Together, LM Studio, llama.cpp, vLLM or Ollama's own ``/v1`` endpoint:
+    they all speak this dialect, and the only things that change are the
+    base url and the model name.
+
+    A local server usually needs no key, so a base url on its own is enough
+    to use it — and with no model configured the server is asked which
+    models it has, so pointing this at a local runtime just works.
+    """
+
     name = "openai"
 
-    def __init__(self, api_key: str, model: str | None = None):
+    def __init__(self, api_key: str | None = None, model: str | None = None,
+                 base_url: str | None = None):
         self.api_key = api_key
-        self.model = model or DEFAULT_MODELS["openai"]
+        self.base_url = (base_url or os.environ.get("OPENAI_BASE_URL") or "").rstrip("/")
+        self.model = model or self._pick_model() or DEFAULT_MODELS["openai"]
+
+    # ── what the server offers ────────────────────────────────────────────
+
+    def _server_models(self) -> list[str] | None:
+        """Which models this server has. Asked once and remembered.
+
+        ``None`` means "could not ask", which is not the same as "has none":
+        a server that is down must not look like a server with no models.
+        """
+        if not self.base_url:
+            return None
+        now = time.time()
+        cached = _OPENAI_MODELS_CACHE.get(self.base_url)
+        if cached and now - cached[0] < _OPENAI_MODELS_TTL:
+            return cached[1]
+        models: list[str] | None = None
+        try:
+            import httpx
+
+            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+            r = httpx.get(f"{self.base_url}/models", headers=headers, timeout=3.0)
+            if r.status_code == 200:
+                data = r.json()
+                models = [str(m.get("id")) for m in (data.get("data") or []) if m.get("id")]
+        except Exception:
+            models = None
+        _OPENAI_MODELS_CACHE[self.base_url] = (now, models)
+        return models
+
+    def _pick_model(self) -> str | None:
+        models = self._server_models()
+        return models[0] if models else None
 
     def available(self) -> bool:
+        if self.base_url:
+            # A local server needs no key; what it needs is to be there.
+            return self._server_models() is not None
         return bool(self.api_key)
+
+    def _client(self):
+        try:
+            import openai
+        except ImportError:
+            raise RuntimeError("the openai package is required for the OpenAI-compatible provider")
+        # The SDK insists on a key; a local server ignores it.
+        return openai.OpenAI(api_key=self.api_key or "local", base_url=self.base_url or None)
 
     @_retry_transient
     def ask(self, system: str, messages: list[dict], **kwargs) -> str:
-        import openai
-        client = openai.OpenAI(api_key=self.api_key)
+        client = self._client()
         msgs = [{"role": "system", "content": system}] + messages
         self.last_usage = None
         resp = client.chat.completions.create(
@@ -449,8 +543,7 @@ class OpenAIProvider(Provider):
         return (resp.choices[0].message.content or "").strip() or "(empty response)"
 
     def stream(self, system: str, messages: list[dict], **kwargs):
-        import openai
-        client = openai.OpenAI(api_key=self.api_key)
+        client = self._client()
         msgs = [{"role": "system", "content": system}] + messages
         with client.chat.completions.create(
             model=self.model,
@@ -462,6 +555,56 @@ class OpenAIProvider(Provider):
             for chunk in resp:
                 if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
+
+    def supports_tools(self) -> bool:
+        return True
+
+    def ask_with_tools(self, system: str, messages: list[dict], tools: list[dict],
+                       on_tool_call=None, **kwargs) -> str:
+        """Agents need tool calling, so every OpenAI-compatible server gets it.
+
+        The loop is the same one the other OpenAI-compatible providers use:
+        the model asks for a tool, the tool runs, its answer goes back, and
+        the model decides what to do next.
+        """
+        from . import tools as brain_tools
+
+        client = self._client()
+        msgs = [{"role": "system", "content": system}] + messages
+        for _ in range(6):
+            resp = client.chat.completions.create(
+                model=self.model,
+                messages=msgs,
+                tools=tools,
+                max_tokens=kwargs.get("max_tokens", 1500),
+                temperature=kwargs.get("temperature", 0.3),
+            )
+            msg = resp.choices[0].message
+            tool_calls = msg.tool_calls or []
+            if not tool_calls:
+                return (msg.content or "").strip() or "(empty response)"
+            msgs.append(msg.model_dump())
+            for tc in tool_calls:
+                fn = tc.function
+                tname = fn.name
+                targs = fn.arguments
+                if isinstance(targs, str):
+                    try:
+                        targs = json.loads(targs)
+                    except Exception:
+                        targs = {}
+                result = brain_tools.call(tname, targs)
+                if on_tool_call:
+                    try:
+                        on_tool_call(tname, targs, result)
+                    except Exception:
+                        log.debug("on_tool_call callback failed", exc_info=True)
+                msgs.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": json.dumps(result, ensure_ascii=False),
+                })
+        return "(max tool iterations reached)"
 
 
 class MiniMaxProvider(Provider):
@@ -889,7 +1032,8 @@ def list_providers_status() -> list[dict]:
         if name == "anthropic":
             p = AnthropicProvider(api_key=byok_keys.get_api_key("anthropic", cfg))
         elif name == "openai":
-            p = OpenAIProvider(api_key=byok_keys.get_api_key("openai", cfg))
+            p = OpenAIProvider(api_key=byok_keys.get_api_key("openai", cfg),
+                               base_url=os.environ.get("OPENAI_BASE_URL") or cfg.get("openai_base_url"))
         elif name == "minimax":
             p = MiniMaxProvider(
                 api_key=byok_keys.get_api_key("minimax", cfg),
@@ -906,6 +1050,8 @@ def list_providers_status() -> list[dict]:
         else:
             p = MockProvider()
         row = {"name": name, "available": p.available(), "model": getattr(p, "model", None),
+               "base_url": getattr(p, "base_url", "") or "",
+               "local": _local_endpoint(getattr(p, "base_url", "") or ""),
                "key_storage": byok_keys.key_storage(name, cfg) if name in byok_keys.PROVIDERS else None}
         if name == "minimax":
             row["plan"] = "coding" if isinstance(p, MiniMaxProvider) and p._anthropic() else "payg"
@@ -959,8 +1105,9 @@ def resolve_provider(name: str | None = None, *, model: str | None = None,
     if name == "auto":
         if model:
             log.debug("resolve_provider: model %r ignored in auto mode", model)
-        # Local Ollama is private + free + zero latency — favor it if reachable.
-        order = ("ollama", "anthropic", "openai", "gateway", "minimax", "mock")
+        # Local first: Ollama, then an OpenAI-compatible server on this
+        # machine, then the cloud providers, and the mock as a safe floor.
+        order = _auto_order(cfg)
         status = list_providers_status()
         chosen: Provider = MockProvider()
         for n in order:
@@ -982,6 +1129,7 @@ def resolve_provider(name: str | None = None, *, model: str | None = None,
         return OpenAIProvider(
             api_key=byok_keys.get_api_key("openai", cfg),
             model=model or os.environ.get("BRAIN_MODEL") or cfg.get("openai_model"),
+            base_url=os.environ.get("OPENAI_BASE_URL") or cfg.get("openai_base_url"),
         )
     if name == "minimax":
         return MiniMaxProvider(
