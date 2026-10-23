@@ -33,8 +33,13 @@ def library_save(handler) -> None:
     if workspace is not None and not isinstance(workspace, str):
         _err(handler, 400, "bad_request", "memory_workspace must be a path")
         return
+    map_folder = data.get("map_export_folder")
+    if map_folder is not None and not isinstance(map_folder, str):
+        _err(handler, 400, "bad_request", "map_export_folder must be a path")
+        return
     try:
-        saved = library.save_settings(index_folders=folders, memory_workspace=workspace)
+        saved = library.save_settings(index_folders=folders, memory_workspace=workspace,
+                                      map_export_folder=map_folder)
     except ValueError as e:
         _err(handler, 400, "bad_request", str(e))
         return
@@ -80,12 +85,14 @@ def library_export(handler) -> None:
 
     The point of a second brain is that it does not matter which agent is
     looking at it: the map is a file in the agent's workspace, not a memory
-    one agent happens to have.
+    one agent happens to have. It is also written where the notes live, so
+    it travels with them.
     """
-    from . import notes_structure
+    from . import library, notes_structure
 
     try:
-        written = notes_structure.write_agent_map()
+        written = notes_structure.write_agent_map(
+            also_to=library.map_export_destinations())
     except Exception as e:
         _err(handler, 500, "export_failed", str(e))
         return

@@ -54,7 +54,8 @@ def memory_workspace() -> Path:
     return Path(raw).expanduser()
 
 
-def save_settings(*, index_folders: list[str] | None = None, memory_workspace: str | None = None) -> dict:
+def save_settings(*, index_folders: list[str] | None = None, memory_workspace: str | None = None,
+                  map_export_folder: str | None = None) -> dict:
     """Store the folders in config.json. Paths that don't exist are rejected."""
     from . import brain
     cfg = brain._load_config()
@@ -72,6 +73,15 @@ def save_settings(*, index_folders: list[str] | None = None, memory_workspace: s
             cfg["memory_workspace"] = ws
         else:
             cfg.pop("memory_workspace", None)
+    if map_export_folder is not None:
+        folder = map_export_folder.strip()
+        if folder:
+            path = Path(folder).expanduser()
+            if not path.is_dir():
+                raise ValueError(f"not a folder: {folder}")
+            cfg["map_export_folder"] = str(path)
+        else:
+            cfg.pop("map_export_folder", None)
     brain._save_config(cfg)
     return settings()
 
@@ -82,9 +92,37 @@ def settings() -> dict:
         "write_vault": str(db.vault_root()),
         "index_folders": list(cfg.get("index_folders") or []),
         "memory_workspace": cfg.get("memory_workspace") or "",
+        "map_export_folder": cfg.get("map_export_folder") or "",
         "active_folders": [str(p) for p in index_folders()],
         "active_workspace": str(memory_workspace()),
     }
+
+
+def map_files() -> set[str]:
+    """The map files themselves.
+
+    The map names every project, so indexing it would make the map part of
+    the map — and one synthetic note in the middle of the real ones.
+    """
+    from .notes_structure import MAP_FILENAME
+
+    out: set[str] = set()
+    for folder in map_export_destinations():
+        try:
+            out.add(str((folder / MAP_FILENAME).resolve()))
+        except OSError:
+            continue
+    return out
+
+
+def map_export_destinations() -> list[Path]:
+    """Where the map is also written, so it travels with the notes."""
+    cfg = _config()
+    raw = (cfg.get("map_export_folder") or "").strip()
+    if not raw:
+        return []
+    path = Path(raw).expanduser()
+    return [path] if path.is_dir() else []
 
 
 def refresh(*, embed: bool = True) -> dict:
@@ -103,7 +141,8 @@ def refresh(*, embed: bool = True) -> dict:
         # Keep the map fresh for whoever reads it next. It only rewrites a
         # map that is already there: the product does not start writing
         # into the agent's workspace just because it happened to run.
-        refreshed = notes_structure.refresh_agent_map()
+        refreshed = notes_structure.refresh_agent_map(
+            also_to=map_export_destinations())
         if refreshed:
             out["map"] = refreshed
     except Exception as e:
