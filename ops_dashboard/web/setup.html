@@ -71,6 +71,17 @@
       </div>
       <div class="note" id="obs-note"></div>
     </div>
+
+    <div class="section">
+      <h2>🗺️ The map of your work</h2>
+      <p class="sub">Your notes, ordered: which project each one belongs to, which ideas belong to nobody yet, and the projects your notes know about but the registry does not. This is what survives when you change agents.</p>
+      <div>
+        <button id="btn-map">Draw the map</button>
+        <button id="btn-map-export" class="ghost">Write it where the next agent looks</button>
+      </div>
+      <div id="map"></div>
+      <div class="note" id="map-note"></div>
+    </div>
   </div>
 
   <script>
@@ -161,6 +172,95 @@
       }, 2000);
     };
     loadLibrary();
+
+    // ── the map ──────────────────────────────────────────────────────────
+    // Built with the DOM, never with innerHTML: the titles come from the
+    // user's own files, and a file is not text to trust.
+    function el(tag, cls, text) {
+      const node = document.createElement(tag);
+      if (cls) node.className = cls;
+      if (text !== undefined && text !== null) node.textContent = String(text);
+      return node;
+    }
+    function mapGroup(title, count) {
+      const box = el('div', 'step ok');
+      box.appendChild(el('div', 'mark', '·'));
+      const body = el('div', 'body');
+      body.appendChild(el('div', 'label', title + (count !== undefined ? ' (' + count + ')' : '')));
+      box.appendChild(body);
+      document.getElementById('map').appendChild(box);
+      return body;
+    }
+    async function loadMap() {
+      const box = document.getElementById('map');
+      box.textContent = '';
+      try {
+        const d = await (await fetch('/api/library/structure')).json();
+        if (!d.ok) throw new Error(d.message || 'failed');
+        const totals = d.totals || {};
+        box.appendChild(el('p', 'hint',
+          totals.documents + ' notes · ' + totals.attributed + ' in a project · ' +
+          totals.loose + ' loose'));
+
+        const withNotes = (d.projects || []).filter(p => p.notes);
+        if (withNotes.length) {
+          const body = mapGroup('Projects');
+          withNotes.forEach(p => {
+            const row = el('div', 'detail');
+            row.textContent = p.name + ' — ' + p.notes + ' note' + (p.notes === 1 ? '' : 's') +
+              (p.known ? '' : ' (from your notes)');
+            body.appendChild(row);
+          });
+        }
+
+        const ideas = d.ideas || [];
+        if (ideas.length) {
+          const body = mapGroup('Ideas (no project yet)', ideas.length);
+          ideas.forEach(group => {
+            const row = el('div', 'detail');
+            row.textContent = group.area + ' — ' + group.count + ' note' + (group.count === 1 ? '' : 's');
+            body.appendChild(row);
+          });
+        }
+
+        const suggestions = d.suggestions || [];
+        if (suggestions.length) {
+          const body = mapGroup('Possible projects, not registered yet', suggestions.length);
+          suggestions.forEach(s => {
+            const row = el('div', 'detail');
+            row.textContent = s.name + ' — ' + s.why;
+            body.appendChild(row);
+          });
+        }
+
+        const topics = d.topics || [];
+        if (topics.length) {
+          const body = mapGroup('Themes in the loose notes', topics.length);
+          topics.forEach(t => {
+            const row = el('div', 'detail');
+            row.textContent = t.name + ' — ' + t.why;
+            body.appendChild(row);
+          });
+        }
+        if (!withNotes.length && !ideas.length && !suggestions.length && !topics.length) {
+          box.appendChild(el('p', 'hint', 'No notes indexed yet. Point the folders above at your vault and press "Index now".'));
+        }
+        return d;
+      } catch (e) {
+        box.appendChild(el('p', 'hint', 'Could not draw the map: ' + e.message));
+      }
+    }
+    document.getElementById('btn-map').onclick = () => loadMap();
+    document.getElementById('btn-map-export').onclick = async () => {
+      const note = document.getElementById('map-note');
+      note.textContent = 'Writing the map…';
+      try {
+        const r = await fetch('/api/library/export', {method: 'POST'});
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.message || d.error || 'failed');
+        note.textContent = '✓ Written to ' + d.path;
+      } catch (e) { note.textContent = '✗ ' + e.message; }
+    };
 
     document.getElementById('btn-export').onclick = () => sync('export');
     document.getElementById('btn-import').onclick = () => sync('import');

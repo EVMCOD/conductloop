@@ -1248,6 +1248,30 @@ def get_document(doc_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+def prune_documents(root: str, keep: set[str], *, source: str = "obsidian") -> int:
+    """Remove the notes of a folder that are no longer there.
+
+    A note the user deleted must stop answering questions: the index kept
+    it for ever, so the map showed a body of work that no longer existed
+    and the search cited notes that were gone (2026-10-23).
+
+    Only the rows under ``root`` are considered, and only the ones this
+    run did not see. The embeddings go with them (the foreign key cascades)
+    and so does the full-text entry (the delete trigger fires).
+    """
+    root = str(root).rstrip("/")
+    if not root:
+        return 0
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT id, path FROM documents WHERE source = ?", (source,)).fetchall()
+        gone = [(int(r["id"]),) for r in rows
+                if str(r["path"]).startswith(root + "/") and r["path"] not in keep]
+        if gone:
+            conn.executemany("DELETE FROM documents WHERE id = ?", gone)
+    return len(gone)
+
+
 def upsert_document(
     *,
     source: str,
