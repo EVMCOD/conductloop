@@ -7,9 +7,14 @@ import inspect
 from types import SimpleNamespace
 
 import pytest
-from anthropic.resources.messages import Messages
 
-from ops_dashboard import brain
+# The point of this test is to check the provider against the *installed*
+# SDK's signature, so it cannot run without it. The CI installs it (see
+# requirements-dev.txt); a lean local checkout skips it.
+pytest.importorskip("anthropic")
+from anthropic.resources.messages import Messages  # noqa: E402
+
+from ops_dashboard import brain  # noqa: E402
 
 # The fake accepts exactly what the installed SDK accepts: anthropic>=2 has no
 # `temperature`, and a fake taking **kwargs hid that the provider passed it.
