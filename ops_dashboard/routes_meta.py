@@ -13,6 +13,7 @@ from . import (  # noqa: F401  (importing a routes_* module registers its routes
     db,
     routes_chat,  # the /chat page and its API
     routes_learning,  # the Aprendizaje page (L3)
+    routes_library,  # /setup: indexed folders and "index now"
 )
 from .routing import router
 

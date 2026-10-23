@@ -28,6 +28,9 @@
     button.ghost{background:transparent;border:1px solid var(--border);color:var(--ink)}
     button:disabled{opacity:.5;cursor:default}
     .note{font-size:13px;color:var(--muted);margin-top:10px;min-height:18px}
+    .lib-label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+    #lib-folders,#lib-workspace{width:100%;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
+    code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink)}
     a{color:var(--blue)}
   </style>
 </head>
@@ -40,6 +43,21 @@
     <div class="count" id="count">Checking…</div>
 
     <div id="steps"></div>
+
+    <div class="section">
+      <h2>📚 Library</h2>
+      <p class="sub">Folders ConductLoop reads and indexes every hour. It never writes to them: its own notes (daily briefing, agent notes, memory export) go to <code id="lib-write"></code>.</p>
+      <label class="lib-label" for="lib-folders">Note folders to index (one per line), e.g. your Obsidian vault</label>
+      <textarea id="lib-folders" rows="3" spellcheck="false" placeholder="~/Documents/Obsidian/MyVault"></textarea>
+      <label class="lib-label" for="lib-workspace">Memory folder (MEMORY.md, memory/*.md)</label>
+      <input id="lib-workspace" spellcheck="false" placeholder="~/agent-workspace" />
+      <div style="margin-top:12px">
+        <button id="lib-save">Save folders</button>
+        <button id="lib-index" class="ghost">Index now</button>
+      </div>
+      <div class="note" id="lib-note"></div>
+      <div class="note" id="lib-status"></div>
+    </div>
 
     <div class="section">
       <h2>🧠 Obsidian memory sync</h2>
@@ -96,6 +114,50 @@
         btns.forEach(b => b.disabled = false);
       }
     }
+
+    function ago(ts) {
+      if (!ts) return 'never';
+      const m = Math.round((Date.now() / 1000 - ts) / 60);
+      return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago';
+    }
+    async function loadLibrary() {
+      try {
+        const d = await (await fetch('/api/library')).json();
+        document.getElementById('lib-write').textContent = d.write_vault;
+        document.getElementById('lib-folders').value = (d.index_folders || []).join('\n');
+        document.getElementById('lib-workspace').value = d.memory_workspace || '';
+        const docs = d.documents || {}, last = d.last_indexed || {};
+        document.getElementById('lib-status').textContent =
+          (d.indexing ? 'Indexing… · ' : '') +
+          ['obsidian', 'memory', 'repo'].map(s => `${s}: ${docs[s] || 0} docs, indexed ${ago(last[s])}`).join(' · ');
+        return d;
+      } catch (e) {
+        document.getElementById('lib-status').textContent = 'Could not load library: ' + e;
+      }
+    }
+    document.getElementById('lib-save').onclick = async () => {
+      const note = document.getElementById('lib-note');
+      const body = {
+        index_folders: document.getElementById('lib-folders').value.split('\n').map(s => s.trim()).filter(Boolean),
+        memory_workspace: document.getElementById('lib-workspace').value.trim(),
+      };
+      try {
+        const r = await fetch('/api/library', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+        const d = await r.json();
+        note.textContent = r.ok ? '✓ Saved. Click "Index now" to read them right away.' : '✗ ' + (d.message || d.error);
+        loadLibrary();
+      } catch (e) { note.textContent = '✗ ' + e; }
+    };
+    document.getElementById('lib-index').onclick = async () => {
+      const note = document.getElementById('lib-note');
+      await fetch('/api/library/index', {method: 'POST'});
+      note.textContent = 'Indexing… (new notes take a few seconds, the first run a little longer)';
+      const poll = setInterval(async () => {
+        const d = await loadLibrary();
+        if (d && !d.indexing) { clearInterval(poll); note.textContent = '✓ Library up to date.'; }
+      }, 2000);
+    };
+    loadLibrary();
 
     document.getElementById('btn-export').onclick = () => sync('export');
     document.getElementById('btn-import').onclick = () => sync('import');

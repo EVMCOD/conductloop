@@ -113,7 +113,19 @@ def index_path(path: Path) -> dict:
 
 
 def run(vault_root: Path | None = None) -> dict:
-    vault_root = vault_root or VAULT_DEFAULT
+    """Index one vault, or (no argument) the write vault plus the read-only
+    folders set in the app (library.index_folders)."""
+    if vault_root is None:
+        from ..library import index_folders
+        total = {"indexed": 0, "skipped": 0, "errors": 0}
+        for root in [db.vault_root(), *index_folders()]:
+            for k, v in _run_one(root).items():
+                total[k] += v
+        return total
+    return _run_one(vault_root)
+
+
+def _run_one(vault_root: Path) -> dict:
     if not vault_root.exists():
         print(f"vault not found: {vault_root}")
         return {"indexed": 0, "skipped": 0, "errors": 0}

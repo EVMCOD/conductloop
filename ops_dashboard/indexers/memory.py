@@ -18,6 +18,8 @@ from pathlib import Path
 
 from .. import db
 
+# Kept for callers that read it; run() asks library.memory_workspace() each
+# time, so the folder set in the app (config.json) applies without a restart.
 WORKSPACE = Path(os.environ.get("OPS_WORKSPACE", str(Path.home() / ".ops-workspace"))).expanduser()
 DAILY_DIR = db.vault_root() / "daily"
 
@@ -42,7 +44,9 @@ def _index_file(path: Path, *, source: str = "memory", metadata_extra: dict | No
 
     stat = path.stat()
     title = path.stem
-    metadata = {"rel": str(path.relative_to(Path.home()))}
+    # A workspace outside the home folder (set in the app) must not abort the run.
+    rel = path.relative_to(Path.home()) if path.is_relative_to(Path.home()) else path
+    metadata = {"rel": str(rel)}
     if metadata_extra:
         metadata.update(metadata_extra)
 
@@ -61,12 +65,14 @@ def _index_file(path: Path, *, source: str = "memory", metadata_extra: dict | No
 
 
 def run() -> dict:
+    from ..library import memory_workspace
+    workspace = memory_workspace()
     run_id = db.start_index_run("memory")
     total = {"indexed": 0, "skipped": 0, "errors": 0}
 
     # Workspace root files
     for name in WORKSPACE_FILES:
-        path = WORKSPACE / name
+        path = workspace / name
         if path.exists():
             c = _index_file(path, source="memory")
         else:
@@ -75,13 +81,13 @@ def run() -> dict:
             total[k] += v
 
     # Memory directory
-    mem_dir = WORKSPACE / "memory"
+    mem_dir = workspace / "memory"
     if mem_dir.exists():
         for path in mem_dir.glob("*.md"):
             c = _index_file(path, source="memory", metadata_extra={"kind": "daily_or_note"})
             for k, v in c.items():
                 total[k] += v
 
-    db.end_run(run_id, **total, notes=f"workspace={WORKSPACE}")
+    db.end_run(run_id, **total, notes=f"workspace={workspace}")
     print(f"memory: done. indexed={total['indexed']} skipped={total['skipped']} errors={total['errors']}")
     return total
