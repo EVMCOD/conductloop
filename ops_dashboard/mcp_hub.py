@@ -113,16 +113,16 @@ def sanitize_tools(raw: list[dict]) -> tuple[list[dict], list[str]]:
     return out, rejected
 
 
-def effective_kind(tool: dict, mode: str, trust_readonly: bool = False) -> str | None:
+def effective_kind(tool: dict, mode: str, trust_readonly: bool = True) -> str | None:
     """Is this tool a read or a write, for the approval gate?
 
     * ``disabled`` -> the tool is off.
     * ``read`` / ``write`` -> the user decided; that is the answer.
-    * ``auto`` -> the default. A tool the server *claims* is read-only is
-      still treated as a WRITE unless the user explicitly trusts this
-      server's annotations (``trust_readonly``). A server used to be able to
-      grant itself a no-approval write by setting ``readOnlyHint``; now it
-      cannot (2026-10-23).
+    * ``auto`` -> the default. The product promises that a tool is read-only
+      by default, so a server the user chose to run is trusted to label its
+      own tools (``trust_readonly``). What it is not trusted to do is change
+      its mind: when a tool's annotations change, the trust is revoked and
+      the tool goes back through the approval gate (2026-10-23).
     """
     if mode == "disabled":
         return None
@@ -306,7 +306,13 @@ def _policies(name: str) -> dict[str, dict]:
 
 
 def _sync_policies(name: str, tools: list[dict]) -> list[str]:
-    """Insert new tools as ``auto``; flag changed ones. Returns changed names."""
+    """Insert new tools as ``auto``; flag changed ones. Returns changed names.
+
+    A server that changes what a tool says it is has stopped being trusted
+    to say it, so the trust is revoked here, next to the detection: every
+    tool it calls in ``auto`` mode goes back through the approval gate until
+    the user has looked at it.
+    """
     pol = _policies(name)
     changed: list[str] = []
     now = int(time.time())
@@ -321,15 +327,19 @@ def _sync_policies(name: str, tools: list[dict]) -> list[str]:
                 new_mode = "auto" if p["mode"] == "read" else p["mode"]
                 conn.execute("UPDATE mcp_tool_policies SET desc_hash=?, changed=1, mode=?, updated_at=? "
                              "WHERE server=? AND tool=?", (t["desc_hash"], new_mode, now, name, t["name"]))
+        if changed:
+            conn.execute("UPDATE mcp_servers SET trust_readonly=0, updated_at=? WHERE name=?", (now, name))
     return changed
 
 
 def set_server_trust(name: str, trust_readonly: bool) -> dict:
     """Does the user trust this server's own read-only annotations?
 
-    Off by default. With it off, every tool in ``auto`` mode is treated as a
-    write and goes through the approval gate, whatever the server claims
-    about its own annotations. 2026-10-23.
+    On by default: the user chose to run this server. With it off, every
+    tool in ``auto`` mode is treated as a write and goes through the
+    approval gate, whatever the server claims about its own annotations.
+    The trust is revoked on its own when a tool's annotations change, and
+    this is how it is given back. 2026-10-23.
     """
     if _row(name) is None:
         raise HubError("unknown_server", name, 404)

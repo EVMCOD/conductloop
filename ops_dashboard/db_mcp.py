@@ -21,17 +21,20 @@ def upsert_mcp_server(name: str, transport: str, *, command: list | None = None,
     with _dbmod.db() as conn:
         existing = conn.execute("SELECT id FROM mcp_servers WHERE name = ?", (name,)).fetchone()
         if existing:
+            # Adding or re-adding a server is the user choosing to run it:
+            # that is the moment the trust is given.
             conn.execute(
                 """UPDATE mcp_servers SET transport=?, command=?, url=?, env=?,
-                   updated_at=? WHERE name=?""",
+                   trust_readonly=1, updated_at=? WHERE name=?""",
                 (transport,
                  json.dumps(command) if command else None,
                  url, json.dumps(env or {}), now, name),
             )
             return int(existing["id"])
         cur = conn.execute(
-            """INSERT INTO mcp_servers (name, transport, command, url, env, enabled, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, 1, ?, ?)""",
+            """INSERT INTO mcp_servers (name, transport, command, url, env, enabled,
+                   trust_readonly, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)""",
             (name, transport,
              json.dumps(command) if command else None,
              url, json.dumps(env or {}), now, now),

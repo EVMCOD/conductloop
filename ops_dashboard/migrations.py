@@ -694,13 +694,14 @@ def _mig_21_documents_project_key(conn: sqlite3.Connection) -> None:
 MIGRATIONS.append((20, "browser sessions: agent_sessions.browser_mode, repo optional (B11)",
                    _mig_20_browser_sessions))
 def _mig_22_mcp_server_trust(conn: sqlite3.Connection) -> None:
-    """mcp_servers.trust_readonly — the user opts in to trusting a server's
-    own read-only annotations.
+    """mcp_servers.trust_readonly — whether to believe this server's own
+    read-only annotations.
 
-    Until now, an MCP server decided for itself whether its tool was a read
-    or a write (``readOnlyHint``), so a server labelling a destructive tool
-    as read-only ran it without approval. Now ``auto`` means "needs
-    approval" unless the user explicitly trusts this server. 2026-10-23.
+    The product promises that a tool is read-only by default, so a server
+    the user chose to run is trusted to label its own tools. What it is not
+    trusted to do is change its mind: when a tool's description or
+    annotations change, the trust is revoked and the tool goes back through
+    the approval gate until the user has looked at it. 2026-10-23.
     """
     cols = [r[1] for r in conn.execute("PRAGMA table_info(mcp_servers)")]
     if "trust_readonly" not in cols:
@@ -708,7 +709,10 @@ def _mig_22_mcp_server_trust(conn: sqlite3.Connection) -> None:
                            "AND name = 'mcp_servers'").fetchone()
         if row is None:
             return  # connectors framework not installed in this DB
-        conn.execute("ALTER TABLE mcp_servers ADD COLUMN trust_readonly INTEGER NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE mcp_servers ADD COLUMN trust_readonly INTEGER NOT NULL DEFAULT 1")
+    # The servers that were already installed were trusted under the old
+    # behaviour; they stay trusted.
+    conn.execute("UPDATE mcp_servers SET trust_readonly=1")
 
 
 MIGRATIONS.append((21, "documents.project_key: RAG isolated per project (2026-10-23)",
