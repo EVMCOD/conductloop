@@ -102,3 +102,23 @@ def test_the_user_can_give_the_trust_back(env):
     assert hub._row("notes")["trust_readonly"] == 0
     hub.set_server_trust("notes", True)
     assert hub._row("notes")["trust_readonly"] == 1
+
+
+def test_a_fresh_database_has_the_trust_column(env):
+    """The column is added by the legacy CREATE TABLE, and that table may be
+    created after the migrations run. A fresh database must still end up with
+    the column, defaulting to "trusted"."""
+    db, _hub = env
+    with db.db() as conn:
+        cols = {r[1]: r for r in conn.execute("PRAGMA table_info(mcp_servers)")}
+    assert "trust_readonly" in cols, "the column is missing in a fresh database"
+    assert str(cols["trust_readonly"][4]) == "1", "a new server starts trusted"
+
+
+def test_saving_a_server_through_the_page_gives_the_trust(env):
+    """The page saves the server; that is the moment the trust is given."""
+    db, hub = env
+    hub.save_server("notes", "stdio", command=["echo"])
+    row = hub._row("notes")
+    assert row is not None
+    assert row["trust_readonly"] == 1

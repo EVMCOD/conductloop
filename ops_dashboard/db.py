@@ -502,7 +502,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
     tools_cache   TEXT,                            -- JSON: [{name, description, input_schema}]
     tools_cached_at INTEGER,
     last_error    TEXT,
-    trust_readonly INTEGER NOT NULL DEFAULT 0,     -- the user trusts this server's read-only annotations
+    trust_readonly INTEGER NOT NULL DEFAULT 1,     -- the user trusts this server's read-only annotations
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL
 );

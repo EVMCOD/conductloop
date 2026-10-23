@@ -250,10 +250,14 @@ def save_server(name: str, transport: str, *, command: Any = None, url: str | No
     env_json = json.dumps({"vars": vars_, "secret_vars": secret_names, "auth": auth})
     now = int(time.time())
     with _dbmod.db() as conn:
+        # Saving a server is the user choosing to run it: that is the moment
+        # the trust in its own read-only annotations is given (again).
         conn.execute(
-            "INSERT INTO mcp_servers (name, transport, command, url, env, enabled, created_at, updated_at) "
-            "VALUES (?,?,?,?,?,1,?,?) ON CONFLICT(name) DO UPDATE SET transport=excluded.transport, "
-            "command=excluded.command, url=excluded.url, env=excluded.env, updated_at=excluded.updated_at",
+            "INSERT INTO mcp_servers (name, transport, command, url, env, enabled, trust_readonly, "
+            "created_at, updated_at) "
+            "VALUES (?,?,?,?,?,1,1,?,?) ON CONFLICT(name) DO UPDATE SET transport=excluded.transport, "
+            "command=excluded.command, url=excluded.url, env=excluded.env, trust_readonly=1, "
+            "updated_at=excluded.updated_at",
             (name, transport, json.dumps(cmd) if cmd else None, url, env_json, now, now))
     cid = connector_id(name)
     acc = store.get_account(cid)
