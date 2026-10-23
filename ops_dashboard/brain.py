@@ -7,7 +7,7 @@ LLM to answer with citations.
 Providers (BYOK):
   - anthropic   (Claude)        needs ANTHROPIC_API_KEY
   - openai      (GPT)           needs OPENAI_API_KEY
-  - minimax     (MiniMax-M2.7)  needs MINIMAX_API_KEY (OpenAI-compatible)
+  - minimax     (MiniMax-M3)    needs MINIMAX_API_KEY (OpenAI-compatible)
   - ollama      (local)         needs Ollama running on localhost:11434
   - mock        (no key, no network)  useful for offline / testing
 
@@ -95,6 +95,14 @@ def _classify_provider_error(e: Exception, provider_name: str) -> ProviderError:
             s = s or code
             break
     s = s or 500
+    if s == 404 or "not_found_error" in raw or "no longer available" in raw or "model_not_found" in raw:
+        m = re.search(r"model[\s'\"]+([A-Za-z0-9._:/-]+)[\s'\"]+(?:is no longer|does not exist|not found)", raw)
+        model = f" «{m.group(1)}»" if m else ""
+        return ProviderError(
+            "model_unavailable",
+            f"El provider '{provider_name}' ya no ofrece el modelo{model}. Elige otro modelo o provider en Connect AI.",
+            404,
+        )
     if s == 402 or "insufficient_balance" in raw or "payment_required" in raw.lower():
         return ProviderError(
             "insufficient_credit",
@@ -141,7 +149,9 @@ DEFAULT_MODELS = {
     "anthropic": "claude-3-5-sonnet-latest",
     "openai":    "gpt-4o-mini",
     "ollama":    "llama3.2",
-    "minimax":   "MiniMax-M2.7",
+    # MiniMax retired MiniMax-M2.7 (404 "is no longer available", code 2069) while
+    # its /models list still showed it.
+    "minimax":   "MiniMax-M3",
     "gateway":   "openai/gpt-4o-mini",
     "mock":      "mock-1",
 }
@@ -439,7 +449,7 @@ class OpenAIProvider(Provider):
 class MiniMaxProvider(Provider):
     """MiniMax provider (OpenAI-compatible API).
 
-    Defaults: model 'MiniMax-M2.7', base 'https://api.minimaxi.chat/v1'.
+    Defaults: model 'MiniMax-M3', base 'https://api.minimaxi.chat/v1'.
     """
     name = "minimax"
 
