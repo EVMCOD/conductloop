@@ -89,6 +89,14 @@ def _classify_provider_error(e: Exception, provider_name: str) -> ProviderError:
     raw = str(e)
     # openai SDK uses status 401 / 402 / 429 / 5xx
     s = getattr(e, "status_code", None) or getattr(e, "status", None)
+    # A bug on our side (bad SDK arguments...) never reached the provider:
+    # don't blame it as "down", say what failed.
+    if s is None and isinstance(e, (TypeError, AttributeError)):
+        return ProviderError(
+            "internal",
+            f"Error interno de ConductLoop al llamar a '{provider_name}' (no llegó al provider): {type(e).__name__}: {raw[:160]}",
+            500,
+        )
     # also look inside the message
     for code in (402, 401, 429, 500, 502, 503, 504):
         if f"{code}" in raw or f"'http_code': '{code}'" in raw:
@@ -327,6 +335,9 @@ class AnthropicProvider(Provider):
     def available(self) -> bool:
         return bool(self.api_key)
 
+    # No `temperature`: anthropic>=2 dropped the sampling parameters from
+    # Messages.create/stream (current Claude models reject them), so passing
+    # it raised TypeError before any request left the Mac.
     def _client(self):
         import anthropic
         if self.base_url:
@@ -345,7 +356,6 @@ class AnthropicProvider(Provider):
             system=system,
             messages=out,
             max_tokens=kwargs.get("max_tokens", 1500),
-            temperature=kwargs.get("temperature", 0.3),
         )
         self.last_usage = _resp_usage(msg)
         parts = []
@@ -364,7 +374,6 @@ class AnthropicProvider(Provider):
             system=system,
             messages=out,
             max_tokens=kwargs.get("max_tokens", 1500),
-            temperature=kwargs.get("temperature", 0.3),
         ) as stream:
             for text in stream.text_stream:
                 if text:
@@ -387,8 +396,7 @@ class AnthropicProvider(Provider):
                 messages=out,
                 tools=tools,
                 max_tokens=kwargs.get("max_tokens", 1500),
-                temperature=kwargs.get("temperature", 0.3),
-            )
+                )
             # Collect tool_use blocks
             tool_blocks = [b for b in msg.content if getattr(b, "type", None) == "tool_use"]
             text_blocks = [b for b in msg.content if getattr(b, "type", None) == "text"]

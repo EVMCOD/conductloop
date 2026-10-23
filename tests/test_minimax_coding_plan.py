@@ -2,11 +2,24 @@
 Anthropic-compatible API, not on the pay-as-you-go balance endpoint."""
 from __future__ import annotations
 
+import contextlib
+import inspect
 from types import SimpleNamespace
 
 import pytest
+from anthropic.resources.messages import Messages
 
 from ops_dashboard import brain
+
+# The fake accepts exactly what the installed SDK accepts: anthropic>=2 has no
+# `temperature`, and a fake taking **kwargs hid that the provider passed it.
+_ACCEPTS = {name: set(inspect.signature(getattr(Messages, name)).parameters) - {"self"}
+            for name in ("create", "stream")}
+
+
+def _check(method: str, kwargs: dict) -> None:
+    unknown = set(kwargs) - _ACCEPTS[method]
+    assert not unknown, f"Messages.{method}() does not take {sorted(unknown)}"
 
 
 class FakeAnthropic:
@@ -15,13 +28,20 @@ class FakeAnthropic:
 
     def __init__(self, **kwargs):
         FakeAnthropic.created.append(kwargs)
-        self.messages = SimpleNamespace(create=self._create)
+        self.messages = SimpleNamespace(create=self._create, stream=self._stream)
 
     def _create(self, **kwargs):
+        _check("create", kwargs)
         FakeAnthropic.created.append({"request": kwargs})
         return SimpleNamespace(
             content=[SimpleNamespace(type="thinking", thinking="..."), SimpleNamespace(type="text", text="ok")],
             usage=SimpleNamespace(input_tokens=3, output_tokens=1))
+
+    @contextlib.contextmanager
+    def _stream(self, **kwargs):
+        _check("stream", kwargs)
+        FakeAnthropic.created.append({"stream": kwargs})
+        yield SimpleNamespace(text_stream=iter(["o", "k"]))
 
 
 @pytest.fixture()
@@ -41,6 +61,17 @@ def test_coding_plan_url_uses_the_anthropic_api(fake_anthropic):
     req = call["request"]
     assert req["model"] == "MiniMax-M3" and req["system"] == "sys"
     assert req["max_tokens"] == brain.CODING_PLAN_MAX_TOKENS                  # room for M3's reasoning
+
+
+def test_coding_plan_streams(fake_anthropic):
+    p = brain.MiniMaxProvider(api_key="k", base_url=brain.MINIMAX_CODING_PLAN_URL)
+    assert "".join(p.stream("sys", [{"role": "user", "content": "hi"}])) == "ok"
+    assert fake_anthropic.created[-1]["stream"]["max_tokens"] == brain.CODING_PLAN_MAX_TOKENS
+
+
+def test_internal_errors_are_not_blamed_on_the_provider():
+    err = brain._classify_provider_error(TypeError("create() got an unexpected keyword argument 'x'"), "minimax")
+    assert err.code == "internal" and "no llegó al provider" in err.message
 
 
 def test_pay_as_you_go_stays_openai_compatible(fake_anthropic):
