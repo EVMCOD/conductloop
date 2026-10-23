@@ -45,6 +45,28 @@ fn app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<Me
 
 struct ServerProcess(Mutex<Option<CommandChild>>);
 
+/// Minimal HTTP GET over plain HTTP (no HTTP crate in the dependency tree).
+/// Returns the response body.
+fn http_get(url: &str, timeout: std::time::Duration) -> Option<String> {
+    use std::io::{Read, Write};
+    let rest = url.strip_prefix("http://")?;
+    let (host_port, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, "/"),
+    };
+    let mut stream = std::net::TcpStream::connect(host_port).ok()?;
+    stream.set_read_timeout(Some(timeout)).ok()?;
+    stream.set_write_timeout(Some(timeout)).ok()?;
+    let req = format!(
+        "GET {path} HTTP/1.1\r\nHost: {host_port}\r\nConnection: close\r\n\
+         User-Agent: conductloop-desktop\r\n\r\n"
+    );
+    stream.write_all(req.as_bytes()).ok()?;
+    let mut buf = String::new();
+    stream.read_to_string(&mut buf).ok()?;
+    buf.split("\r\n\r\n").nth(1).map(|b| b.to_string())
+}
+
 /// 32 random bytes as hex from the OS CSPRNG, or None if unavailable.
 /// (No extra crate: /dev/urandom on macOS/Linux. Elsewhere the app token is
 /// simply not used and the server keeps its previous behaviour.)
@@ -179,6 +201,10 @@ pub fn run() {
             // nonce is single-use and only lets the first load set that cookie.
             let app_token = random_hex32();
             let boot_nonce = random_hex32();
+            // Per-launch instance id: the server echoes it in /api/health, so
+            // the window can tell "my sidecar" from "something else that
+            // grabbed :7777 first" before handing over the boot nonce.
+            let instance_id = random_hex32();
             let mut sidecar = app
                 .shell()
                 .sidecar("conductloop-server")?
@@ -187,6 +213,9 @@ pub fn run() {
                 // The server exits when this process is gone (Cmd+Q, crash):
                 // killing the PyInstaller launcher alone left it running.
                 .env("CONDUCTLOOP_PARENT_PID", std::process::id().to_string());
+            if let Some(i) = &instance_id {
+                sidecar = sidecar.env("CONDUCTLOOP_INSTANCE_ID", i);
+            }
             if let (Some(t), Some(n)) = (&app_token, &boot_nonce) {
                 sidecar = sidecar
                     .env("CONDUCTLOOP_APP_TOKEN", t)
@@ -205,14 +234,37 @@ pub fn run() {
             // 2. Once the server is listening on :7777, navigate the window to it.
             let handle = app.handle().clone();
             std::thread::spawn(move || {
+                // Wait for OUR server: the instance id proves the process on
+                // the port is the sidecar we just spawned. If somebody else
+                // owns :7777, that process must not receive the boot nonce
+                // (it would become the app's privileged origin, able to hand
+                // out the app token). 2026-10-23.
+                let mut ours = false;
                 for _ in 0..120 {
-                    if std::net::TcpStream::connect("127.0.0.1:7777").is_ok() {
-                        break;
+                    let health = http_get(
+                        &format!("{BACKEND_URL}/api/health"),
+                        std::time::Duration::from_millis(800),
+                    );
+                    if let Some(body) = &health {
+                        match &instance_id {
+                            Some(id) => {
+                                if body.contains(id.as_str()) {
+                                    ours = true;
+                                    break;
+                                }
+                            }
+                            None => {
+                                ours = true;
+                                break;
+                            }
+                        }
                     }
                     std::thread::sleep(std::time::Duration::from_millis(500));
                 }
-                let target = match &boot_nonce {
-                    Some(n) if app_token.is_some() => format!("{BACKEND_URL}/__cl/boot?n={n}"),
+                let target = match (&boot_nonce, ours) {
+                    (Some(n), true) if app_token.is_some() => {
+                        format!("{BACKEND_URL}/__cl/boot?n={n}")
+                    }
                     _ => BACKEND_URL.to_string(),
                 };
                 if let Some(win) = handle.get_webview_window("main") {

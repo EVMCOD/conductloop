@@ -12,10 +12,13 @@ import sys
 
 
 def main() -> None:
-    from http.server import ThreadingHTTPServer
-
-    from ops_dashboard import db, server
+    from ops_dashboard import db, media, server
     from ops_dashboard.indexers import live_urls
+
+    # The app inherits a soft limit of 256 open files from launchd, and the
+    # one-file bundle keeps its extracted files open: spawning a subprocess
+    # then failed with "Too many open files" (2026-10-23).
+    media._ensure_fd_headroom()
 
     host = os.environ.get("OPS_HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "7777"))
@@ -32,7 +35,14 @@ def main() -> None:
         except Exception as e:  # scheduler is best-effort; app still serves
             print(f"[server_entry] scheduler not started: {e}", file=sys.stderr)
 
-    httpd = ThreadingHTTPServer((host, port), server.DashboardHandler)
+    # Same guard as `ops_dashboard serve`: if the port is taken, say so
+    # instead of dying with a bare OSError. A local process that grabs the
+    # port first would otherwise receive the app's boot nonce (2026-10-23).
+    try:
+        httpd = server._bind_server(host, port)
+    except SystemExit as e:
+        print(f"[server_entry] {e}", file=sys.stderr)
+        raise
     parent_gone = False
     parent = os.environ.get("CONDUCTLOOP_PARENT_PID", "")
     if parent.isdigit():
