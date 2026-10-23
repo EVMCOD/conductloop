@@ -78,3 +78,19 @@ def test_ask_in_lean_build_sends_context_and_citations(vault_db, monkeypatch):
     ans = brain.ask("¿Cuál es el precio del plan Pro?")
     assert ans.citations and ans.citations[0]["path"] == "decisions/pricing.md"
     assert "29 € al mes" in seen["system"] and brain.NO_CONTEXT_GUARD not in seen["system"]
+
+
+def test_detected_project_notes_reach_the_context(vault_db, monkeypatch):
+    # Similarity search prefers look-alike words: "ConductLoop" → "Code of Conduct".
+    for path, title in [("knowledge/CODE_OF_CONDUCT.md", "Code of Conduct"),
+                        ("projects/conductloop.md", "ConductLoop")]:
+        vault_db.upsert_document(source="obsidian", path=path, title=title, content=f"{title} notes",
+                                 metadata={}, mtime=2, size=10)
+    with vault_db.db() as conn:
+        conduct = conn.execute("SELECT id FROM documents WHERE path LIKE '%CODE_OF_CONDUCT%'").fetchone()[0]
+    monkeypatch.setattr(embeddings, "search", lambda q, limit=15: [
+        {"doc_id": conduct, "source": "obsidian", "path": "knowledge/CODE_OF_CONDUCT.md",
+         "title": "Code of Conduct", "score": 0.6}])
+    docs = brain._retrieve("¿Qué priorizamos en ConductLoop?", k=6, project_key="conductloop")
+    assert [d["path"] for d in docs][:2] == ["projects/conductloop.md", "knowledge/CODE_OF_CONDUCT.md"]
+    assert brain._retrieve("¿Qué priorizamos?", k=6)[0]["path"] == "knowledge/CODE_OF_CONDUCT.md"

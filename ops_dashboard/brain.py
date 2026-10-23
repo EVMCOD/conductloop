@@ -1325,23 +1325,21 @@ def _retrieve(question: str, *, k: int = 8, project_key: str | None = None) -> l
         rows = []
     if not rows:
         rows = _keyword_retrieve(question, limit=k * 2)
-    # Add a project boost
+    # The detected project's own notes go first. Appended after the similarity
+    # hits (as this used to do) they never made the top K, and similarity alone
+    # ranks look-alike words above them ("ConductLoop" → "Code of Conduct").
     if project_key:
-        # Also pull any docs that mention the project (alias) and have a recency signal
+        needle = f"%{project_key.lower()}%"
         with db.db() as conn:
             proj_docs = conn.execute(
-                "SELECT id, source, path, title, mtime FROM documents ORDER BY mtime DESC LIMIT 200"
+                "SELECT id, source, path, title FROM documents "
+                "WHERE lower(path) LIKE ? OR lower(coalesce(title, '')) LIKE ? "
+                "ORDER BY mtime DESC LIMIT ?",
+                (needle, needle, max(2, k // 2)),
             ).fetchall()
-        seen_ids = {r.get("doc_id") for r in rows}
-        for d in proj_docs:
-            if d["id"] in seen_ids:
-                continue
-            text = (d["title"] or "") + " " + d["path"]
-            if project_key.lower() in text.lower():
-                rows.append({"doc_id": d["id"], "source": d["source"], "path": d["path"],
-                             "title": d["title"], "score": 0.2, "excerpt": ""})
-                if len(rows) >= k * 2:
-                    break
+        ids = {d["id"] for d in proj_docs}
+        rows = [{"doc_id": d["id"], "source": d["source"], "path": d["path"], "title": d["title"],
+                 "score": 1.0, "excerpt": ""} for d in proj_docs] + [r for r in rows if r.get("doc_id") not in ids]
     # Fetch full content for the top K
     out: list[dict] = []
     for r in rows[:k]:
