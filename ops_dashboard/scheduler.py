@@ -62,6 +62,12 @@ def _system_jobs() -> list[tuple[str, str, object]]:
                     "errors": [r["site"] for r in gsc_res if not r.get("ok")]},
         }
 
+    def _library_index():
+        # Incremental (unchanged files are skipped): without it the library
+        # stayed at the last manual index, four months stale on one install.
+        from . import library
+        return library.refresh()
+
     def _learning():
         # L8: failure-log retention (D6) + skills curator that only PROPOSES
         # archiving skills unused for 60 days (D14). Never moves or deletes.
@@ -73,6 +79,7 @@ def _system_jobs() -> list[tuple[str, str, object]]:
         ("briefing", os.environ.get("BRIEFING_CRON", "0 8 * * *"), _briefing),
         ("obsidian_export", os.environ.get("OBSIDIAN_EXPORT_CRON", "0 3 * * *"), _export),
         ("analytics_poll", os.environ.get("ANALYTICS_POLL_CRON", "30 7 * * *"), _analytics),
+        ("library_index", os.environ.get("LIBRARY_INDEX_CRON", "17 * * * *"), _library_index),
     ]
 
 
