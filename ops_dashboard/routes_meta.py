@@ -36,7 +36,6 @@ def _version() -> str:
 # does not collide with the other PRs that register route modules.
 from . import routes_connectors  # noqa: E402,F401
 
-
 # ── the shared design system ───────────────────────────────────────────────
 # Every page loads /theme.css, so the whole product speaks one design
 # language: one palette, one type scale, one spacing scale, one set of

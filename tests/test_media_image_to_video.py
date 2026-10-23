@@ -18,7 +18,6 @@ import pytest
 
 from ops_dashboard import media
 
-
 # ── a recording engine, so we can assert on what would be sent ─────────────
 
 class _RecordingEngine(media.MediaEngine):

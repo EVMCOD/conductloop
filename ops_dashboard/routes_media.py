@@ -20,8 +20,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from . import db_media
-from . import media
+from . import db_media, media
 from .routing import router
 
 _WEB = Path(__file__).resolve().parent / "web"

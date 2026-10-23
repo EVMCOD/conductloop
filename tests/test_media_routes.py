@@ -17,8 +17,11 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from ops_dashboard import db_media, media
-from ops_dashboard import routes_media  # noqa: F401  (registers the routes)
+from ops_dashboard import (
+    db_media,
+    media,
+    routes_media,  # noqa: F401  (registers the routes)
+)
 
 
 class _Engine(media.MediaEngine):

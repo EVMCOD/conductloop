@@ -775,8 +775,8 @@ def _multipart(fields: dict[str, str], file_field: str = "") -> bytes:
     if file_field:
         parts.append(f"--{boundary}\r\n".encode())
         parts.append(
-            f'Content-Disposition: form-data; name="image"; filename="image.png"\r\n'
-            f"Content-Type: image/png\r\n\r\n".encode())
+            b'Content-Disposition: form-data; name="image"; filename="image.png"\r\n'
+            b"Content-Type: image/png\r\n\r\n")
         parts.append(file_field.encode("latin-1", "ignore"))
         parts.append(b"\r\n")
     parts.append(f"--{boundary}--\r\n".encode())
@@ -814,7 +814,7 @@ class LocalEmbedProvider(Provider):
         # a path that holds 175 MB of packages it does not have. The memory
         # expires so installing fastembed later is picked up without a
         # restart.
-        global _FASTEMBED_UNTIL
+        global _FASTEMBED_UNTIL, _FASTEMBED_MESSAGE
         now = time.time()
         if now < _FASTEMBED_UNTIL:
             raise MediaError(_FASTEMBED_MESSAGE)

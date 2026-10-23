@@ -28,7 +28,6 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-
 # ── helpers ────────────────────────────────────────────────────────────────
 
 def _free_port() -> int:

@@ -17,7 +17,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from ops_dashboard import media, media_providers as mp
+from ops_dashboard import media
+from ops_dashboard import media_providers as mp
 from ops_dashboard.media_providers import MediaError
 
 # ── a mock that speaks both API dialects ──────────────────────────────────
@@ -93,7 +94,7 @@ def mock_server():
 @pytest.fixture(autouse=True)
 def clean_registry():
     """The tests share one database: leave no provider behind."""
-    from ops_dashboard import db, db_media
+    from ops_dashboard import db
 
     db.init_db()
     yield
@@ -387,11 +388,14 @@ def test_a_missing_fastembed_is_not_retried_on_every_call():
     try:
         provider.embed(["hola"])
         return  # fastembed is installed here; there is nothing to remember
-    except Exception:
+    except MediaError:
         pass
     assert media_backends._FASTEMBED_UNTIL > time.time()
+    # The second call must fail the same way, not with some other error: a
+    # blind "raises Exception" would pass even if the reason were wrong.
     started = time.time()
     for _ in range(10):
-        with pytest.raises(Exception):
+        with pytest.raises(MediaError) as exc:
             provider.embed(["hola"])
+        assert "fastembed" in str(exc.value)
     assert time.time() - started < 1.0

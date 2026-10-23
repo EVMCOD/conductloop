@@ -426,7 +426,7 @@ class MatrixEngine(MediaEngine):
 
     def upload(self, path: str, *, mime_type: str | None = None) -> str:
         """Publish a local file to the connector and return its temp url."""
-        cli = self._require()
+        self._require()
         # Absolute, always: the CLI runs in a private temp cwd, so a relative
         # path from the caller resolves to nothing and the upload fails.
         src = Path(path).expanduser().resolve()

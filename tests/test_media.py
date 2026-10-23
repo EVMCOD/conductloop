@@ -21,7 +21,6 @@ import pytest
 
 from ops_dashboard import media
 
-
 # ── a stub engine ──────────────────────────────────────────────────────────
 
 class _StubEngine(media.MediaEngine):
@@ -228,7 +227,6 @@ def test_video_job_moves_from_queued_to_succeeded():
 
 def test_video_job_stays_pending_until_the_engine_says_so():
     """The product keeps one status vocabulary, whatever casing the engine uses."""
-    from ops_dashboard import db
 
     class _PendingEngine(_StubEngine):
         def poll_video(self, task_id, **kw):

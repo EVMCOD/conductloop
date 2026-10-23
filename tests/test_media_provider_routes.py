@@ -8,7 +8,6 @@ client.
 from __future__ import annotations
 
 import json
-import os
 import socket
 import threading
 import urllib.error
@@ -17,8 +16,11 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from ops_dashboard import media, media_providers as mp
-from ops_dashboard import routes_media  # noqa: F401  (registers the routes)
+from ops_dashboard import (
+    media,
+    routes_media,  # noqa: F401  (registers the routes)
+)
+from ops_dashboard import media_providers as mp
 
 
 @pytest.fixture

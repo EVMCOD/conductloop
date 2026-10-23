@@ -1470,7 +1470,7 @@ def _like_search(query: str, fold: str, source: str | None, limit: int) -> list:
 _FTS_STOPWORDS = {
     "and", "or", "not", "a", "an", "the", "of", "to", "in", "on", "for",
     "de", "la", "el", "los", "las", "un", "una", "y", "o", "en", "con", "por",
-    "para", "del", "al", "que", "es", "son", "the", "with", "from", "at", "by",
+    "para", "del", "al", "que", "es", "son", "with", "from", "at", "by",
 }
 
 
@@ -2158,19 +2158,6 @@ from .db_approvals import (  # noqa: E402,F401
     resolve_approval,
 )
 
-# Media assets and jobs (2026-10-23). Re-exported so `db.<name>` keeps working.
-from .db_media import (  # noqa: E402,F401
-    add_asset,
-    add_job,
-    delete_asset,
-    get_asset,
-    get_job,
-    get_job_by_external_task,
-    list_assets,
-    list_jobs,
-    update_job,
-)
-
 # Users / auth / sessions / device tokens / usage / entitlements moved to
 # db_auth.py (2026-07-20). Re-exported so `db.<name>` keeps working.
 from .db_auth import (  # noqa: E402,F401
@@ -2263,6 +2250,19 @@ from .db_mcp import (  # noqa: E402,F401
     set_mcp_server_error,
     unbind_agent_tool,
     upsert_mcp_server,
+)
+
+# Media assets and jobs (2026-10-23). Re-exported so `db.<name>` keeps working.
+from .db_media import (  # noqa: E402,F401
+    add_asset,
+    add_job,
+    delete_asset,
+    get_asset,
+    get_job,
+    get_job_by_external_task,
+    list_assets,
+    list_jobs,
+    update_job,
 )
 
 # Note backlinks moved to db_notelinks.py (2026-07-20). Re-exported so

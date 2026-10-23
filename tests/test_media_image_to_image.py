@@ -159,7 +159,6 @@ def test_presets_are_advertised_in_the_status():
 
 def test_variations_default_to_a_useful_batch_size(tmp_path, eng):
     """Asking for "variations" and getting one back is not a variation."""
-    from ops_dashboard import db_media
 
     res = media.generate_image("more like this", image_path=_ref(tmp_path), n=4)
     assert len(res.meta["paths"]) == 4
