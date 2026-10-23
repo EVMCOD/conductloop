@@ -45,11 +45,13 @@ def server(tmp_path, monkeypatch):
                 registry.unregister(sp.id)
 
 
-def _req(url, body=None, headers=None):
+def _req(url, body=None, headers=None, method=None):
     data = json.dumps(body).encode() if body is not None else None
     h = {"Content-Type": "application/json"} if data is not None else {}
     h.update(headers or {})
-    req = urllib.request.Request(url, data=data, method="POST" if data is not None else "GET", headers=h)
+    req = urllib.request.Request(url, data=data,
+                                 method=method or ("POST" if data is not None else "GET"),
+                                 headers=h)
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             return r.status, json.loads(r.read() or b"{}")
@@ -69,6 +71,9 @@ def test_mcp_routes_end_to_end(server):
                                                         "env": {"OPENAI_API_KEY": "sk-x"}})
     assert st == 400 and b["error"] == "secret_in_env"
 
+    # The user trusts this server: until they do, its tools are all writes
+    # and need the approval gate (2026-10-23).
+    assert _req(base + "/api/mcp/servers/notes", {"trust_readonly": True}, method="PUT")[0] == 200
     st, b = _req(base + "/api/connectors/mcp/servers/notes/refresh", {})
     assert st == 200 and b["server"]["status"] == "connected"
     listing = _req(base + "/api/connectors/mcp")[1]

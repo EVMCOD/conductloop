@@ -14,6 +14,7 @@ from . import (  # noqa: F401  (importing a routes_* module registers its routes
     routes_chat,  # the /chat page and its API
     routes_learning,  # the Aprendizaje page (L3)
     routes_library,  # /setup: indexed folders and "index now"
+    routes_media,  # image / video / speech generation (2026-10-23)
 )
 from .routing import router
 
@@ -35,6 +36,45 @@ def _version() -> str:
 # does not collide with the other PRs that register route modules.
 from . import routes_connectors  # noqa: E402,F401
 
+# ── the shared design system ───────────────────────────────────────────────
+# Every page loads /theme.css, so the whole product speaks one design
+# language: one palette, one type scale, one spacing scale, one set of
+# components. Pages keep their own stylesheets on top of it.
+_WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+
+
+@router.get("/theme.css")
+def theme_css(handler) -> None:
+    """The design system, served to every page."""
+    with open(os.path.join(_WEB_DIR, "theme.css"), "rb") as fh:
+        body = fh.read()
+    handler._send(200, body, "text/css; charset=utf-8")
+
+
+@router.get("/csrf.js")
+def csrf_js(handler) -> None:
+    """Echoes the CSRF cookie back on every state-changing API call."""
+    with open(os.path.join(_WEB_DIR, "csrf.js"), "rb") as fh:
+        body = fh.read()
+    handler._send(200, body, "text/javascript; charset=utf-8")
+
+
+@router.get("/app.css")
+def app_css(handler) -> None:
+    """The dashboard's stylesheet, extracted from index.html (2026-10-23)."""
+    with open(os.path.join(_WEB_DIR, "app.css"), "rb") as fh:
+        body = fh.read()
+    handler._send(200, body, "text/css; charset=utf-8")
+
+
+@router.get("/app.js")
+def app_js(handler) -> None:
+    """The dashboard's script, extracted from index.html (2026-10-23)."""
+    with open(os.path.join(_WEB_DIR, "app.js"), "rb") as fh:
+        body = fh.read()
+    handler._send(200, body, "text/javascript; charset=utf-8")
+
+
 
 @router.get("/api/health")
 @router.get("/health")
@@ -51,11 +91,20 @@ def health(handler) -> None:
             schema_version = migrations.current_version(conn)
     except Exception:
         db_ok = False
+    payload = {"ok": db_ok, "service": "conductloop", "db": db_ok,
+               "version": _version(), "schema_version": schema_version,
+               "ts": int(time.time())}
+    # Instance id: the desktop app passes a random one per launch and uses it
+    # to check that the process listening on the port is really the one it
+    # spawned — otherwise a local process that grabbed the port first would
+    # receive the boot nonce and become the app's privileged origin
+    # (2026-10-23).
+    instance = (os.environ.get("CONDUCTLOOP_INSTANCE_ID") or "").strip()
+    if instance and os.environ.get("CONDUCTLOOP_APP_TOKEN"):
+        payload["instance"] = instance[:16]
     handler._send(
         200 if db_ok else 503,
-        json.dumps({"ok": db_ok, "service": "conductloop", "db": db_ok,
-                    "version": _version(), "schema_version": schema_version,
-                    "ts": int(time.time())}).encode(),
+        json.dumps(payload).encode(),
         "application/json",
     )
 

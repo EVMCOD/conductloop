@@ -44,6 +44,25 @@ def list_agent_memory(agent_id: int, *, limit: int = 100, search: str | None = N
     return out
 
 
+def get_agent_memory(memory_id: int) -> dict | None:
+    """One memory row by id, including its owner (``agent_id``).
+
+    Used to check that ``/api/agents/<id>/memory/<mid>`` targets that agent's
+    OWN memory: the id is a global row id, so without the check one agent
+    could edit (or delete) another agent's memory.
+    """
+    with _dbmod.db() as conn:
+        row = conn.execute(
+            "SELECT * FROM agent_memory WHERE id = ?", (int(memory_id),)
+        ).fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    try: d["tags"] = json.loads(d.get("tags") or "[]")
+    except Exception: d["tags"] = []
+    return d
+
+
 def top_agent_memory(agent_id: int, *, k: int = 10) -> list[dict]:
     """Return the top-K most important memories for an agent, formatted for system prompt."""
     rows = list_agent_memory(agent_id, limit=k)

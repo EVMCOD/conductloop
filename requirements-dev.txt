@@ -4,6 +4,8 @@
 
 pytest>=8.0
 requests>=2.31          # collection of the live-worker test module
+anthropic>=0.111.0     # the Anthropic SDK, so the MiniMax plan test can check
+                        # the real signature of Messages.create() (not heavy)
 ruff==0.16.0           # lint + format (pinned: matches .pre-commit rev, avoids CI/local drift)
 mypy>=1.11              # static type check
 pytest-cov>=5.0         # coverage reporting

@@ -1,45 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/csrf.js" defer></script>
+  <link rel="stylesheet" href="/theme.css">
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Autonomy — ConductLoop Boardroom</title>
   <style>
-    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#D4AF37; --border:#232a36; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+    /* Colours come from /theme.css. #fff stays for text on the accent fill: the system has no on-accent ink token. */
     *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    body{margin:0;background:var(--cl-bg);color:var(--cl-ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
     .wrap{max-width:880px;margin:0 auto;padding:24px 20px 80px}
     h1{font-size:24px;margin:0 0 6px;font-weight:600}
-    .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+    .sub{color:var(--cl-ink-muted);font-size:13px;margin:0 0 14px}
     .nav{display:flex;gap:8px;margin:14px 0 22px;font-size:13px;flex-wrap:wrap}
-    .nav a{color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
-    .nav a:hover{color:var(--ink);border-color:var(--border)}
-    .nav a.active{color:var(--brand);border-color:var(--brand)}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px}
+    .nav a{color:var(--cl-ink-muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
+    .nav a:hover{color:var(--cl-ink);border-color:var(--cl-border)}
+    .nav a.active{color:var(--cl-accent-ink);border-color:var(--cl-accent)}
+    .card{background:var(--cl-bg-soft);border:1px solid var(--cl-border);border-radius:12px;padding:18px;margin-bottom:14px}
     .tier-row{display:flex;gap:6px;margin:8px 0;flex-wrap:wrap}
-    .tier-opt{flex:1;min-width:150px;background:#0b0d12;border:1px solid var(--border);border-radius:9px;padding:10px;cursor:pointer;font-size:13px;text-align:center}
-    .tier-opt strong{display:block;color:var(--ink);margin-bottom:2px}
-    .tier-opt .desc{color:var(--muted);font-size:11px}
-    .tier-opt.active{border-color:var(--brand);background:rgba(212,175,55,.08)}
-    .tier-opt.t1.active{border-color:var(--ok);background:rgba(34,197,94,.08)}
-    .tier-opt.t2.active{border-color:var(--brand);background:rgba(212,175,55,.08)}
-    .tier-opt.t3.active{border-color:var(--warn);background:rgba(245,158,11,.08)}
-    .tier-opt.t4.active{border-color:var(--bad);background:rgba(239,68,68,.08)}
-    h2{font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 10px;font-weight:600}
+    .tier-opt{flex:1;min-width:150px;background:var(--cl-bg);border:1px solid var(--cl-border);border-radius:9px;padding:10px;cursor:pointer;font-size:13px;text-align:center}
+    .tier-opt strong{display:block;color:var(--cl-ink);margin-bottom:2px}
+    .tier-opt .desc{color:var(--cl-ink-soft);font-size:11px}
+    .tier-opt.active{border-color:var(--cl-accent);background:var(--cl-accent-soft)}
+    .tier-opt.t1.active{border-color:var(--cl-ok);background:var(--cl-ok-soft)}
+    .tier-opt.t2.active{border-color:var(--cl-accent);background:var(--cl-accent-soft)}
+    .tier-opt.t3.active{border-color:var(--cl-warn);background:var(--cl-warn-soft)}
+    .tier-opt.t4.active{border-color:var(--cl-danger);background:var(--cl-danger-soft)}
+    h2{font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:var(--cl-ink-muted);margin:0 0 10px;font-weight:600}
     .maturity-row{display:flex;gap:6px;flex-wrap:wrap}
-    .mat-opt{padding:7px 12px;background:#0b0d12;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer}
-    .mat-opt.active{border-color:var(--brand);background:rgba(212,175,55,.08);color:var(--ink)}
-    .tool{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#0b0d12;border:1px solid var(--border);border-radius:8px;font-size:13px;margin:4px 0}
-    .tool.on{border-color:var(--brand)}
+    .mat-opt{padding:7px 12px;background:var(--cl-bg);border:1px solid var(--cl-border);border-radius:8px;font-size:13px;cursor:pointer}
+    .mat-opt.active{border-color:var(--cl-accent);background:var(--cl-accent-soft);color:var(--cl-ink)}
+    .tool{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--cl-bg);border:1px solid var(--cl-border);border-radius:8px;font-size:13px;margin:4px 0}
+    .tool.on{border-color:var(--cl-accent)}
     .tool .name{font-weight:500}
     .tool .tier-select{display:flex;gap:3px}
-    .tool .t-btn{padding:3px 8px;font-size:11px;background:#0b0d12;border:1px solid var(--border);border-radius:5px;cursor:pointer;color:var(--muted)}
-    .tool .t-btn.on{background:var(--brand);color:#0b0d12;font-weight:600;border-color:var(--brand)}
+    .tool .t-btn{padding:3px 8px;font-size:11px;background:var(--cl-bg);border:1px solid var(--cl-border);border-radius:5px;cursor:pointer;color:var(--cl-ink-muted)}
+    .tool .t-btn.on{background:var(--cl-accent);color:#fff;font-weight:600;border-color:var(--cl-accent)}
     .actions{display:flex;justify-content:space-between;margin-top:18px;gap:8px}
-    button{padding:10px 18px;border-radius:9px;border:0;background:var(--brand);color:#0b0d12;font-weight:600;cursor:pointer;font-size:14px}
-    button.ghost{background:transparent;color:var(--ink);border:1px solid var(--border)}
+    button{padding:10px 18px;border-radius:9px;border:0;background:var(--cl-accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+    button.ghost{background:transparent;color:var(--cl-ink);border:1px solid var(--cl-border)}
     button:disabled{opacity:.5}
-    .toast{display:none;background:rgba(34,197,94,.15);color:var(--ok);padding:10px 14px;border-radius:8px;margin-top:10px;font-size:13px;border:1px solid var(--ok)}
+    .toast{display:none;background:var(--cl-ok-soft);color:var(--cl-ok);padding:10px 14px;border-radius:8px;margin-top:10px;font-size:13px;border:1px solid var(--cl-ok)}
     .toast.show{display:block}
   </style>
 </head>
@@ -66,7 +68,7 @@
         <div class="tier-opt t3" data-tier="3"><strong>Tier 3 — Approve</strong><div class="desc">CEO waits for chairman yes/no.</div></div>
         <div class="tier-opt t4" data-tier="4"><strong>Tier 4 — Escalate</strong><div class="desc">CEO flags for discussion only.</div></div>
       </div>
-      <div style="margin-top:14px"><label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><input id="require" type="checkbox"/>Require chairman approval for every action</label></div>
+      <div style="margin-top:14px"><label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--cl-ink-muted)"><input id="require" type="checkbox"/>Require chairman approval for every action</label></div>
     </div>
 
     <div class="card">
@@ -139,7 +141,7 @@
       cats.forEach(cat => {
         const names = byCat[cat]; if (!names || !names.length) return;
         const sec = document.createElement('div');
-        sec.innerHTML = `<div style="color:var(--brand);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 4px">${cat}</div>`;
+        sec.innerHTML = `<div style="color:var(--cl-accent-ink);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 4px">${cat}</div>`;
         el.appendChild(sec);
         names.forEach(n => {
           if (seen.has(n)) return; seen.add(n);
@@ -150,7 +152,7 @@
           row.innerHTML = `
             <div>
               <div class="name">${esc(t.name)}</div>
-              <div style="color:var(--muted);font-size:11px">${esc(t.description || '')}</div>
+              <div style="color:var(--cl-ink-muted);font-size:11px">${esc(t.description || '')}</div>
             </div>
             <div class="tier-select">
               <span class="t-btn ${tier===0?'on':''}" data-tool="${esc(t.name)}" data-tier="0">OFF</span>

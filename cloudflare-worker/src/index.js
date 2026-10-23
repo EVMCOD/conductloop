@@ -111,20 +111,42 @@ export default {
       });
     }
 
-    // API proxy: /api/* → backend
+    // API proxy: /api/* → backend.
+    //
+    // Only the public, read-only endpoints go through. This worker is on the
+    // public internet: proxying everything would expose /api/brain/memory,
+    // /api/notes/* and /api/sessions/* to anyone, and caching them would
+    // keep copies in the CDN. It also used to drop the method and the Origin
+    // header, which laundered cross-site writes past the backend's own origin
+    // guard. 2026-10-23.
     if (url.pathname.startsWith('/api/')) {
+      if (!PUBLIC_API_PATHS.has(url.pathname)) {
+        return new Response(JSON.stringify({ error: 'not_found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (request.method !== 'GET') {
+        return new Response(JSON.stringify({ error: 'method_not_allowed' }), {
+          status: 405,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
       const target = BACKEND + url.pathname + url.search;
       try {
         const resp = await fetch(target, {
+          method: 'GET',
           headers: { 'Accept': 'application/json' },
-          cf: { cacheTtl: 30, cacheEverything: true }
+          // Public data, but never cached: the backend may tighten its rules
+          // and a cached copy would outlive them.
+          cf: { cacheTtl: 0, cacheEverything: false }
         });
         const body = await resp.text();
         return new Response(body, {
           status: resp.status,
           headers: {
             'Content-Type': resp.headers.get('Content-Type') || 'application/json',
-            'Cache-Control': 'public, max-age=30, s-maxage=60',
+            'Cache-Control': 'no-store',
             'Access-Control-Allow-Origin': '*',
           }
         });
@@ -163,3 +185,13 @@ function corsHeaders() {
     'Access-Control-Allow-Headers': 'Content-Type',
   };
 }
+
+/**
+ * The only backend endpoints this public worker may proxy: read-only and
+ * public by the backend's own rules (see ops_dashboard/origin_guard.py,
+ * PUBLIC_CORS_PATHS). Keep in sync with it.
+ */
+const PUBLIC_API_PATHS = new Set([
+  '/api/health',
+  '/api/pricing-tier',
+]);

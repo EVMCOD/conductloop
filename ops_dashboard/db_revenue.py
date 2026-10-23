@@ -285,9 +285,22 @@ def revenue_forecast(*, days: int = 30, project_key: str | None = None) -> dict:
     }
 
 
+# Columns of ga_metrics_daily the forecast endpoint is allowed to sum.
+# The metric name comes from the query string and is interpolated into the
+# SQL below, so it MUST be validated against this whitelist first: it used to
+# be spliced raw into the f-string, which allowed arbitrary SQL injection
+# (e.g. metric=(select count(*) from sqlite_master)) — fixed 2026-10-23.
+GA_FORECAST_METRICS = ("users", "new_users", "sessions", "page_views", "events")
+
+
 def ga_forecast(*, days: int = 30, metric: str = "users", project_key: str | None = None) -> dict:
-    """Same as revenue_forecast but on GA4 daily users (or page_views)."""
+    """Same as revenue_forecast but on GA4 daily users (or page_views).
+
+    Raises ValueError for any metric outside :data:`GA_FORECAST_METRICS`.
+    """
     import datetime as dt
+    if metric not in GA_FORECAST_METRICS:
+        raise ValueError("metric must be one of: " + ", ".join(GA_FORECAST_METRICS))
     since = (dt.date.today() - dt.timedelta(days=90)).isoformat()
     sql = f"SELECT date, SUM({metric}) as total FROM ga_metrics_daily WHERE date >= ?"
     params: list = [since]

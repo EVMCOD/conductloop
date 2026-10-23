@@ -4,33 +4,34 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Agents Directory — ConductLoop Boardroom</title>
+  <link rel="stylesheet" href="/theme.css">
   <style>
-    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#D4AF37; --border:#232a36; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+    /* Colours come from /theme.css. #fff stays for text on the accent fill: the system has no on-accent ink token. */
     *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    body{margin:0;background:var(--cl-bg);color:var(--cl-ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
     .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 80px}
     h1{font-size:24px;margin:0 0 6px;font-weight:600}
-    .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+    .sub{color:var(--cl-ink-muted);font-size:13px;margin:0 0 14px}
     .nav{display:flex;gap:8px;margin:14px 0 22px;font-size:13px;flex-wrap:wrap}
-    .nav a{color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
-    .nav a:hover{color:var(--ink);border-color:var(--border)}
-    .nav a.active{color:var(--brand);border-color:var(--brand)}
+    .nav a{color:var(--cl-ink-muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
+    .nav a:hover{color:var(--cl-ink);border-color:var(--cl-border)}
+    .nav a.active{color:var(--cl-accent-ink);border-color:var(--cl-accent)}
     .filter{margin-bottom:14px;display:flex;gap:8px;align-items:center}
-    .filter input{background:var(--card);border:1px solid var(--border);color:var(--ink);border-radius:8px;padding:8px 12px;font-size:13px;flex:1;max-width:300px}
-    table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13px}
-    th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
-    th{background:#1a1f2c;font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+    .filter input{background:var(--cl-bg-soft);border:1px solid var(--cl-border);color:var(--cl-ink);border-radius:8px;padding:8px 12px;font-size:13px;flex:1;max-width:300px}
+    table{width:100%;border-collapse:collapse;background:var(--cl-bg-soft);border:1px solid var(--cl-border);border-radius:12px;overflow:hidden;font-size:13px}
+    th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--cl-border)}
+    th{background:var(--cl-bg-2);font-weight:600;color:var(--cl-ink-soft);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
     tr:last-child td{border-bottom:0}
-    tr:hover td{background:#1a1f2c}
-    a{color:var(--brand);text-decoration:none}
-    a:hover{color:#fff}
-    .pill{font-size:11px;padding:2px 8px;border-radius:5px;background:#0b0d12;border:1px solid var(--border);color:var(--muted)}
-    .pill.tier1{background:rgba(34,197,94,.15);color:var(--ok);border-color:transparent}
-    .pill.tier2{background:rgba(212,175,55,.15);color:var(--brand);border-color:transparent}
-    .pill.tier3{background:rgba(245,158,11,.15);color:var(--warn);border-color:transparent}
-    .pill.tier4{background:rgba(239,68,68,.15);color:var(--bad);border-color:transparent}
+    tr:hover td{background:var(--cl-bg-hover)}
+    a{color:var(--cl-accent-ink);text-decoration:none}
+    a:hover{color:var(--cl-ink)}
+    .pill{font-size:11px;padding:2px 8px;border-radius:5px;background:var(--cl-bg-3);border:1px solid var(--cl-border);color:var(--cl-ink-soft)}
+    .pill.tier1{background:var(--cl-ok-soft);color:var(--cl-ok);border-color:transparent}
+    .pill.tier2{background:var(--cl-accent-soft);color:var(--cl-accent-ink);border-color:transparent}
+    .pill.tier3{background:var(--cl-warn-soft);color:var(--cl-warn);border-color:transparent}
+    .pill.tier4{background:var(--cl-danger-soft);color:var(--cl-danger);border-color:transparent}
     .status{display:inline-flex;align-items:center;gap:4px;font-size:12px}
-    .empty{padding:30px;color:var(--muted);text-align:center}
+    .empty{padding:30px;color:var(--cl-ink-muted);text-align:center}
   </style>
 </head>
 <body>
@@ -47,7 +48,7 @@
     </div>
     <div class="filter">
       <input id="q" type="search" placeholder="Filter by name, project, role…" autocomplete="off" />
-      <span style="color:var(--muted);font-size:12px" id="count">— CEOs</span>
+      <span style="color:var(--cl-ink-muted);font-size:12px" id="count">— CEOs</span>
     </div>
     <table id="table">
       <thead>
@@ -91,12 +92,12 @@
         const tier = c.default_tier || '—';
         return `
         <tr>
-          <td><a href="/boardroom/ceo/${c.id}"><strong>${esc(c.name)}</strong></a><br/><span style="color:var(--muted);font-size:11px">${esc(c.role || c.level || '')}</span></td>
+          <td><a href="/boardroom/ceo/${c.id}"><strong>${esc(c.name)}</strong></a><br/><span style="color:var(--cl-ink-muted);font-size:11px">${esc(c.role || c.level || '')}</span></td>
           <td>${esc(c.project_slug || '—')}</td>
           <td><span class="pill tier${tier}">Tier ${tier}</span></td>
           <td>${esc(c.maturity_stage || '—')}</td>
           <td>${c.tools_count || 0}</td>
-          <td><span class="status">${statusIcon(c.status)} ${esc(c.status||'—')}</span><br/><span style="color:var(--muted);font-size:11px">${ago(c.last_active_at)}</span></td>
+          <td><span class="status">${statusIcon(c.status)} ${esc(c.status||'—')}</span><br/><span style="color:var(--cl-ink-muted);font-size:11px">${ago(c.last_active_at)}</span></td>
           <td>${c.message_count || 0}</td>
           <td>
             <a href="/boardroom/ceo/${c.id}" title="Open thread">💬</a>

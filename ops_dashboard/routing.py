@@ -57,6 +57,12 @@ class Router:
     def post(self, path: str) -> Callable:
         return self.route("POST", path)
 
+    def put(self, path: str) -> Callable:
+        return self.route("PUT", path)
+
+    def delete(self, path: str) -> Callable:
+        return self.route("DELETE", path)
+
     def dispatch(self, handler, method: str, path: str) -> bool:
         """Call the first matching handler; return True if one handled it."""
         for m, rx, fn, _raw in self._routes:

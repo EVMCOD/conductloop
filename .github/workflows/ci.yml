@@ -171,18 +171,22 @@ jobs:
       - name: Package builds (pip install .)
         run: pip install . --no-deps
 
-      - name: Install bubblewrap (OS sandbox for sessions code tools)
+      - name: Install bubblewrap and ffmpeg (real sandbox and real mixing)
         # tests/test_sessions_code_tools.py proves network/write isolation for
         # real; CONDUCTLOOP_REQUIRE_SANDBOX makes it fail instead of skipping.
+        # ffmpeg is the same idea for the media pipeline: the narration and
+        # the assembly are proven with the real tool, not with a fake.
         run: |
-          sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends bubblewrap
+          sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends bubblewrap ffmpeg
           # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           bwrap --unshare-net --ro-bind / / --dev /dev --proc /proc true
+          ffmpeg -version | head -1
 
       - name: Test (pytest + coverage)
         env:
           CONDUCTLOOP_REQUIRE_SANDBOX: "1"
+          CONDUCTLOOP_REQUIRE_FFMPEG: "1"
         # Floor prevents regressions; ratchet it up as server.py routes migrate
         # to the (testable) registry. Currently ~26%.
         run: pytest -m "not live" --cov=ops_dashboard --cov-report=term-missing:skip-covered --cov-fail-under=25

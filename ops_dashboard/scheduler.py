@@ -105,6 +105,42 @@ def run_system_jobs(now: datetime | None = None, *, force: bool = False) -> list
     return out
 
 
+# Standard cron day-of-week numbering: 0 and 7 are Sunday, 1 is Monday.
+# The old implementation used Python's weekday() (Monday=0), so every cron
+# expression written anywhere else meant a different day, and name ranges
+# like "MON-FRI" never matched at all. Fixed 2026-10-23.
+_CRON_DOW_NAMES = {
+    "SUN": 0, "MON": 1, "TUE": 2, "WED": 3,
+    "THU": 4, "FRI": 5, "SAT": 6,
+}
+
+# Bounds per field: minute, hour, day-of-month, month, day-of-week.
+_CRON_BOUNDS = ((0, 59), (0, 23), (1, 31), (1, 12), (0, 6))
+
+
+def _cron_dow_value(now: datetime) -> int:
+    """Day of week in standard cron numbering (Sunday=0, Monday=1)."""
+    return (now.weekday() + 1) % 7
+
+
+def _cron_value(token: str, dow_field: bool) -> int | None:
+    """Parse one cron field token (a number, or a day name) into a value."""
+    token = token.strip()
+    if not token:
+        return None
+    if dow_field:
+        named = _CRON_DOW_NAMES.get(token.upper())
+        if named is not None:
+            return named
+    try:
+        n = int(token)
+    except ValueError:
+        return None
+    if dow_field and n == 7:
+        return 0  # standard cron: 7 is Sunday too
+    return n
+
+
 def _cron_matches(expr: str, now: datetime) -> bool:
     """Match a 5-field cron expression against `now`. Supports *, */N, N, N-M, N,M."""
     try:
@@ -112,42 +148,63 @@ def _cron_matches(expr: str, now: datetime) -> bool:
         if len(fields) != 5:
             return False
         minute, hour, dom, month, dow = fields
-        vals = [now.minute, now.hour, now.day, now.month, now.weekday()]
-        for f, v in zip([minute, hour, dom, month, dow], vals):
-            if not _match_field(f, v, dow_field=(f is dow)):
-                return False
-        return True
+        vals = [now.minute, now.hour, now.day, now.month, _cron_dow_value(now)]
+        minute_ok, hour_ok, dom_ok, month_ok, dow_ok = (
+            _match_field(f, v, dow_field=(i == 4), bounds=_CRON_BOUNDS[i])
+            for i, (f, v) in enumerate(zip(fields, vals))
+        )
+        # Standard cron: when BOTH day-of-month and day-of-week are restricted
+        # (not "*"), the job fires if EITHER of them matches.
+        if dom.strip() != "*" and dow.strip() != "*":
+            day_ok = dom_ok or dow_ok
+        else:
+            day_ok = dom_ok and dow_ok
+        return bool(minute_ok and hour_ok and month_ok and day_ok)
     except Exception:
         return False
 
 
-def _match_field(field: str, value: int, dow_field: bool = False) -> bool:
-    """Match a single cron field. value: minute 0-59, hour 0-23, dom 1-31, month 1-12, dow 0-6 (Mon=0)."""
+def _match_field(field: str, value: int, dow_field: bool = False,
+                 bounds: tuple[int, int] = (0, 59)) -> bool:
+    """Match a single cron field. value: minute 0-59, hour 0-23, dom 1-31, month 1-12, dow 0-6 (Sun=0)."""
+    lo, hi = bounds
     for part in field.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        step = 1
+        base = part
         if "/" in part:
-            base, step = part.split("/", 1)
-            step = int(step)
-            if base == "*":
-                start, end = 0, 59 if not dow_field else 6
-            elif "-" in base:
-                start, end = (int(x) for x in base.split("-", 1))
-            else:
-                start = int(base); end = 59 if not dow_field else 6
-            if value in range(start, end + 1, step):
-                return True
-        elif "-" in part:
-            start, end = (int(x) for x in part.split("-", 1))
-            if start <= value <= end:
-                return True
-        elif part == "*":
+            base, step_s = part.split("/", 1)
+            try:
+                step = int(step_s)
+            except ValueError:
+                continue
+            if step <= 0:
+                continue
+        base = base.strip()
+        if base == "*":
+            start, end = lo, hi
+        elif "-" in base:
+            lo_s, hi_s = base.split("-", 1)
+            start = _cron_value(lo_s, dow_field)
+            end = _cron_value(hi_s, dow_field)
+            if start is None or end is None:
+                continue
+        else:
+            v = _cron_value(base, dow_field)
+            if v is None:
+                continue
+            # "5/2" means "from 5, every 2, up to the field maximum".
+            start, end = (v, hi) if step > 1 else (v, v)
+        if start is None or end is None:
+            continue
+        if start < lo or end > hi or start > end:
+            continue
+        if not (start <= value <= end):
+            continue
+        if (value - start) % step == 0:
             return True
-        elif part.isdigit():
-            if int(part) == value:
-                return True
-        elif dow_field and part.upper() in ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"):
-            days = {"MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6}
-            if days[part.upper()] == value:
-                return True
     return False
 
 
@@ -192,7 +249,15 @@ def _wake_agent(agent_id: int, prompt: str, trigger_id: int | None = None) -> di
             provider_name = model.split(":", 1)[0]
         prov = brain.resolve_provider(provider_name)
         if not prov.available():
-            prov = brain.resolve_provider("mock")
+            # Never fake a run: a mock answer was logged as a successful
+            # 'run_complete' and persisted in agent_logs as if a real agent
+            # had done the work. Fail loudly instead. Fixed 2026-10-23.
+            raise brain.ProviderUnavailableError(
+                provider_name or "auto", "unavailable",
+                f"Provider '{provider_name or 'auto'}' is not available, so the agent "
+                f"did not run. No output was produced.",
+                model=model,
+            )
 
         messages = [{"role": "user", "content": prompt or "(no prompt) — continue from memory"}]
         text = prov.ask(system_prompt, messages)
@@ -246,6 +311,16 @@ def tick(now: datetime | None = None) -> list[dict]:
         results.append({"trigger_id": t["id"], "agent_id": t["agent_id"], **r})
     # Built-in system jobs (briefing, vault export) on their own crons.
     results.extend(run_system_jobs(now))
+    # Media jobs: a video render that nobody polls is paid for and lost, so
+    # every tick finishes the ones that are ready (2026-10-23).
+    try:
+        from . import media as _media_mod
+        reaped = _media_mod.reap_jobs()
+        if reaped.get("checked"):
+            log.info("media reaper: %s", reaped)
+            results.append({"media": reaped})
+    except Exception:
+        log.debug("media reaper failed", exc_info=True)
     return results
 
 

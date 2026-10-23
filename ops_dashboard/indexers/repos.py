@@ -62,12 +62,47 @@ def _git(cmd: list[str], cwd: Path) -> str:
         return ""
 
 
+def _registered_paths() -> dict[str, Path]:
+    """basename -> absolute path, from the project registry.
+
+    The registry knows where the repos really live; resolving by basename
+    alone picked the wrong folder (or a hidden one) under $HOME.
+    """
+    out: dict[str, Path] = {}
+    try:
+        from .. import projects as _proj
+        for p in _proj.PROJECTS:
+            for rp in p.repo_paths or []:
+                path = Path(rp).expanduser()
+                if path.name:
+                    out.setdefault(path.name, path)
+    except Exception:
+        pass
+    return out
+
+
 def _resolve(name: str) -> Path | None:
-    """Find the repo by name under ~/ or $OPS_WORKSPACE."""
+    """Find the repo by name.
+
+    1. The project registry wins: it knows the absolute path.
+    2. Otherwise a basename match under $HOME / $OPS_WORKSPACE, but only for a
+       real repository: never a hidden directory (.ssh, .aws, .config …) and
+       never a folder without .git. Indexing those would pull secrets into
+       the RAG. 2026-10-23.
+    """
+    registered = _registered_paths()
+    if name in registered:
+        path = registered[name]
+        return path if path.exists() else None
     for base in (HOME, WORKSPACE):
         p = base / name
-        if p.exists():
-            return p
+        if not p.exists() or not p.is_dir():
+            continue
+        if p.name.startswith("."):
+            continue  # hidden directory: never a repo
+        if not (p / ".git").exists():
+            continue  # not a git checkout
+        return p
     return None
 
 

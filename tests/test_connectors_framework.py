@@ -112,7 +112,9 @@ def test_gap_fill_applies_14_on_db_already_past_it():
     applied = migrations.run_migrations(conn)
     assert (14, migrations.MIGRATIONS[[v for v, *_ in migrations.MIGRATIONS].index(14)][1]) in applied
     assert conn.execute("SELECT name FROM sqlite_master WHERE name='connector_audit'").fetchone()
-    assert migrations.current_version(conn) == 20
+    # The intent is "the database ends up at the latest schema", not a
+    # particular number: a hardcoded version breaks on every new migration.
+    assert migrations.current_version(conn) == max(v for v, *_ in migrations.MIGRATIONS)
 
 
 # ── registry ────────────────────────────────────────────────────────────────

@@ -113,13 +113,25 @@ def sanitize_tools(raw: list[dict]) -> tuple[list[dict], list[str]]:
     return out, rejected
 
 
-def effective_kind(tool: dict, mode: str) -> str | None:
+def effective_kind(tool: dict, mode: str, trust_readonly: bool = True) -> str | None:
+    """Is this tool a read or a write, for the approval gate?
+
+    * ``disabled`` -> the tool is off.
+    * ``read`` / ``write`` -> the user decided; that is the answer.
+    * ``auto`` -> the default. The product promises that a tool is read-only
+      by default, so a server the user chose to run is trusted to label its
+      own tools (``trust_readonly``). What it is not trusted to do is change
+      its mind: when a tool's annotations change, the trust is revoked and
+      the tool goes back through the approval gate (2026-10-23).
+    """
     if mode == "disabled":
         return None
     if mode in ("read", "write"):
         return mode
     ann = tool.get("annotations") or {}
-    return "read" if ann.get("readOnlyHint") is True and not ann.get("destructiveHint") else "write"
+    if trust_readonly and ann.get("readOnlyHint") is True and not ann.get("destructiveHint"):
+        return "read"
+    return "write"
 
 
 def untrusted_result(server: str, tool: str, res: dict) -> dict:
@@ -238,10 +250,14 @@ def save_server(name: str, transport: str, *, command: Any = None, url: str | No
     env_json = json.dumps({"vars": vars_, "secret_vars": secret_names, "auth": auth})
     now = int(time.time())
     with _dbmod.db() as conn:
+        # Saving a server is the user choosing to run it: that is the moment
+        # the trust in its own read-only annotations is given (again).
         conn.execute(
-            "INSERT INTO mcp_servers (name, transport, command, url, env, enabled, created_at, updated_at) "
-            "VALUES (?,?,?,?,?,1,?,?) ON CONFLICT(name) DO UPDATE SET transport=excluded.transport, "
-            "command=excluded.command, url=excluded.url, env=excluded.env, updated_at=excluded.updated_at",
+            "INSERT INTO mcp_servers (name, transport, command, url, env, enabled, trust_readonly, "
+            "created_at, updated_at) "
+            "VALUES (?,?,?,?,?,1,1,?,?) ON CONFLICT(name) DO UPDATE SET transport=excluded.transport, "
+            "command=excluded.command, url=excluded.url, env=excluded.env, trust_readonly=1, "
+            "updated_at=excluded.updated_at",
             (name, transport, json.dumps(cmd) if cmd else None, url, env_json, now, now))
     cid = connector_id(name)
     acc = store.get_account(cid)
@@ -294,7 +310,13 @@ def _policies(name: str) -> dict[str, dict]:
 
 
 def _sync_policies(name: str, tools: list[dict]) -> list[str]:
-    """Insert new tools as ``auto``; flag changed ones. Returns changed names."""
+    """Insert new tools as ``auto``; flag changed ones. Returns changed names.
+
+    A server that changes what a tool says it is has stopped being trusted
+    to say it, so the trust is revoked here, next to the detection: every
+    tool it calls in ``auto`` mode goes back through the approval gate until
+    the user has looked at it.
+    """
     pol = _policies(name)
     changed: list[str] = []
     now = int(time.time())
@@ -309,7 +331,28 @@ def _sync_policies(name: str, tools: list[dict]) -> list[str]:
                 new_mode = "auto" if p["mode"] == "read" else p["mode"]
                 conn.execute("UPDATE mcp_tool_policies SET desc_hash=?, changed=1, mode=?, updated_at=? "
                              "WHERE server=? AND tool=?", (t["desc_hash"], new_mode, now, name, t["name"]))
+        if changed:
+            conn.execute("UPDATE mcp_servers SET trust_readonly=0, updated_at=? WHERE name=?", (now, name))
     return changed
+
+
+def set_server_trust(name: str, trust_readonly: bool) -> dict:
+    """Does the user trust this server's own read-only annotations?
+
+    On by default: the user chose to run this server. With it off, every
+    tool in ``auto`` mode is treated as a write and goes through the
+    approval gate, whatever the server claims about its own annotations.
+    The trust is revoked on its own when a tool's annotations change, and
+    this is how it is given back. 2026-10-23.
+    """
+    if _row(name) is None:
+        raise HubError("unknown_server", name, 404)
+    trust = bool(trust_readonly)
+    with _dbmod.db() as conn:
+        conn.execute("UPDATE mcp_servers SET trust_readonly=?, updated_at=? WHERE name=?",
+                     (1 if trust else 0, int(time.time()), name))
+    store.audit(connector_id(name), "mcp_server_trust", {"trust_readonly": trust})
+    return server_view(name)
 
 
 def set_tool_mode(name: str, tool: str, mode: str) -> dict:
@@ -427,8 +470,9 @@ def _register(name: str) -> registry.ConnectorSpec | None:
         return None
     pol = _policies(name)
     acts: dict[str, registry.ActionSpec] = {}
+    trust_readonly = bool(row.get("trust_readonly"))
     for t in row["tools_cache"] or []:
-        kind = effective_kind(t, (pol.get(t["name"]) or {}).get("mode", "auto"))
+        kind = effective_kind(t, (pol.get(t["name"]) or {}).get("mode", "auto"), trust_readonly)
         if kind is None:
             continue
         aname = f"tool:{t['name']}"
@@ -467,11 +511,12 @@ def server_view(name: str) -> dict:
         raise HubError("unknown_server", name, 404)
     acc = store.get_account(connector_id(name))
     pol = _policies(name)
+    trust_readonly = bool(row.get("trust_readonly"))
     tools = []
     for t in row["tools_cache"] or []:
         p = pol.get(t["name"]) or {"mode": "auto", "changed": False}
         tools.append({"name": t["name"], "description": t.get("description", ""), "mode": p["mode"],
-                      "kind": effective_kind(t, p["mode"]), "changed": p["changed"],
+                      "kind": effective_kind(t, p["mode"], trust_readonly), "changed": p["changed"],
                       "annotations": t.get("annotations") or {}})
     b = tokens.backend()
     return {
@@ -484,6 +529,7 @@ def server_view(name: str) -> dict:
         "legacy_env": row.get("legacy_env", False),
         "status": acc["status"], "permission": acc["permission"], "server_label": acc["account_label"],
         "last_error": acc["last_error"], "connected_at": acc["connected_at"], "tools": tools,
+        "trust_readonly": trust_readonly,
     }
 
 

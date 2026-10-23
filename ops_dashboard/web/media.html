@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/csrf.js" defer></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Media · ConductLoop</title>
+  <link rel="stylesheet" href="/theme.css">
+  <style>
+  /* Page-only layout. Everything else comes from theme.css, so this page
+     speaks the same design language as the rest of the product. */
+  body { margin: 0; background: var(--cl-bg-soft); color: var(--cl-ink); font-family: var(--cl-font-ui); font-size: var(--cl-text-base); }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: var(--cl-space-6); }
+  header.page { display: flex; align-items: baseline; gap: var(--cl-space-3); margin-bottom: var(--cl-space-5); flex-wrap: wrap; }
+  header.page h1 { margin: 0; font-size: var(--cl-text-2xl); font-weight: var(--cl-weight-semibold); letter-spacing: -0.02em; }
+  header.page .sub { color: var(--cl-ink-muted); font-size: var(--cl-text-sm); }
+  header.page .spacer { flex: 1; }
+
+  .layout { display: grid; grid-template-columns: minmax(340px, 420px) 1fr; gap: var(--cl-space-5); align-items: start; }
+  @media (max-width: 1040px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--cl-bg); border: 1px solid var(--cl-border); border-radius: var(--cl-radius-md); padding: var(--cl-space-5); }
+  .panel + .panel { margin-top: var(--cl-space-5); }
+  .panel h2 { margin: 0 0 var(--cl-space-4); font-size: var(--cl-text-md); font-weight: var(--cl-weight-semibold); }
+
+  .tabs { display: flex; gap: var(--cl-space-1); background: var(--cl-bg-2); padding: 3px; border-radius: var(--cl-radius-sm); margin-bottom: var(--cl-space-5); }
+  .tabs button { flex: 1; border: 0; background: transparent; color: var(--cl-ink-soft); font: inherit; font-size: var(--cl-text-sm); padding: var(--cl-space-2) var(--cl-space-2); border-radius: var(--cl-radius-xs); cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--cl-bg); color: var(--cl-ink); font-weight: var(--cl-weight-medium); box-shadow: var(--cl-shadow-1); }
+  .providers { display: grid; gap: var(--cl-space-3); }
+  .provider { border: 1px solid var(--cl-border); border-radius: var(--cl-radius-sm); padding: var(--cl-space-3); background: var(--cl-bg-2); }
+  .provider__head { display: flex; align-items: center; gap: var(--cl-space-2); justify-content: space-between; }
+  .provider__name { font-weight: var(--cl-weight-medium); color: var(--cl-ink); }
+  .provider__doc { color: var(--cl-ink-soft); font-size: var(--cl-text-sm); margin: var(--cl-space-1) 0 0; }
+  .provider__caps { color: var(--cl-ink-muted); font-size: var(--cl-text-xs); margin: var(--cl-space-1) 0 0; }
+  .provider__health { color: var(--cl-ink-soft); font-size: var(--cl-text-xs); margin: var(--cl-space-1) 0 0; }
+  .provider__health--bad { color: var(--cl-danger); }
+  .provider__fields { display: grid; gap: var(--cl-space-2); margin-top: var(--cl-space-3); }
+
+  .field { margin-bottom: var(--cl-space-4); }
+  .field > label { display: block; margin-bottom: var(--cl-space-2); }
+  textarea, input[type="text"], select { width: 100%; font: inherit; font-size: var(--cl-text-sm); padding: var(--cl-space-2) var(--cl-space-3); border: 1px solid var(--cl-border-2); border-radius: var(--cl-radius-sm); background: var(--cl-bg); color: var(--cl-ink); }
+  textarea { min-height: 92px; resize: vertical; line-height: var(--cl-leading-normal); }
+  textarea:focus, input:focus, select:focus { outline: 2px solid var(--cl-focus); outline-offset: -1px; border-color: var(--cl-focus); }
+  .row { display: flex; gap: var(--cl-space-3); }
+  .row--tight { margin-bottom: var(--cl-space-4); }
+  .field--flush { margin: 0; }
+  .cl-btn--block { width: 100%; }
+  .row > .field { flex: 1; min-width: 0; }
+  .hint { color: var(--cl-ink-muted); font-size: var(--cl-text-xs); margin-top: var(--cl-space-1); }
+
+  .presets { display: flex; flex-wrap: wrap; gap: var(--cl-space-2); margin-bottom: var(--cl-space-4); }
+  .presets button { border: 1px solid var(--cl-border-2); background: var(--cl-bg); color: var(--cl-ink-soft); font: inherit; font-size: var(--cl-text-xs); padding: var(--cl-space-1) var(--cl-space-3); border-radius: 999px; cursor: pointer; }
+  .presets button:hover { border-color: var(--cl-accent); color: var(--cl-accent-ink); background: var(--cl-accent-soft); }
+
+  .keyframe { display: flex; gap: var(--cl-space-3); align-items: center; padding: var(--cl-space-3); border: 1px dashed var(--cl-border-2); border-radius: var(--cl-radius-sm); margin-bottom: var(--cl-space-4); }
+  .keyframe img { width: 56px; height: 56px; object-fit: cover; border-radius: var(--cl-radius-xs); border: 1px solid var(--cl-border); }
+  .keyframe .info { flex: 1; min-width: 0; font-size: var(--cl-text-xs); color: var(--cl-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .note { background: var(--cl-info-soft); color: var(--cl-info); border-radius: var(--cl-radius-sm); padding: var(--cl-space-3); font-size: var(--cl-text-xs); line-height: var(--cl-leading-normal); margin-bottom: var(--cl-space-4); }
+  .note--warn { background: var(--cl-warn-soft); color: var(--cl-warn); }
+
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--cl-space-4); }
+  .tile { background: var(--cl-bg); border: 1px solid var(--cl-border); border-radius: var(--cl-radius-md); overflow: hidden; display: flex; flex-direction: column; }
+  .tile .frame { aspect-ratio: 1; background: var(--cl-bg-2); display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
+  .tile-drop { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; padding: 0; border-radius: var(--cl-radius-full); background: var(--cl-bg); color: var(--cl-ink-muted); box-shadow: var(--cl-shadow-1); opacity: 0; transition: opacity var(--cl-dur-fast) var(--cl-ease); }
+  .tile:hover .tile-drop, .tile-drop:focus-visible { opacity: 1; }
+  .tile-drop:hover { color: var(--cl-danger); background: var(--cl-danger-soft); }
+  .tile .frame img, .tile .frame video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tile .meta { padding: var(--cl-space-3); }
+  .tile .prompt { font-size: var(--cl-text-xs); color: var(--cl-ink-soft); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .tile .acts { display: flex; gap: var(--cl-space-2); padding: 0 var(--cl-space-3) var(--cl-space-3); }
+  .tile .acts button { flex: 1; }
+
+  .jobs { display: flex; flex-direction: column; gap: var(--cl-space-2); }
+  .job { display: flex; align-items: center; gap: var(--cl-space-3); padding: var(--cl-space-3); border: 1px solid var(--cl-border); border-radius: var(--cl-radius-sm); background: var(--cl-bg); font-size: var(--cl-text-sm); }
+  .job .p { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--cl-ink-soft); }
+  .job .m { color: var(--cl-ink-muted); font-size: var(--cl-text-xs); white-space: nowrap; }
+
+  .busy { position: relative; pointer-events: none; opacity: .6; }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--cl-border-2); border-top-color: var(--cl-accent); border-radius: 50%; animation: cl-spin .7s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes cl-spin { to { transform: rotate(360deg); } }
+
+  dialog { border: 0; border-radius: var(--cl-radius-md); padding: 0; max-width: 560px; width: calc(100vw - 48px); box-shadow: var(--cl-shadow-3); }
+  dialog::backdrop { background: rgba(20, 22, 26, 0.4); }
+  dialog .body { padding: var(--cl-space-5); }
+  dialog h3 { margin: 0 0 var(--cl-space-3); font-size: var(--cl-text-lg); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <h1>Media</h1>
+    <span class="sub" id="engineLine">checking the engine…</span>
+    <span class="spacer"></span>
+    <span class="cl-pill" id="enginePill">…</span>
+  </header>
+
+  <div class="layout">
+    <!-- ── create ────────────────────────────────────────────────────── -->
+    <div>
+      <section class="panel">
+        <div class="tabs" role="tablist">
+          <button role="tab" id="tab-image" aria-selected="true" aria-controls="pane-image">Image</button>
+          <button role="tab" id="tab-vary" aria-selected="false" aria-controls="pane-vary">Variations</button>
+          <button role="tab" id="tab-video" aria-selected="false" aria-controls="pane-video">Video</button>
+          <button role="tab" id="tab-providers" aria-selected="false" aria-controls="pane-providers">Providers</button>
+        </div>
+
+        <!-- text-to-image -->
+        <div id="pane-image" role="tabpanel" aria-labelledby="tab-image">
+          <div class="field">
+            <label class="cl-label" for="imgPreset">Start from a preset</label>
+            <div class="presets" id="presetBar"></div>
+          </div>
+          <div class="field">
+            <label class="cl-label" for="imgSubject">Subject</label>
+            <input type="text" id="imgSubject" placeholder="a stylised mountain ridge inside a rounded square">
+            <p class="hint" id="presetHint">Pick a preset to get a complete prompt you can edit.</p>
+          </div>
+          <div class="field">
+            <label class="cl-label" for="imgPrompt">Prompt</label>
+            <textarea id="imgPrompt" placeholder="Describe the image…"></textarea>
+            <p class="hint">Write the subject first, then light, then mood. A bare sentence gives a bare result.</p>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label class="cl-label" for="imgBg">Background</label>
+              <select id="imgBg"></select>
+            </div>
+            <div class="field">
+              <label class="cl-label" for="imgRatio">Ratio</label>
+              <select id="imgRatio"></select>
+            </div>
+            <div class="field">
+              <label class="cl-label" for="imgRes">Resolution</label>
+              <select id="imgRes"></select>
+            </div>
+            <div class="field">
+              <label class="cl-label" for="imgN">How many</label>
+              <select id="imgN"><option>1</option><option>2</option><option>3</option><option selected>4</option></select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="cl-label" for="imgProvider">Provider</label>
+            <select id="imgProvider"></select>
+            <p class="hint" id="imgProviderHint"></p>
+          </div>
+          <button class="cl-btn cl-btn--primary cl-btn--block" id="btnImage">Generate image</button>
+        </div>
+
+        <!-- image-to-image -->
+        <div id="pane-vary" role="tabpanel" aria-labelledby="tab-vary" hidden>
+          <div class="note">Pick any image in the library on the right with <strong>Vary</strong>, or paste an id below.</div>
+          <div class="field">
+            <label class="cl-label" for="varyId">Source asset id</label>
+            <input type="text" id="varyId" placeholder="e.g. 12" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label class="cl-label" for="varyPrompt">What should change?</label>
+            <textarea id="varyPrompt" placeholder="Same composition, now a warm amber and violet palette…"></textarea>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label class="cl-label" for="varyRatio">Ratio</label>
+              <select id="varyRatio"></select>
+            </div>
+            <div class="field">
+              <label class="cl-label" for="varyN">How many</label>
+              <select id="varyN"><option>1</option><option>2</option><option>3</option><option selected>4</option></select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="cl-label" for="varyProvider">Provider</label>
+            <select id="varyProvider"></select>
+          </div>
+          <button class="cl-btn cl-btn--primary cl-btn--block" id="btnVary">Generate variations</button>
+        </div>
+
+        <!-- video -->
+        <div id="pane-video" role="tabpanel" aria-labelledby="tab-video" hidden>
+          <div class="note" id="audioNote"></div>
+          <div class="field">
+            <label class="cl-label" for="vidKeyframe">Keyframe</label>
+            <div class="keyframe" id="keyframeBox">
+              <img id="kfImg" alt="" hidden>
+              <span class="info" id="kfInfo">None — this will be text-to-video. Use <strong>Animate</strong> on an image instead.</span>
+              <button class="cl-btn cl-btn--ghost" id="kfClear" hidden>Clear</button>
+            </div>
+          </div>
+          <div class="field">
+            <label class="cl-label" for="vidPrompt">Prompt</label>
+            <textarea id="vidPrompt" placeholder="Slow push-in, the light shifting gently, ambient room tone."></textarea>
+            <p class="hint" id="vidHint">With a keyframe the shot starts from that image.</p>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label class="cl-label" for="vidModel">Model</label>
+              <select id="vidModel"></select>
+            </div>
+            <div class="field">
+              <label class="cl-label" for="vidDur">Seconds</label>
+              <select id="vidDur"></select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label class="cl-label" for="vidRes">Resolution</label>
+              <select id="vidRes"></select>
+            </div>
+            <div class="field">
+              <label class="cl-label" for="vidRatio">Ratio</label>
+              <select id="vidRatio"></select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="cl-label" for="vidProvider">Provider</label>
+            <select id="vidProvider"></select>
+          </div>
+          <button class="cl-btn cl-btn--primary cl-btn--block" id="btnVideo">Queue render</button>
+          <p class="hint" id="vidWarn"></p>
+        </div>
+
+        <!-- providers -->
+        <div id="pane-providers" role="tabpanel" aria-labelledby="tab-providers" hidden>
+          <div class="note">
+            ConductLoop asks for a <strong>capability</strong> — an image, a video, a voice —
+            and whichever provider is set up for it does the work. A provider can be a cloud
+            API or something running on this Mac; local ones are used first.
+          </div>
+          <div class="providers" id="providerList"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="jobsPanel">
+        <h2>Renders in flight</h2>
+        <div class="jobs" id="jobs"><p class="cl-empty">Nothing queued.</p></div>
+      </section>
+    </div>
+
+    <!-- ── library ───────────────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Library</h2>
+      <div class="row row--tight">
+        <div class="field field--flush"><select id="filterKind">
+          <option value="">All kinds</option>
+          <option value="image">Images</option>
+          <option value="video">Videos</option>
+          <option value="audio">Audio</option>
+        </select></div>
+        <div class="field field--flush"><select id="filterProject">
+          <option value="">All projects</option>
+        </select></div>
+      </div>
+      <div class="gallery" id="gallery"><p class="cl-empty">Nothing generated yet.</p></div>
+    </section>
+  </div>
+</div>
+
+<div class="cl-toast" id="toast" hidden></div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const state = { presets: [], caps: [], keyframe: null, timer: null,
+                  providers: [], capabilities: {}, providerChoice: {}, usage: {} };
+  // Same wording the server sends when /api/media/animate is called with no
+  // prompt, so the button and the API default never disagree.
+  const ANIMATE_DEFAULT = "Slow, natural camera push-in. Gentle ambient motion in the scene, "
+    + "soft shifting light. Keep the subject unchanged, no text, no artifacts.";
+
+  // ── toast ──────────────────────────────────────────────────────────────
+  let toastTimer = null;
+  function toast(message, kind) {
+    const el = $("toast");
+    el.textContent = message;
+    el.className = "cl-toast" + (kind ? " cl-toast--" + kind : "");
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, 5200);
+  }
+
+  async function api(path, body, method) {
+    // csrf.js patches fetch once and adds X-CSRF-Token to every /api/ write,
+    // so this only decides the verb and the payload.
+    const verb = method || (body === undefined ? "GET" : "POST");
+    const opts = body === undefined
+      ? { method: verb }
+      : { method: verb, headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body) };
+    const res = await fetch(path, opts);
+    const text = await res.text();
+    let data;
+    try { data = text ? JSON.parse(text) : {}; }
+    catch { throw new Error("the server did not answer with JSON"); }
+    if (!res.ok || data.ok === false) throw new Error(data.message || data.error || res.statusText);
+    return data;
+  }
+
+  function busy(button, on, label) {
+    button.disabled = on;
+    if (on) { button.dataset.label = button.textContent; button.textContent = "\u25cf " + (label || "Working\u2026"); }
+    else if (button.dataset.label) button.textContent = button.dataset.label;
+  }
+
+  // ── boot ───────────────────────────────────────────────────────────────
+  async function boot() {
+    let status;
+    try { status = await api("/api/media/status"); }
+    catch (e) { $("engineLine").textContent = "engine unavailable: " + e.message; $("enginePill").textContent = "offline";
+                $("enginePill").className = "cl-pill cl-pill--danger"; return; }
+
+    state.presets = status.image_presets || [];
+    state.caps = status.video_capabilities || [];
+    await loadProviders();
+
+    $("engineLine").textContent = status.engine + (status.ffmpeg ? " · ffmpeg ready" : " · ffmpeg missing");
+    $("enginePill").textContent = status.available ? "ready" : "cli not found";
+    $("enginePill").className = "cl-pill " + (status.available ? "cl-pill--ok" : "cl-pill--danger");
+
+    fill($("imgRatio"), status.aspect_ratios);
+    fill($("imgRes"), status.image_resolutions);
+    fill($("varyRatio"), status.aspect_ratios);
+    fill($("vidRatio"), ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"]);
+
+    $("presetBar").textContent = "";
+    state.presets.forEach((p) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = p.label;
+      b.title = p.hint;
+      b.onclick = () => {
+        $("imgPrompt").value = p.prompt.replace("{subject}", $("imgSubject").value.trim() || "{subject}");
+        $("imgRatio").value = p.aspect_ratio;
+        $("presetHint").textContent = "From “" + p.label + "”: " + p.hint;
+        [...$("presetBar").children].forEach((c) => c.classList.remove("active"));
+      };
+      $("presetBar").appendChild(b);
+    });
+
+    fillModels(status);
+    setKeyframe(null);          // so "Clear" starts hidden, as it should
+    fillProjects();
+    await refresh();
+    startPolling();
+  }
+
+  function fill(select, values) {
+    select.textContent = "";
+    (values || []).forEach((v) => {
+      const o = document.createElement("option");
+      o.value = o.textContent = v;
+      select.appendChild(o);
+    });
+  }
+
+  // ── providers ───────────────────────────────────────────────────────────
+  // The product asks for a capability and the provider does the work. The
+  // page only chooses between the ones that are switched on, and shows what
+  // each of them can do.
+  async function loadProviders() {
+    let data;
+    try { data = await api("/api/media/providers"); }
+    catch (e) { return; }
+    state.providers = data.providers || [];
+    state.capabilities = data.capabilities || {};
+    state.usage = data.usage || {};
+    fillProviderSelects();
+    renderProviders();
+  }
+
+  function providerFor(capability) {
+    return state.providers.filter((p) => (p.capabilities || []).includes(capability));
+  }
+
+  function fillProviderSelects() {
+    [["imgProvider", "image"], ["varyProvider", "image"], ["vidProvider", "video"]]
+      .forEach(([id, capability]) => {
+        const sel = $(id);
+        if (!sel) return;
+        const current = sel.value;
+        sel.textContent = "";
+        const usable = providerFor(capability).filter((p) => p.enabled);
+        usable.forEach((p) => {
+          const o = document.createElement("option");
+          o.value = p.key;
+          o.textContent = p.label + (p.kind === "local" ? " · local" : "");
+          sel.appendChild(o);
+        });
+        if (!usable.length) {
+          const o = document.createElement("option");
+          o.value = "";
+          o.textContent = "none enabled — set one up in Providers";
+          sel.appendChild(o);
+        }
+        if (current && usable.some((p) => p.key === current)) sel.value = current;
+        sel.onchange = () => {
+          state.providerChoice[capability] = sel.value;
+          providerHint();
+        };
+        state.providerChoice[capability] = sel.value;
+      });
+    providerHint();
+  }
+
+  function providerHint() {
+    const hint = $("imgProviderHint");
+    const sel = $("imgProvider");
+    if (!hint || !sel) return;
+    const p = state.providers.find((x) => x.key === sel.value);
+    hint.textContent = p ? (p.doc || "") : "";
+  }
+
+  function renderProviders() {
+    const list = $("providerList");
+    if (!list) return;
+    list.textContent = "";
+    state.providers.forEach((p) => {
+      const card = el("div", "provider");
+
+      const head = el("div", "provider__head");
+      head.appendChild(el("span", "provider__name", p.label));
+      head.appendChild(el("span", "cl-pill" + (p.kind === "local" ? " cl-pill--ok" : ""),
+                          p.kind === "local" ? "local" : "remote"));
+      card.appendChild(head);
+
+      if (p.doc) card.appendChild(el("p", "provider__doc", p.doc));
+      card.appendChild(el("p", "provider__caps", "Does: " + (p.capabilities || []).join(", ")));
+
+      if (p.healthy === false) {
+        card.appendChild(el("p", "provider__health provider__health--bad", p.detail || "not reachable"));
+      } else if (p.healthy === true) {
+        card.appendChild(el("p", "provider__health", p.detail || "ready"));
+      }
+
+      const used = (state.usage || {})[p.key];
+      if (used) {
+        const cap = (p.default_config || {}).daily_cap;
+        const capText = cap ? (" · cap " + cap) : "";
+        card.appendChild(el("p", "provider__health",
+          "Today: " + used.calls + " call" + (used.calls === 1 ? "" : "s") +
+          (used.errors ? (" · " + used.errors + " failed") : "") + capText));
+      }
+
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "cl-btn " + (p.enabled ? "cl-btn--ghost" : "cl-btn--primary");
+      toggle.textContent = p.enabled ? "Turn off" : "Turn on";
+      toggle.onclick = async () => {
+        busy(toggle, true, "Working…");
+        try {
+          await api("/api/media/providers/" + encodeURIComponent(p.key),
+                    { enabled: !p.enabled }, p.enabled ? "DELETE" : "POST");
+          toast(p.label + (p.enabled ? " turned off" : " turned on"), "ok");
+          await loadProviders();
+        } catch (e) { toast(e.message, "error"); busy(toggle, false); }
+      };
+      const row = el("div", "row row--tight");
+      row.appendChild(toggle);
+      card.appendChild(row);
+
+      const fields = (p.config_fields || []).slice();
+      // Every provider gets the same brake: a cap on how many calls it may
+      // make in a day. Zero means no cap.
+      fields.push({ key: "daily_cap", label: "Daily cap (calls per day, 0 = no cap)",
+                    type: "text", placeholder: "0",
+                    help: "The provider stops accepting work once it reaches this." });
+      if (fields.length) {
+        const form = el("div", "provider__fields");
+        fields.forEach((f) => {
+          const field = el("div", "field");
+          const label = document.createElement("label");
+          label.className = "cl-label";
+          label.textContent = f.label;
+          const input = document.createElement("input");
+          input.type = f.type === "password" ? "password" : "text";
+          input.placeholder = f.placeholder || "";
+          // A secret is never sent back, so the field starts empty: leaving
+          // it empty keeps the stored key.
+          input.value = f.secret ? "" : ((p.default_config || {})[f.key] || "");
+          input.dataset.key = f.key;
+          field.appendChild(label);
+          field.appendChild(input);
+          if (f.help) field.appendChild(el("p", "hint", f.help));
+          form.appendChild(field);
+        });
+        const save = document.createElement("button");
+        save.type = "button";
+        save.className = "cl-btn cl-btn--block";
+        save.textContent = "Save " + p.label;
+        save.onclick = async () => {
+          const config = {};
+          form.querySelectorAll("input").forEach((i) => {
+            // The cap is always sent, even empty: clearing it means "no
+            // cap". A secret left empty keeps the one that is stored.
+            if (i.value || i.dataset.key === "daily_cap") {
+              config[i.dataset.key] = i.dataset.key === "daily_cap"
+                ? (i.value || "0") : i.value;
+            }
+          });
+          busy(save, true, "Saving…");
+          try {
+            await api("/api/media/providers/" + encodeURIComponent(p.key),
+                      { config, enabled: true });
+            toast("Saved " + p.label, "ok");
+            await loadProviders();
+          } catch (e) { toast(e.message, "error"); busy(save, false); }
+        };
+        form.appendChild(save);
+        card.appendChild(form);
+      }
+      list.appendChild(card);
+    });
+  }
+
+  // ── video model capabilities drive the form ────────────────────────────
+  function currentCap() {
+    return state.caps.find((c) => c.model === $("vidModel").value) || state.caps[0];
+  }
+
+  function fillModels(status) {
+    const sel = $("vidModel");
+    sel.textContent = "";
+    state.caps.forEach((c) => {
+      const o = document.createElement("option");
+      o.value = c.model;
+      const tags = [];
+      if (c.default) tags.push("quality");
+      if (c.fast) tags.push("~20 s");
+      if (!c.native_audio) tags.push("silent");
+      o.textContent = c.model + (tags.length ? "  (" + tags.join(", ") + ")" : "");
+      sel.appendChild(o);
+    });
+    sel.onchange = () => {
+      const c = currentCap();
+      fill($("vidDur"), c.durations);
+      onDurationChange();
+      // The engine follows the keyframe's aspect; a ratio there is meaningless.
+      const locked = !!state.keyframe || !c.accepts_ratio;
+      $("vidRatio").disabled = locked;
+      $("vidRatio").title = locked ? "With a keyframe the aspect follows the image." : "";
+      $("audioNote").textContent = c.native_audio
+        ? "This model renders its own sound track — describe the ambience or dialogue in the prompt."
+        : "This model is silent. Describe motion only.";
+      $("audioNote").className = "note" + (c.native_audio ? "" : " note--warn");
+    };
+    if (sel.options.length) sel.onchange();
+  }
+
+  function onDurationChange() {
+    const c = currentCap();
+    if (!c) return;
+    const dur = parseInt($("vidDur").value || "6", 10);
+    const allowed = c.resolutions_by_duration[String(dur)] || c.resolutions;
+    fill($("vidRes"), allowed);
+    const saved = $("vidRes").dataset.saved;
+    if (saved && allowed.includes(saved)) $("vidRes").value = saved;
+  }
+
+  $("vidDur").addEventListener("change", onDurationChange);
+
+  function fillProjects() {
+    fetch("/api/projects").then((r) => r.json()).then((d) => {
+      // The endpoint answers with a bare list; older payloads wrapped it.
+      const rows = Array.isArray(d) ? d : (d.projects || d.rows || []);
+      if (!rows.length) return;
+      const sel = $("filterProject");
+      const current = sel.value;
+      sel.textContent = "";
+      const all = document.createElement("option");
+      all.value = ""; all.textContent = "All projects";
+      sel.appendChild(all);
+      rows.forEach((p) => {
+        const o = document.createElement("option");
+        o.value = p.key || p.project_key || p.name;
+        o.textContent = p.name || o.value;
+        sel.appendChild(o);
+      });
+      sel.value = current;
+    }).catch(() => {});
+  }
+
+  // ── tabs ───────────────────────────────────────────────────────────────
+  const TABS = [["tab-image", "pane-image"], ["tab-vary", "pane-vary"],
+                ["tab-video", "pane-video"], ["tab-providers", "pane-providers"]];
+  TABS.forEach(([tab, pane]) => {
+    $(tab).onclick = () => {
+      TABS.forEach(([t, p]) => {
+        $(t).setAttribute("aria-selected", String(t === tab));
+        $(p).hidden = (p !== pane);
+      });
+    };
+  });
+
+  // ── keyframe ───────────────────────────────────────────────────────────
+  function setKeyframe(asset) {
+    state.keyframe = asset;
+    const box = $("keyframeBox");
+    if (!asset) {
+      $("kfImg").hidden = true; $("kfClear").hidden = true;
+      $("kfInfo").textContent = "None — this will be text-to-video. Use Animate on an image instead.";
+      return;
+    }
+    $("kfImg").src = asset.url; $("kfImg").hidden = false; $("kfClear").hidden = false;
+    $("kfInfo").textContent = "From asset #" + asset.id;
+    const cap = currentCap();
+    if (cap && !cap.keyframe_modes.length) {
+      $("vidWarn").textContent = cap.model + " cannot start from an image. Pick another model.";
+    } else {
+      $("vidWarn").textContent = "";
+    }
+  }
+  $("kfClear").onclick = () => setKeyframe(null);
+
+  // ── actions ────────────────────────────────────────────────────────────
+  $("btnImage").onclick = async () => {
+    const button = $("btnImage");
+    const preset = [...$("presetBar").children].find((c) => c.dataset.picked);
+    const payload = {
+      prompt: $("imgPrompt").value.trim(),
+      background: $("imgBg").value || undefined,
+      aspect_ratio: $("imgRatio").value,
+      resolution: $("imgRes").value,
+      n: parseInt($("imgN").value, 10),
+      provider: $("imgProvider").value || undefined,
+    };
+    busy(button, true, "Generating…");
+    try {
+      const res = await api("/api/media/image", payload);
+      toast("Saved " + (res.meta.saved || 1) + " image(s)", "ok");
+      await refresh();
+    } catch (e) { toast(e.message, "error"); }
+    finally { busy(button, false); }
+  };
+
+  $("btnVary").onclick = async () => {
+    const button = $("btnVary");
+    const id = $("varyId").value.trim();
+    if (!id) { toast("Pick an image in the library first", "error"); return; }
+    busy(button, true, "Generating…");
+    try {
+      const res = await api("/api/media/vary", {
+        asset_id: Number(id), prompt: $("varyPrompt").value.trim() || undefined,
+        aspect_ratio: $("varyRatio").value, n: parseInt($("varyN").value, 10),
+        provider: $("varyProvider").value || undefined,
+      });
+      toast("Saved " + (res.meta.saved || 1) + " variation(s)", "ok");
+      await refresh();
+    } catch (e) { toast(e.message, "error"); }
+    finally { busy(button, false); }
+  };
+
+  $("btnVideo").onclick = async () => {
+    const button = $("btnVideo");
+    const payload = {
+      prompt: $("vidPrompt").value.trim(),
+      model: $("vidModel").value,
+      duration: parseInt($("vidDur").value || "6", 10),
+      resolution: $("vidRes").value,
+      image_asset_id: state.keyframe ? state.keyframe.id : undefined,
+      provider: $("vidProvider").value || undefined,
+    };
+    if (!$("vidRatio").disabled) payload.ratio = $("vidRatio").value;
+    busy(button, true, "Queueing…");
+    try {
+      const res = await api("/api/media/video", payload);
+      toast(res.fell_back
+        ? "Queued on " + res.model + " (the requested model was unavailable)"
+        : "Queued on " + res.model, "ok");
+      await refresh();
+    } catch (e) { toast(e.message, "error"); }
+    finally { busy(button, false); }
+  };
+
+  // ── library ────────────────────────────────────────────────────────────
+  // Built with DOM nodes rather than innerHTML: a prompt, a file name or a
+  // model name is user-authored text, and this page renders whatever the
+  // library happens to hold.
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  async function refresh() {
+    const params = new URLSearchParams();
+    if ($("filterKind").value) params.set("kind", $("filterKind").value);
+    if ($("filterProject").value) params.set("project_key", $("filterProject").value);
+    try {
+      const data = await api("/api/media/assets?" + params.toString());
+      renderGallery(data.rows || []);
+      renderJobs(data.jobs || []);
+    } catch (e) { /* the toast already carries engine problems */ }
+  }
+
+  function renderGallery(rows) {
+    const box = $("gallery");
+    box.textContent = "";
+    if (!rows.length) { box.appendChild(el("p", "cl-empty", "Nothing generated yet.")); return; }
+    rows.forEach((a) => {
+      const tile = el("div", "tile");
+      const frame = el("div", "frame");
+      if (a.kind === "video") {
+        const v = el("video");
+        v.src = a.url; v.muted = true; v.loop = true; v.playsInline = true;
+        frame.appendChild(v);
+      } else if (a.kind === "audio") {
+        frame.appendChild(el("span", "cl-empty", "audio"));
+      } else {
+        const img = el("img");
+        img.src = a.url; img.alt = a.prompt || "generated image"; img.loading = "lazy";
+        frame.appendChild(img);
+      }
+      tile.appendChild(frame);
+
+      const meta = el("div", "meta");
+      const prompt = el("div", "prompt", a.prompt || "");
+      prompt.title = a.prompt || "";
+      meta.appendChild(prompt);
+      const when = a.created_at ? new Date(a.created_at * 1000).toLocaleString() : "";
+      meta.appendChild(el("div", "hint", a.model ? when + " \u00b7 " + a.model : when));
+      tile.appendChild(meta);
+
+      const drop = el("button", "cl-btn cl-btn--ghost tile-drop", "\u2715");
+      drop.type = "button";
+      drop.title = "Delete this asset";
+      drop.setAttribute("aria-label", "Delete asset " + a.id);
+      drop.onclick = () => removeAsset(a);
+      tile.querySelector(".frame").appendChild(drop);
+
+      if (a.kind === "image") {
+        const acts = el("div", "acts");
+        const vary = el("button", "cl-btn", "Vary");
+        vary.type = "button";
+        vary.onclick = () => {
+          $("varyId").value = a.id;
+          $("tab-vary").click();
+          $("varyPrompt").focus();
+        };
+        const animate = el("button", "cl-btn", "Animate");
+        animate.type = "button";
+        animate.onclick = () => {
+          setKeyframe(a);
+          $("tab-video").click();
+          if (!$("vidPrompt").value.trim()) $("vidPrompt").value = ANIMATE_DEFAULT;
+          $("vidPrompt").focus();
+        };
+        acts.appendChild(vary);
+        acts.appendChild(animate);
+        tile.appendChild(acts);
+      }
+      box.appendChild(tile);
+    });
+  }
+
+  async function removeAsset(asset) {
+    if (!window.confirm("Delete this asset and its file?\n\n"
+      + (asset.prompt || "").slice(0, 120))) return;
+    try {
+      await api("/api/media/assets/" + asset.id, undefined, "DELETE");
+      toast("Deleted", "ok");
+      await refresh();
+    } catch (e) { toast(e.message, "error"); }
+  }
+
+  function renderJobs(jobs) {
+    const box = $("jobs");
+    box.textContent = "";
+    const live = jobs.filter((j) => j.status === "queued" || j.status === "running");
+    if (!live.length) { box.appendChild(el("p", "cl-empty", "Nothing queued.")); return; }
+    live.forEach((j) => {
+      const row = el("div", "job");
+      row.appendChild(el("span", "spin"));
+      const p = el("span", "p", j.prompt || "");
+      p.title = j.prompt || "";
+      row.appendChild(p);
+      row.appendChild(el("span", "m", (j.model || "") + " \u00b7 " + j.status));
+      box.appendChild(row);
+    });
+  }
+
+  function startPolling() {
+    if (state.timer) clearInterval(state.timer);
+    state.timer = setInterval(async () => {
+      const data = await api("/api/media/assets");
+      renderJobs(data.jobs || []);
+      const settled = (data.jobs || []).some((j) => j.status === "succeeded");
+      if (settled) await refresh();
+    }, 6000);
+  }
+
+  $("filterKind").onchange = refresh;
+  $("filterProject").onchange = refresh;
+  // Keep a preset-picked subject in sync with the editable prompt.
+  $("imgSubject").addEventListener("input", () => {
+    const value = $("imgSubject").value.trim();
+    if (!value) return;
+    const current = $("imgPrompt").value;
+    if (current.includes("{subject}") || !current) $("imgPrompt").value = current.replace("{subject}", value);
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>

@@ -51,6 +51,5 @@ if len(sys.argv) == 1:
 
 from ops_dashboard.cli import app
 
-
 if __name__ == "__main__":
     sys.exit(app())

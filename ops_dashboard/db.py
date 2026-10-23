@@ -69,12 +69,14 @@ CREATE TABLE IF NOT EXISTS documents (
     metadata    TEXT,                       -- JSON blob
     mtime       INTEGER,
     size        INTEGER,
+    project_key TEXT,                       -- which business this document belongs to
     indexed_at  INTEGER NOT NULL,
     UNIQUE(source, path)
 );
 
 CREATE INDEX IF NOT EXISTS idx_documents_source ON documents(source);
 CREATE INDEX IF NOT EXISTS idx_documents_mtime  ON documents(mtime DESC);
+CREATE INDEX IF NOT EXISTS idx_documents_project_key ON documents(project_key);
 
 -- documents_fts (FTS5 index), its content view and sync triggers are created
 -- by db_fts.ensure_documents_fts(): trigger bodies contain ';' and can't go
@@ -500,6 +502,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
     tools_cache   TEXT,                            -- JSON: [{name, description, input_schema}]
     tools_cached_at INTEGER,
     last_error    TEXT,
+    trust_readonly INTEGER NOT NULL DEFAULT 1,     -- the user trusts this server's read-only annotations
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL
 );
@@ -914,6 +917,54 @@ CREATE TABLE IF NOT EXISTS recap_cache (
     expires_at    INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_recap_cache_lookup ON recap_cache(kind, payload_hash, expires_at);
+
+-- ── Media (2026-10-23) ─────────────────────────────────────────────────────
+-- One row per generated file: image, video or audio. Keeps the prompt, the
+-- engine and the project it belongs to, so every asset is traceable.
+CREATE TABLE IF NOT EXISTS media_assets (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind        TEXT    NOT NULL,                      -- 'image' | 'video' | 'audio'
+    project_key TEXT,
+    prompt      TEXT,
+    engine      TEXT,                                 -- 'matrix' | ...
+    model       TEXT,
+    path        TEXT,                                 -- local file
+    source_url  TEXT,                                 -- short-lived source url
+    node_id     TEXT,                                 -- connector asset id
+    status      TEXT    NOT NULL DEFAULT 'ready',     -- 'ready' | 'failed'
+    width       INTEGER,
+    height      INTEGER,
+    duration_sec REAL,
+    bytes       INTEGER,
+    meta        TEXT,                                 -- JSON
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_media_assets_project ON media_assets(project_key);
+CREATE INDEX IF NOT EXISTS idx_media_assets_kind ON media_assets(kind);
+
+-- Video generation is asynchronous (submit → task_id → poll → file), so the
+-- product tracks its own job instead of holding an HTTP request open.
+CREATE TABLE IF NOT EXISTS media_jobs (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind              TEXT    NOT NULL,              -- 'video'
+    project_key       TEXT,
+    prompt            TEXT,
+    engine            TEXT,
+    model             TEXT,
+    external_task_id  TEXT,                          -- the engine's task id
+    status            TEXT    NOT NULL DEFAULT 'queued',
+                                                      -- 'queued'|'running'|'succeeded'|'failed'
+    progress          INTEGER NOT NULL DEFAULT 0,
+    asset_id          INTEGER,                       -- FK to media_assets
+    error             TEXT,
+    meta              TEXT,                         -- JSON
+    created_at        INTEGER NOT NULL,
+    updated_at        INTEGER NOT NULL,
+    FOREIGN KEY (asset_id) REFERENCES media_assets(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_media_jobs_status ON media_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_media_jobs_task ON media_jobs(external_task_id);
 """
 
 
@@ -1063,6 +1114,14 @@ def init_db() -> None:
         purge_expired_sessions()
     except Exception:
         log.debug("purge_expired_sessions failed", exc_info=True)
+    # Attribute every document to the business it belongs to, so the RAG can
+    # answer about one project without citing another project's files
+    # (2026-10-23). Idempotent: it only fills rows that have no owner yet.
+    try:
+        from . import projects as _projects_mod
+        _projects_mod.backfill_document_project_keys()
+    except Exception:
+        log.debug("backfill_document_project_keys failed", exc_info=True)
 
 
 # Optional connection reuse (upgrade #6, opt-in via OPS_DB_CONN_REUSE=1).
@@ -1158,12 +1217,25 @@ def create_document(*, source: str, path: str, title: str | None, content: str =
     with db() as conn:
         cur = conn.execute(
             """
-            INSERT INTO documents (source, path, title, content, metadata, mtime, size, indexed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO documents (source, path, title, content, metadata, mtime, size, project_key, indexed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (source, path, title, content, "{}", now, len(content), now),
+            (source, path, title, content, "{}", now, len(content), _project_key_for(path), now),
         )
         return cur.lastrowid or 0
+
+
+def _project_key_for(path: str) -> str | None:
+    """Which business owns this document path? (None when it belongs to none.)
+
+    Imported lazily: projects.py imports db, so a module-level import here
+    would be circular.
+    """
+    try:
+        from . import projects as _projects_mod
+        return _projects_mod.project_for_path(path)
+    except Exception:
+        return None
 
 
 def get_document(doc_id: int) -> dict | None:
@@ -1216,14 +1288,15 @@ def upsert_document(
 
         conn.execute(
             """
-            INSERT INTO documents (source, path, title, content, metadata, mtime, size, indexed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO documents (source, path, title, content, metadata, mtime, size, project_key, indexed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(source, path) DO UPDATE SET
                 title = excluded.title,
                 content = excluded.content,
                 metadata = excluded.metadata,
                 mtime = excluded.mtime,
                 size = excluded.size,
+                project_key = excluded.project_key,
                 indexed_at = excluded.indexed_at
             """,
             (
@@ -1234,6 +1307,7 @@ def upsert_document(
                 _json.dumps(metadata, ensure_ascii=False),
                 mtime,
                 size,
+                _project_key_for(path),
                 int(time.time()),
             ),
         )
@@ -1328,9 +1402,14 @@ def _casefold(value: object) -> str | None:
     return None if value is None else str(value).casefold()
 
 
-def _folded_excerpt(content: str, query: str, width: int = 220) -> str:
+def _folded_excerpt(content: str, query: str, width: int = 220,
+                    require: bool = False) -> str:
     """Excerpt around the case-folded match, at the offset in the ORIGINAL text
-    (folding can change length: "ß" → "ss")."""
+    (folding can change length: "ß" → "ss").
+
+    With require=True an absent match yields an empty string instead of the
+    head of the text, so a caller can tell "found here" from "fell back".
+    """
     q = query.casefold()
     folded: list[str] = []
     origin: list[int] = []
@@ -1339,6 +1418,8 @@ def _folded_excerpt(content: str, query: str, width: int = 220) -> str:
         folded.append(f)
         origin.extend([i] * len(f))
     pos = "".join(folded).find(q)
+    if pos < 0:
+        return "" if require else content[:width]
     start = origin[pos] if pos >= 0 else 0
     return content[start:start + width]
 
@@ -1347,21 +1428,31 @@ def _like_search(query: str, fold: str, source: str | None, limit: int) -> list:
     with db() as conn:
         if fold == "cl_casefold":
             conn.create_function("cl_casefold", 1, _casefold, deterministic=True)
-            excerpt = "d.content AS excerpt"          # cut in Python, see _folded_excerpt
+            # content is cut in Python here, see _folded_excerpt
+            excerpt = "d.content AS excerpt"
+            matches = ("({fold}(d.content) LIKE '%' || {fold}(?) || '%')"
+                       " OR ({fold}(d.title) LIKE '%' || {fold}(?) || '%')"
+                       " OR ({fold}(d.path)  LIKE '%' || {fold}(?) || '%')")
         else:
             excerpt = f"substr(d.content, MAX(1, instr({fold}(d.content), {fold}(?))), 220) AS excerpt"
+            # The path is matched too: searching for a project or a repo name
+            # must find its documents even when neither the title nor the body
+            # mentions it (2026-10-23).
+            matches = ("({fold}(d.content) LIKE '%' || {fold}(?) || '%')"
+                       " OR ({fold}(d.title) LIKE '%' || {fold}(?) || '%')"
+                       " OR ({fold}(d.path)  LIKE '%' || {fold}(?) || '%')")
         sql = f"""
             SELECT
                 d.id, d.source, d.path, d.title,
                 {excerpt},
                 d.metadata
             FROM documents d
-            WHERE (({fold}(d.content) LIKE '%' || {fold}(?) || '%')
-               OR  ({fold}(d.title)  LIKE '%' || {fold}(?) || '%'))
+            WHERE ({matches.format(fold=fold)})
         """
-        # The outer parentheses matter: the optional "AND d.source = ?" below
-        # must apply to content AND title matches, not just to title matches.
-        params: list = [query, query] if fold == "cl_casefold" else [query, query, query]
+        # Bindings follow the order they appear in the statement: the excerpt
+        # comes first (it is in the SELECT), then the three match terms, then
+        # the optional source and the limit.
+        params: list = [query] * (3 if fold == "cl_casefold" else 4)
         if source:
             sql += " AND d.source = ?"
             params.append(source)
@@ -1373,14 +1464,122 @@ def _like_search(query: str, fold: str, source: str | None, limit: int) -> list:
     return [{**dict(r), "excerpt": _folded_excerpt(r["excerpt"] or "", query)} for r in rows]
 
 
-def search(query: str, *, limit: int = 20, source: str | None = None, fuzzy: bool = False) -> list[sqlite3.Row]:
-    """LIKE-based search across title + content. Simple, reliable, fast at our scale.
+# Stopwords in both languages the product is used in: dropping "de" / "the"
+# keeps a two-word query from matching every document that happens to contain
+# a common word.
+_FTS_STOPWORDS = {
+    "and", "or", "not", "a", "an", "the", "of", "to", "in", "on", "for",
+    "de", "la", "el", "los", "las", "un", "una", "y", "o", "en", "con", "por",
+    "para", "del", "al", "que", "es", "son", "with", "from", "at", "by",
+}
 
-    The FTS5 index is kept in sync (see triggers) for future semantic use, but v1
-    queries through LIKE so we don't have to fight tokenizer edge cases
-    (camelCase, hyphens, underscores, accents, etc).
 
-    If fuzzy=True, also matches typos via rapidfuzz.
+def _fts_query(query: str) -> str:
+    """Turn a human query into a safe FTS5 MATCH expression.
+
+    FTS5 has its own query language, so anything the user types can be a
+    syntax error ("NOT", an unbalanced quote, "NEAR(...)"). Every term is
+    emitted as an explicit quoted string instead: quoted input is taken
+    literally, and ``*`` after it makes it a prefix match so "indicador"
+    still finds "indicadores". 2026-10-23.
+    """
+    terms: list[str] = []
+    for raw in (query or "").split():
+        term = raw.strip().strip('"').strip("'").strip()
+        if not term:
+            continue
+        if term.lower() in _FTS_STOPWORDS:
+            continue
+        # Skip pure operators and anything with FTS5 syntax characters.
+        if not any(ch.isalnum() for ch in term):
+            continue
+        terms.append('"' + term.replace('"', "") + '"*')
+    return " OR ".join(terms)
+
+
+def _row_project(doc_id: int) -> str | None:
+    """The project a document belongs to, for the LIKE-layer filter."""
+    with db() as conn:
+        row = conn.execute("SELECT project_key FROM documents WHERE id = ?",
+                           (int(doc_id),)).fetchone()
+    return row["project_key"] if row else None
+
+
+def _fts_search(query: str, limit: int, source: str | None,
+                project_key: str | None = None) -> list:
+    """Ranked full-text search over the FTS5 index of ``documents``.
+
+    LIKE only matches a literal substring, so it misses a query word written
+    in the singular, with different spacing, or as one of several words. FTS5
+    answers all of those and returns them in relevance order. 2026-10-23.
+    """
+    match = _fts_query(query)
+    if not match:
+        return []
+    # documents_fts columns are (title, content, tags): content is index 1.
+    # Reading index 2 silently returned the tags column, which is why a body
+    # hit produced an empty excerpt.
+    sql = """
+        SELECT d.id, d.source, d.path, d.title,
+               snippet(documents_fts, 0, '', '', '…', 12) AS title_snip,
+               snippet(documents_fts, 1, '', '', '…', 14) AS content_snip,
+               substr(IFNULL(d.content, ''), 1, 220) AS head,
+               d.metadata,
+               bm25(documents_fts, 0.0, 4.0, 1.0) AS score
+        FROM documents_fts JOIN documents d ON d.id = documents_fts.rowid
+        WHERE documents_fts MATCH ?
+    """
+    params: list = [match]
+    if source:
+        sql += " AND d.source = ?"
+        params.append(source)
+    if project_key:
+        sql += " AND d.project_key = ?"
+        params.append(project_key)
+    # bm25() is negative-better; the weights favour a title hit over a body one.
+    sql += " ORDER BY score LIMIT ?"
+    params.append(limit)
+    try:
+        with db() as conn:
+            rows = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        # A malformed MATCH must never take the endpoint down.
+        log.debug("fts search failed for %r: %s", query, e)
+        return []
+    return [{**dict(r), "excerpt": _best_excerpt(r, query)} for r in rows]
+
+
+def _best_excerpt(row, query: str) -> str:
+    """Text around the match, the way the product has always shown it.
+
+    FTS5's own snippet() returns a window of tokens, which on a short
+    document is the whole thing — so a hit in the middle of the text showed
+    no context at all. The case-folded offset is therefore the primary
+    excerpt, because it is centred on the match; the FTS snippet and then the
+    head of the document serve the cases where the words differ in form
+    (stemmed, inflected) and no literal offset exists. 2026-10-23.
+    """
+    keys = row.keys()
+    head = (row["head"] if "head" in keys else "") or ""
+    if query and query.strip():
+        folded = _folded_excerpt(head, query, width=220, require=True)
+        if folded:
+            return folded[:400]
+    for key in ("content_snip", "title_snip"):
+        value = ((row[key] if key in keys else "") or "").strip()
+        if value:
+            return value[:400]
+    return head[:220]
+
+
+def search(query: str, *, limit: int = 20, source: str | None = None,
+           fuzzy: bool = False, project_key: str | None = None) -> list[sqlite3.Row]:
+    """Search title + content, ranked.
+
+    FTS5 first (relevance-ordered, catches word forms LIKE misses), then LIKE
+    for the exact-substring cases the index does not cover, then fuzzy on
+    titles for typos. Each layer only contributes rows the previous one
+    missed. 2026-10-23.
     """
     if not query.strip():
         return []
@@ -1389,12 +1588,29 @@ def search(query: str, *, limit: int = 20, source: str | None = None, fuzzy: boo
     # connection). ASCII queries try the faster built-in lower() first and fall
     # back to casefold when it finds nothing ("STRASSE" vs "Straße").
     rows: list = []
-    if query.isascii():
-        rows = _like_search(query, "lower", source, limit)
-    if not rows:
-        rows = _like_search(query, "cl_casefold", source, limit)
+    seen_ids: set = set()
+    if project_key is None:
+        for row in _fts_search(query, limit, source):
+            seen_ids.add(row["id"])
+            rows.append(row)
+    if len(rows) < limit:
+        if query.isascii():
+            extra = _like_search(query, "lower", source, limit)
+        else:
+            extra = []
+        if not extra and len(rows) < limit:
+            extra = _like_search(query, "cl_casefold", source, limit)
+        if project_key:
+            with db() as conn:
+                extra = [r for r in extra if _row_project(r["id"]) == project_key]
+        for r in extra:
+            rid = r["id"]
+            if rid in seen_ids:
+                continue
+            seen_ids.add(rid)
+            rows.append(dict(r))
     if fuzzy and query:
-        # Augment with fuzzy matches on title that LIKE didn't catch
+        # Augment with fuzzy matches on title that neither FTS nor LIKE caught
         seen_ids = {r["id"] for r in rows}
         try:
             from rapidfuzz import fuzz, process
@@ -1406,6 +1622,9 @@ def search(query: str, *, limit: int = 20, source: str | None = None, fuzzy: boo
                 if source:  # fuzzy matches honour the source filter too
                     fsql += " AND source = ?"
                     fparams.append(source)
+                if project_key:
+                    fsql += " AND project_key = ?"
+                    fparams.append(project_key)
                 titles = conn.execute(fsql + " ORDER BY mtime DESC LIMIT 5000", fparams).fetchall()
             scored = process.extract(query, [t["title"] for t in titles],
                                     scorer=fuzz.WRatio, limit=limit, score_cutoff=55)
@@ -1917,6 +2136,7 @@ from .db_agents import (  # noqa: E402,F401
     add_trigger,
     delete_agent_memory,
     delete_trigger,
+    get_agent_memory,
     get_trigger_by_token,
     list_agent_logs,
     list_agent_memory,
@@ -2032,6 +2252,19 @@ from .db_mcp import (  # noqa: E402,F401
     upsert_mcp_server,
 )
 
+# Media assets and jobs (2026-10-23). Re-exported so `db.<name>` keeps working.
+from .db_media import (  # noqa: E402,F401
+    add_asset,
+    add_job,
+    delete_asset,
+    get_asset,
+    get_job,
+    get_job_by_external_task,
+    list_assets,
+    list_jobs,
+    update_job,
+)
+
 # Note backlinks moved to db_notelinks.py (2026-07-20). Re-exported so
 # `db.<name>` keeps working.
 from .db_notelinks import (  # noqa: E402,F401
@@ -2045,6 +2278,7 @@ from .db_notelinks import (  # noqa: E402,F401
 
 # Moved to db_revenue.py (2026-07-20). Re-exported so `db.<name>` keeps working.
 from .db_revenue import (  # noqa: E402,F401
+    GA_FORECAST_METRICS,
     add_revenue_source,
     customer_cohorts,
     delete_revenue_source,

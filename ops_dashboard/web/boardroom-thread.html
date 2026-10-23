@@ -1,11 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/csrf.js" defer></script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>CEO Thread — ConductLoop</title>
+  <link rel="stylesheet" href="/theme.css" />
   <style>
-    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#D4AF37; --border:#232a36; --ok:#22c55e; --bad:#ef4444; }
+    /* Legacy tokens are aliases of the shared design system in /theme.css. */
+    :root { --bg: var(--cl-bg); --card: var(--cl-bg-soft); --ink: var(--cl-ink); --muted: var(--cl-ink-muted); --brand: var(--cl-accent); --border: var(--cl-border); --ok: var(--cl-ok); --bad: var(--cl-danger); }
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
     .toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.92);color:#fff;padding:12px 18px;border-radius:9px;font-size:14px;font-weight:500;z-index:100;display:none;max-width:90vw;border:1px solid var(--border)}
@@ -219,7 +222,7 @@
         const isSys = m.role === 'system';
         return `
           <div class="msg ${isUser ? 'you' : isSys ? 'system' : ''}">
-            <div class="who">${isUser ? 'You' : (ceo.name)}</div>
+            <div class="who">${isUser ? 'You' : escapeHtml(ceo.name)}</div>
             <div class="body">${escapeHtml(m.content)}
               <div class="ts">${formatTs(m.created_at)}</div>
             </div>
