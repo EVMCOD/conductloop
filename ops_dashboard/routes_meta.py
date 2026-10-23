@@ -37,6 +37,46 @@ def _version() -> str:
 from . import routes_connectors  # noqa: E402,F401
 
 
+# ── the shared design system ───────────────────────────────────────────────
+# Every page loads /theme.css, so the whole product speaks one design
+# language: one palette, one type scale, one spacing scale, one set of
+# components. Pages keep their own stylesheets on top of it.
+_WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+
+
+@router.get("/theme.css")
+def theme_css(handler) -> None:
+    """The design system, served to every page."""
+    with open(os.path.join(_WEB_DIR, "theme.css"), "rb") as fh:
+        body = fh.read()
+    handler._send(200, body, "text/css; charset=utf-8")
+
+
+@router.get("/csrf.js")
+def csrf_js(handler) -> None:
+    """Echoes the CSRF cookie back on every state-changing API call."""
+    with open(os.path.join(_WEB_DIR, "csrf.js"), "rb") as fh:
+        body = fh.read()
+    handler._send(200, body, "text/javascript; charset=utf-8")
+
+
+@router.get("/app.css")
+def app_css(handler) -> None:
+    """The dashboard's stylesheet, extracted from index.html (2026-10-23)."""
+    with open(os.path.join(_WEB_DIR, "app.css"), "rb") as fh:
+        body = fh.read()
+    handler._send(200, body, "text/css; charset=utf-8")
+
+
+@router.get("/app.js")
+def app_js(handler) -> None:
+    """The dashboard's script, extracted from index.html (2026-10-23)."""
+    with open(os.path.join(_WEB_DIR, "app.js"), "rb") as fh:
+        body = fh.read()
+    handler._send(200, body, "text/javascript; charset=utf-8")
+
+
+
 @router.get("/api/health")
 @router.get("/health")
 def health(handler) -> None:

@@ -1,16 +1,19 @@
 /* Team chat (/chat). Light by default, dark with body.dark (same switch as the dashboard). */
 :root {
-  --bg: #fbfbfc; --panel: #ffffff; --rail: #f5f6f8; --ink: #15171c; --ink-soft: #4b5260; --muted: #8a909c;
-  --border: #e7e8ec; --border-strong: #d6d8de; --accent: #6d5efc; --accent-2: #a855f7; --accent-soft: #efedff;
-  --bubble: #eef0f5; --hover: #eceef2; --ok: #16a34a; --err: #dc2626; --amber: #d97706;
-  --code: #f3f4f6; --shadow: 0 10px 30px rgba(20, 22, 30, .08), 0 2px 6px rgba(20, 22, 30, .04);
+  /* Legacy tokens are aliases of the shared design system in /theme.css, so
+     this page adopts one palette. Surfaces map to the --cl-* scale, states to
+     the system's data colours. --accent-2 / --amber / --shadow / --radius
+     have no system equivalent yet and keep their literal values. */
+  --bg: var(--cl-bg); --panel: var(--cl-bg); --rail: var(--cl-bg-soft); --ink: var(--cl-ink); --ink-soft: var(--cl-ink-soft); --muted: var(--cl-ink-muted);
+  --border: var(--cl-border); --border-strong: var(--cl-border-2); --accent: var(--cl-accent); --accent-2: #a855f7; --accent-soft: var(--cl-accent-soft);
+  --bubble: var(--cl-bg-3); --hover: var(--cl-bg-hover); --ok: var(--cl-ok); --err: var(--cl-danger); --amber: #d97706;
+  --code: var(--cl-bg-2); --shadow: 0 10px 30px rgba(20, 22, 30, .08), 0 2px 6px rgba(20, 22, 30, .04);
   --radius: 14px;
   color-scheme: light;
 }
+/* Modo oscuro: lo define /theme.css (body.dark) */
 body.dark {
-  --bg: #111215; --panel: #17181c; --rail: #141518; --ink: #e8e9ec; --ink-soft: #b8bcc6; --muted: #7c8290;
-  --border: #25272d; --border-strong: #33363e; --accent: #8b7dff; --accent-2: #c084fc; --accent-soft: #24213d;
-  --bubble: #22242b; --hover: #1d1f24; --code: #1c1e23; --shadow: 0 10px 30px rgba(0, 0, 0, .35);
+  --shadow: 0 10px 30px rgba(0, 0, 0, .35);  /* sin equivalente --cl-* */
   color-scheme: dark;
 }
 * { box-sizing: border-box; }

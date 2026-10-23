@@ -6,18 +6,20 @@
   <title>System Status — ConductLoop</title>
   <meta name="description" content="Live status of all public services." />
   <meta name="theme-color" content="#0f172a" />
+  <link rel="stylesheet" href="/theme.css" />
   <style>
+    /* Legacy tokens are aliases of the shared design system in /theme.css. */
     :root {
-      --bg: #0f172a;
-      --bg-soft: #1e293b;
-      --bg-card: #1a2332;
-      --border: #334155;
-      --ink: #f1f5f9;
-      --muted: #94a3b8;
-      --green: #22c55e;
-      --amber: #f59e0b;
-      --red: #ef4444;
-      --blue: #3b82f6;
+      --bg: var(--cl-bg);
+      --bg-soft: var(--cl-bg-soft);
+      --bg-card: var(--cl-bg-2);
+      --border: var(--cl-border);
+      --ink: var(--cl-ink);
+      --muted: var(--cl-ink-muted);
+      --green: var(--cl-ok);
+      --amber: var(--cl-warn);
+      --red: var(--cl-danger);
+      --blue: var(--cl-info);
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;

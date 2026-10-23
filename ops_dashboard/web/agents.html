@@ -1,26 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/csrf.js" defer></script>
+  <link rel="stylesheet" href="/theme.css">
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Agents — ConductLoop</title>
   <style>
-    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#6366f1; --border:#232a36; --ok:#22c55e; }
+    /* Colours come from /theme.css. #fff stays for text on the accent fill: the system has no on-accent ink token. */
     *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    body{margin:0;background:var(--cl-bg);color:var(--cl-ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
     .wrap{max-width:560px;margin:0 auto;padding:32px 20px 64px}
     h1{font-size:22px;margin:0 0 4px}
-    p.sub{color:var(--muted);margin:0 0 24px;font-size:14px}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:16px}
-    label{display:block;font-size:12px;color:var(--muted);margin:12px 0 4px}
-    input,select,textarea{width:100%;background:#0b0d12;border:1px solid var(--border);color:var(--ink);border-radius:8px;padding:9px 11px;font-size:14px;font-family:inherit}
-    button{background:var(--brand);color:#fff;border:0;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;margin-top:16px}
+    p.sub{color:var(--cl-ink-muted);margin:0 0 24px;font-size:14px}
+    .card{background:var(--cl-bg-soft);border:1px solid var(--cl-border);border-radius:14px;padding:18px;margin-bottom:16px}
+    label{display:block;font-size:12px;color:var(--cl-ink-muted);margin:12px 0 4px}
+    input,select,textarea{width:100%;background:var(--cl-bg);border:1px solid var(--cl-border);color:var(--cl-ink);border-radius:8px;padding:9px 11px;font-size:14px;font-family:inherit}
+    button{background:var(--cl-accent);color:#fff;border:0;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;margin-top:16px}
     button:disabled{opacity:.5}
-    .agent{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)}
+    .agent{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--cl-border)}
     .agent:last-child{border-bottom:0}
-    .pill{font-size:11px;color:var(--muted);background:#0b0d12;border:1px solid var(--border);border-radius:999px;padding:2px 8px}
-    .hint{font-size:12px;color:var(--muted);margin-top:10px}
-    a{color:var(--brand)}
+    .pill{font-size:11px;color:var(--cl-ink-soft);background:var(--cl-bg-3);border:1px solid var(--cl-border);border-radius:999px;padding:2px 8px}
+    .hint{font-size:12px;color:var(--cl-ink-muted);margin-top:10px}
+    a{color:var(--cl-accent-ink)}
     .two{display:flex;gap:10px}.two>div{flex:1}
   </style>
 </head>
@@ -58,20 +60,26 @@
 
   <script>
     let teams = [];
+    // Team and agent names are free text and end up in innerHTML: escape them
+    // or a name like "<img onerror=…>" runs in the app webview, which holds
+    // the browser_* capabilities (stored XSS -> browser control). 2026-10-23.
+    const esc = s => String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     async function load(){
       try{
         teams = await (await fetch('/api/teams')).json();
         const sel = document.getElementById('team');
         const squad = teams.find(t=>t.key==='ai-squad') || teams[0];
-        sel.innerHTML = teams.map(t=>'<option value="'+t.id+'"'+(squad&&t.id===squad.id?' selected':'')+'>'+t.name+'</option>').join('');
+        sel.innerHTML = teams.map(t=>'<option value="'+esc(t.id)+'"'+(squad&&t.id===squad.id?' selected':'')+'>'+esc(t.name)+'</option>').join('');
       }catch(e){}
       try{
         const members = await (await fetch('/api/members')).json();
         const agents = members.filter(m=>m.type==='ai_agent');
         const el = document.getElementById('list');
         el.innerHTML = agents.length ? agents.map(a=>
-          '<div class="agent"><div><strong>'+a.name+'</strong> <span class="hint">'+(a.capabilities||a.role||'')+'</span></div>'+
-          '<span class="pill">'+(a.model||'—')+'</span></div>').join('')
+          '<div class="agent"><div><strong>'+esc(a.name)+'</strong> <span class="hint">'+esc(a.capabilities||a.role||'')+'</span></div>'+
+          '<span class="pill">'+esc(a.model||'—')+'</span></div>').join('')
           : '<span class="hint">No agents yet.</span>';
       }catch(e){ document.getElementById('list').innerHTML='<span class="hint">Could not load.</span>'; }
     }

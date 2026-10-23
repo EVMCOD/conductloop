@@ -1,47 +1,49 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/csrf.js" defer></script>
+  <link rel="stylesheet" href="/theme.css">
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Create New CEO — ConductLoop</title>
   <style>
-    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#D4AF37; --border:#232a36; --ok:#22c55e; }
+    /* Colours come from /theme.css. #fff stays for text on the accent fill: the system has no on-accent ink token. */
     *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    body{margin:0;background:var(--cl-bg);color:var(--cl-ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
     .wrap{max-width:760px;margin:0 auto;padding:24px 20px 80px}
     h1{font-size:24px;margin:0 0 6px;font-weight:600}
-    .sub{color:var(--muted);font-size:13px;margin:0 0 22px}
+    .sub{color:var(--cl-ink-muted);font-size:13px;margin:0 0 22px}
     .nav{display:flex;gap:8px;margin:14px 0 22px;font-size:13px;flex-wrap:wrap}
-    .nav a{color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
-    .nav a:hover{color:var(--ink);border-color:var(--border)}
+    .nav a{color:var(--cl-ink-muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
+    .nav a:hover{color:var(--cl-ink);border-color:var(--cl-border)}
     .steps{display:flex;justify-content:space-between;margin-bottom:18px;position:relative}
-    .step{flex:1;text-align:center;padding:10px;font-size:13px;color:var(--muted);border-bottom:2px solid var(--border)}
-    .step.active{color:var(--brand);border-color:var(--brand)}
-    .step.done{color:var(--ink);border-color:var(--ok)}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:14px}
-    label{display:block;font-size:13px;color:var(--muted);margin:14px 0 4px;font-weight:500}
-    label .req{color:var(--brand);margin-left:4px}
-    input[type="text"], textarea, select{width:100%;background:#0b0d12;border:1px solid var(--border);color:var(--ink);border-radius:9px;padding:10px 12px;font-size:14px;font-family:inherit}
+    .step{flex:1;text-align:center;padding:10px;font-size:13px;color:var(--cl-ink-muted);border-bottom:2px solid var(--cl-border)}
+    .step.active{color:var(--cl-accent-ink);border-color:var(--cl-accent)}
+    .step.done{color:var(--cl-ink);border-color:var(--cl-ok)}
+    .card{background:var(--cl-bg-soft);border:1px solid var(--cl-border);border-radius:14px;padding:20px;margin-bottom:14px}
+    label{display:block;font-size:13px;color:var(--cl-ink-muted);margin:14px 0 4px;font-weight:500}
+    label .req{color:var(--cl-accent-ink);margin-left:4px}
+    input[type="text"], textarea, select{width:100%;background:var(--cl-bg);border:1px solid var(--cl-border);color:var(--cl-ink);border-radius:9px;padding:10px 12px;font-size:14px;font-family:inherit}
     textarea{resize:vertical;min-height:64px}
-    .hint{color:var(--muted);font-size:12px;margin-top:4px}
+    .hint{color:var(--cl-ink-muted);font-size:12px;margin-top:4px}
     .tools{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
-    .tool{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#0b0d12;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer}
-    .tool.on{border-color:var(--brand)}
-    .tool input{accent-color:var(--brand)}
-    .tool .desc{color:var(--muted);font-size:11px;display:block;margin-top:2px}
-    .tool .cat{color:var(--brand);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+    .tool{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--cl-bg);border:1px solid var(--cl-border);border-radius:8px;font-size:13px;cursor:pointer}
+    .tool.on{border-color:var(--cl-accent)}
+    .tool input{accent-color:var(--cl-accent)}
+    .tool .desc{color:var(--cl-ink-soft);font-size:11px;display:block;margin-top:2px}
+    .tool .cat{color:var(--cl-accent-ink);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
     .tier{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
-    .tier-opt{flex:1;min-width:140px;background:#0b0d12;border:1px solid var(--border);border-radius:9px;padding:10px;cursor:pointer;font-size:13px;text-align:center}
-    .tier-opt.active{border-color:var(--brand);background:rgba(212,175,55,.08)}
-    .tier-opt strong{display:block;color:var(--ink);margin-bottom:2px}
-    .tier-opt .desc{color:var(--muted);font-size:11px}
+    .tier-opt{flex:1;min-width:140px;background:var(--cl-bg);border:1px solid var(--cl-border);border-radius:9px;padding:10px;cursor:pointer;font-size:13px;text-align:center}
+    .tier-opt.active{border-color:var(--cl-accent);background:var(--cl-accent-soft)}
+    .tier-opt strong{display:block;color:var(--cl-ink);margin-bottom:2px}
+    .tier-opt .desc{color:var(--cl-ink-soft);font-size:11px}
     .btn-row{display:flex;justify-content:space-between;margin-top:18px}
-    button{background:var(--brand);color:#0b0d12;border:0;border-radius:9px;padding:11px 22px;font-size:14px;font-weight:600;cursor:pointer}
-    button.ghost{background:transparent;color:var(--ink);border:1px solid var(--border)}
+    button{background:var(--cl-accent);color:#fff;border:0;border-radius:9px;padding:11px 22px;font-size:14px;font-weight:600;cursor:pointer}
+    button.ghost{background:transparent;color:var(--cl-ink);border:1px solid var(--cl-border)}
     button:disabled{opacity:.5}
-    .success{background:var(--card);border:1px solid var(--ok);border-radius:12px;padding:16px;text-align:center;color:var(--ok)}
+    .success{background:var(--cl-bg-soft);border:1px solid var(--cl-ok);border-radius:12px;padding:16px;text-align:center;color:var(--cl-ok)}
     .success h2{margin:0 0 6px}
-    .success p{color:var(--muted);margin:6px 0}
+    .success p{color:var(--cl-ink-muted);margin:6px 0}
   </style>
 </head>
 <body>
@@ -119,7 +121,7 @@
     <div id="success" class="success" style="display:none">
       <h2>✅ CEO created</h2>
       <p id="successDetail"></p>
-      <p><a href="/boardroom/ceo/" id="successLink" style="color:var(--brand);text-decoration:none">Open thread →</a> · <a href="/boardroom" style="color:var(--muted);text-decoration:none">Back to inbox</a></p>
+      <p><a href="/boardroom/ceo/" id="successLink" style="color:var(--cl-accent-ink);text-decoration:none">Open thread →</a> · <a href="/boardroom" style="color:var(--cl-ink-muted);text-decoration:none">Back to inbox</a></p>
     </div>
   </div>
 
@@ -174,7 +176,7 @@
         const list = byCat[c]; if (!list || !list.length) return;
         const wrap = document.createElement('div');
         wrap.style.gridColumn = '1 / -1';
-        wrap.innerHTML = `<div style="color:var(--brand);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:8px 0 4px">${c}</div>`;
+        wrap.innerHTML = `<div style="color:var(--cl-accent-ink);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:8px 0 4px">${c}</div>`;
         el.appendChild(wrap);
         list.forEach(t => {
           if (seen.has(t.name)) return; seen.add(t.name);

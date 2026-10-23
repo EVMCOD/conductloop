@@ -4,8 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Portfolio — ConductLoop Boardroom</title>
+  <link rel="stylesheet" href="/theme.css" />
   <style>
-    :root { --bg:#0b0d12; --card:#151922; --ink:#e7ecf3; --muted:#8b97a8; --brand:#D4AF37; --border:#232a36; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+    /* Legacy tokens are aliases of the shared design system in /theme.css. */
+    :root { --bg: var(--cl-bg); --card: var(--cl-bg-soft); --ink: var(--cl-ink); --muted: var(--cl-ink-muted); --brand: var(--cl-accent); --border: var(--cl-border); --ok: var(--cl-ok); --warn: var(--cl-warn); --bad: var(--cl-danger); }
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
     .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 80px}
