@@ -39,6 +39,20 @@ def upsert_mcp_server(name: str, transport: str, *, command: list | None = None,
         return int(cur.lastrowid or 0)
 
 
+def set_mcp_server_trust(name: str, trust_readonly: bool) -> bool:
+    """Record whether the user trusts this server's own read-only annotations.
+
+    Off by default: a server must not be able to grant itself a no-approval
+    write by labelling its tool ``readOnlyHint`` (2026-10-23).
+    """
+    with _dbmod.db() as conn:
+        cur = conn.execute(
+            "UPDATE mcp_servers SET trust_readonly=?, updated_at=? WHERE name=?",
+            (1 if trust_readonly else 0, int(time.time()), name),
+        )
+        return cur.rowcount > 0
+
+
 def list_mcp_servers(enabled_only: bool = False) -> list[dict]:
     sql = "SELECT * FROM mcp_servers"
     if enabled_only: sql += " WHERE enabled = 1"

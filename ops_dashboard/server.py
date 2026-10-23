@@ -533,7 +533,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._brain_ask()
         elif path == "/api/brain/ask-tools":
             self._brain_ask_tools()
-            self._send(200, _json(db.list_conversations(limit=50)).encode(), "application/json")
+        elif path == "/api/brain/conversations":
+            # The UI asked for this and it did not exist: the agent panel sat
+            # on "loading…" forever and "export chat" always said "no
+            # conversations yet". 2026-10-23.
+            try:
+                limit = int((qs.get("limit") or ["50"])[0])
+            except Exception:
+                limit = 50
+            member_id = (qs.get("member_id") or [None])[0]
+            agent_key = f"m:{member_id}" if member_id else None
+            rows = db.list_conversations(limit=limit, agent_key=agent_key)
+            self._send(200, _json(rows).encode(), "application/json")
         elif path == "/api/brain/conversation":
             conv_id = int((qs.get("id") or ["0"])[0])
             data = db.get_conversation(conv_id)
@@ -1202,7 +1213,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
                             rows = [r for r in rows if project_prefix in r["path"].lower()
                                     or project_prefix in (r["title"] or "").lower()]
                     out = [dict(r) for r in rows[:limit]]
-                    self._send(200, _json(out).encode(), "application/json")
+                    # Which engine answered, so the UI can say "semantic search is
+                    # off in this build" instead of showing an empty result as
+                    # if there were no matches (2026-10-23).
+                    try:
+                        from . import embeddings as _emb
+                        engine = _emb.engine()
+                    except Exception:
+                        engine = "unknown"
+                    self._send(200, _json(out).encode(), "application/json",
+                               headers={"X-Embeddings-Engine": engine})
                     return
                 except Exception as e:
                     self._send(500, json.dumps({"error": str(e)}).encode(), "application/json")
@@ -1222,8 +1242,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
                                      "metadata": r["metadata"]})
                 rows = rows[:limit]
             else:
-                rows = db.search(q, limit=limit * 3 if fuzzy else limit, fuzzy=fuzzy)
+                # Resolve the ':alias' to the real project and filter on
+                # project_key. Matching the alias against the path afterwards
+                # returned documents from any other business whose path
+                # happened to contain the word. 2026-10-23.
+                project_key_filter = None
                 if project_prefix:
+                    try:
+                        from .projects import find_project
+                        hit = find_project(project_prefix)
+                        if hit is not None:
+                            project_key_filter = hit.key
+                    except Exception:
+                        project_key_filter = None
+                rows = db.search(q, limit=limit * 3 if fuzzy else limit, fuzzy=fuzzy,
+                                 project_key=project_key_filter)
+                if project_prefix and project_key_filter is None:
+                    # Unknown alias: fall back to matching it in the text, which
+                    # is looser but better than silently returning another
+                    # project's documents.
                     rows = [r for r in rows if project_prefix in r["path"].lower()
                             or project_prefix in (r["title"] or "").lower()]
             if since_ts is not None:
@@ -1655,6 +1692,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
         _PUBLIC_POSTS = {"/api/auth/signup", "/api/auth/login",
                          "/api/pair/start", "/api/pair/revoke",
                          "/api/brain/providers/key", "/api/agents/create", "/api/agents/run"}
+        # Agent webhooks carry their own credential: the trigger token in the
+        # path identifies the trigger and nothing else is accepted. They are
+        # called by external systems (server-to-server, no session, no CSRF
+        # cookie), so they skip the session gate — the same posture the origin
+        # guard already gives the Stripe/Telegram webhooks. The token is a
+        # secret, and origin_guard still refuses browser cross-site writes.
+        _is_webhook = path.startswith("/api/webhook/")
         # Cross-site / foreign-Origin writes are refused for every path, public or
         # not, loopback included (origin_guard, 2026-10-21). seed-starter is no
         # longer public: it gets the normal write gate.
@@ -1664,9 +1708,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
         # Local-first trust: loopback requests (the desktop owner at the machine)
         # may mutate without a session. Remote (LAN/relay) still needs a bearer
         # token — _is_local() returns False when X-Forwarded-For/X-Relay is set.
-        if path not in _PUBLIC_POSTS and not self._is_local() and not self._current_user():
+        if path not in _PUBLIC_POSTS and not _is_webhook and not self._is_local() and not self._current_user():
             self._send(401, b'{"error":"authentication required"}', "application/json"); return
-        if path not in _PUBLIC_POSTS and not self._is_local() and not self._check_csrf():
+        if path not in _PUBLIC_POSTS and not _is_webhook and not self._is_local() and not self._check_csrf():
             self._send(403, b'{"error":"csrf token missing or invalid"}', "application/json"); return
         try:
             path = urlparse(self.path).path
@@ -1674,6 +1718,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
             # gate above, before the legacy chain.
             from . import routes_meta  # noqa: F401  (import registers routes)
             if _router.dispatch(self, "POST", path):
+                return
+            # ── Agent webhooks: external systems wake an agent ────────────
+            # The route used to live only in the GET chain (_route), so a
+            # real POST fell through to 404 — the documented webhook in
+            # AGENTS.md could never be called. Fixed 2026-10-23.
+            if path.startswith("/api/webhook/"):
+                token = path[len("/api/webhook/"):]
+                self._webhook_dispatch(token)
                 return
             # ── Per-CEO channel bindings (2026-07-16) ─────────────────────
             if path.startswith("/api/boardroom/ceo/") and path.endswith("/channels") and path.count("/") == 5:
@@ -2347,12 +2399,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 name = path[len("/api/mcp/servers/"):]
                 try: payload = self._read_json()
                 except Exception: payload = {}
-                # Update is done via the create+overwrite path
+                # The user can decide to trust this server's own read-only
+                # annotations; until then every auto tool needs approval.
+                if "trust_readonly" in payload:
+                    try:
+                        from . import mcp_hub
+                        mcp_hub.set_server_trust(name, bool(payload.get("trust_readonly")))
+                    except mcp_hub.HubError as e:
+                        self._send(e.status if hasattr(e, "status") else 400,
+                                   _json({"error": e.code, "message": str(e)}).encode(),
+                                   "application/json")
+                        return
                 command = payload.get("command") or []
                 if isinstance(command, str): command = command.split()
-                db.upsert_mcp_server(name, payload.get("transport", "stdio"),
-                                      command=command, url=payload.get("url"),
-                                      env=payload.get("env"))
+                # Only overwrite the server configuration when the payload
+                # actually carries one: a trust-only update must not wipe the
+                # command, url or env (2026-10-23).
+                if any(k in payload for k in ("command", "url", "env", "transport")):
+                    db.upsert_mcp_server(name, payload.get("transport", "stdio"),
+                                          command=command, url=payload.get("url"),
+                                          env=payload.get("env"))
                 self._send(200, b'{"ok":true}', "application/json"); return
             if path.startswith("/api/agents/"):
                 tail = path[len("/api/agents/"):]
@@ -2700,6 +2766,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 except Exception as e:
                     self._send(400, json.dumps({"error": str(e)}).encode(), "application/json")
                 return
+            # Registered DELETE routes (media assets, 2026-10-23). The legacy
+            # chain above still answers everything it already handled.
+            if _router.dispatch(self, "DELETE", path):
+                return
             self._send(404, b'{"error":"not found"}', "application/json")
         except Exception as e:
             self._send(500, json.dumps({"error": str(e)}).encode(), "application/json")
@@ -2735,8 +2805,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         conv_id = data.get("conversation_id")
         provider = data.get("provider")
+        # Optional: scope the question to one business, so the RAG cannot
+        # answer it with another business's files (2026-10-23).
+        scope = (data.get("project_key") or data.get("project") or "").strip() or None
         try:
-            ans = brain.ask(q, conversation_id=conv_id, provider_name=provider)
+            ans = brain.ask(q, conversation_id=conv_id, provider_name=provider,
+                            project_key=scope)
         except _pe.ProviderUnavailableError as e:
             _pe.send(self, e); return
         except brain.ProviderError as e:
@@ -3991,6 +4065,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def _agent_memory_action(self, member_id: int, memory_id: int) -> None:
         """PUT/DELETE /api/agents/<mid>/memory/<id>"""
+        # The memory id is a global row id, so the memory must belong to THIS
+        # agent. Without this check, PUT /api/agents/A/memory/<B's id> wrote
+        # into agent B's memory (and DELETE removed it). Fixed 2026-10-23.
+        mem = db.get_agent_memory(memory_id)
+        if not mem or int(mem.get("agent_id") or 0) != int(member_id):
+            self._send(404, b'{"error":"not found"}', "application/json"); return
         if self.command == "PUT":
             try: data = self._read_json()
             except Exception: data = {}
@@ -4662,7 +4742,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
         except Exception: days = 30
         metric = (qs.get("metric") or ["users"])[0]
         project = (qs.get("project") or [None])[0]
-        result = db.ga_forecast(days=days, metric=metric, project_key=project)
+        try:
+            result = db.ga_forecast(days=days, metric=metric, project_key=project)
+        except ValueError as e:
+            # Unknown metric — the column name is whitelisted inside
+            # db.ga_forecast, so this is a client error, not a server fault.
+            self._send(400, json.dumps({"error": str(e)}).encode(), "application/json"); return
         self._send(200, json.dumps(result, default=str).encode(), "application/json")
 
     def _sentry_projects(self) -> None:
@@ -5544,6 +5629,24 @@ def _resolve_bind(host: str, port: int) -> str:
     return host
 
 
+def _bind_server(host: str, port: int) -> ThreadingHTTPServer:
+    """Bind the HTTP server, failing loudly if the port is taken.
+
+    A local process that grabs the port first would receive the app's boot
+    nonce and become the privileged origin of the app (it could hand out the
+    app token). So: refuse to start instead of silently serving somebody
+    else, and say so. 2026-10-23.
+    """
+    try:
+        return ThreadingHTTPServer((host, port), DashboardHandler)
+    except OSError as e:
+        raise SystemExit(
+            f"Cannot bind {host}:{port} — {e}.\n"
+            f"Another process is already using that port. Close it (or run the "
+            f"app on another port) and try again."
+        ) from e
+
+
 @app.callback(invoke_without_command=True)
 def _default(
     ctx: typer.Context,
@@ -5568,7 +5671,7 @@ def _default(
             db.init_db()
         result = _demo_mod.run()
         console.print(f"[bold magenta]▸ DEMO MODE[/bold magenta] — fixture data loaded: {result}")
-    server = ThreadingHTTPServer((host, port), DashboardHandler)
+    server = _bind_server(host, port)
     if os.environ.get("CONDUCTLOOP_DEMO") == "1":
         console.print(f"[bold green]✓[/bold green] ops-dashboard (DEMO) serving on [cyan]http://{host}:{port}/[/cyan]")
     else:
@@ -5612,7 +5715,7 @@ def serve_cmd(
         scheduler = sched_mod.Scheduler(interval=scheduler_interval)
         scheduler.start()
         console.print(f"[green]\u2713[/green] agent scheduler running (every {scheduler_interval:.0f}s)")
-    server = ThreadingHTTPServer((host, port), DashboardHandler)
+    server = _bind_server(host, port)
     if os.environ.get("CONDUCTLOOP_DEMO") == "1":
         console.print(f"[bold green]\u2713[/bold green] ops-dashboard (DEMO) serving on [cyan]http://{host}:{port}/[/cyan]")
     else:

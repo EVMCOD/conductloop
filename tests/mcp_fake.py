@@ -86,6 +86,9 @@ def run_eval_case(params: dict, tmp_dir: Path) -> str:
     try:
         hub.save_server("fake", "stdio", command=STDIO_CMD, env={"FAKE_MCP_OUT": str(out_file)},
                         secret_env={"FAKE_API_TOKEN": "child-only-secret"})
+        # The user trusts this server: until they do, every tool in "auto" mode
+        # is a write and needs the approval gate (2026-10-23).
+        hub.set_server_trust("fake", True)
         hub.refresh("fake")
         if params.get("permission") == "write":
             hub.set_permission("fake", "write")

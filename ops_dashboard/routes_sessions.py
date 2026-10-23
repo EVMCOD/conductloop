@@ -528,8 +528,23 @@ def close_session(handler, sid):
                            result_summary="returned to the queue: session closed")
     st.set_session_status(s["id"], "closed")
     st.record_event(s["id"], "session.closed", {"by": "user"})
+    # Prune the worktree when it is clean and has no commits to review.
+    # Without this, every session left a full clone and a cl/<role>/<id>
+    # branch behind, forever (worktrees.prune had no caller at all).
+    worktree_kept = s["worktree_path"]
+    pruned = None
+    if s.get("worktree_path") and s.get("repo_path"):
+        try:
+            from ..sessions import worktrees as _wt
+            res = _wt.prune(s["repo_path"], s["worktree_path"],
+                            s.get("base_ref") or "HEAD")
+            pruned = res.reason
+            if res.removed:
+                worktree_kept = None
+        except Exception as e:
+            pruned = f"kept: {e}"
     return 200, {"ok": True, "session": _public_session(st.get_session(s["id"]) or {}),
-                 "worktree_kept": s["worktree_path"]}
+                 "worktree_kept": worktree_kept, "worktree_prune": pruned}
 
 
 @route("POST", "/api/sessions/<sid>/resume")

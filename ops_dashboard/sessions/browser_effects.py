@@ -18,9 +18,25 @@ from dataclasses import dataclass
 EFFECT_VERBS = (
     "comprar", "compra", "pagar", "pago", "pedido", "tramitar", "reservar", "donar", "transferir",
     "publicar", "enviar", "mandar", "borrar", "eliminar", "suscrib", "darse de baja", "confirmar",
-    "registrar", "aceptar y pagar", "buy", "purchase", "checkout", "check out", "order", "pay",
+    "registrar", "aceptar y pagar",
+    "buy", "purchase", "checkout", "check out", "order", "pay",
     "donate", "transfer", "book", "post", "publish", "send", "submit", "delete", "remove",
     "subscribe", "unsubscribe", "confirm", "sign up", "register", "place order",
+    # Irreversible or outward-facing actions the list above did not cover:
+    # approving, merging, granting access, deploying, replying, cancelling…
+    # A click on one of these changes somebody else's state, so it has to go
+    # through the approval gate (2026-10-23).
+    "aprobar", "fusionar", "guardar", "autorizar", "conceder", "otorgar", "revocar", "cancelar",
+    "aceptar", "aceptar invitacion", "rechazar solicitud", "asignar", "comprar ahora",
+    "instalar", "desplegar", "publicar en", "invitar", "compartir", "responder", "comentar",
+    "reenviar", "ejecutar", "archivar", "vaciar", "restablecer", "activar", "desactivar",
+    "cerrar cuenta", "firmar", "validar", "pujar", "canjear", "contratar", "facturar",
+    "approve", "approval", "merge", "accept", "save", "authorize", "grant", "revoke", "cancel",
+    "install", "deploy", "uninstall", "upgrade", "downgrade", "invite", "share", "reply", "respond",
+    "comment", "forward", "execute", "run", "archive", "purge", "wipe", "reset", "restore",
+    "enable", "disable", "unlock", "lock", "sign", "verify", "validate", "confirm payment",
+    "close account", "terminate", "suspend", "unsuspend", "reopen", "assign", "add to cart",
+    "claim", "redeem", "bid", "subscribe to", "change password", "add member", "remove member",
 )
 _TEXT_TAGS = ("input", "textarea")
 _NOT_TEXT_TYPES = ("checkbox", "radio", "file", "submit", "button", "image", "hidden")

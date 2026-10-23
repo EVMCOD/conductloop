@@ -92,11 +92,20 @@ def health(handler) -> None:
             schema_version = migrations.current_version(conn)
     except Exception:
         db_ok = False
+    payload = {"ok": db_ok, "service": "conductloop", "db": db_ok,
+               "version": _version(), "schema_version": schema_version,
+               "ts": int(time.time())}
+    # Instance id: the desktop app passes a random one per launch and uses it
+    # to check that the process listening on the port is really the one it
+    # spawned — otherwise a local process that grabbed the port first would
+    # receive the boot nonce and become the app's privileged origin
+    # (2026-10-23).
+    instance = (os.environ.get("CONDUCTLOOP_INSTANCE_ID") or "").strip()
+    if instance and os.environ.get("CONDUCTLOOP_APP_TOKEN"):
+        payload["instance"] = instance[:16]
     handler._send(
         200 if db_ok else 503,
-        json.dumps({"ok": db_ok, "service": "conductloop", "db": db_ok,
-                    "version": _version(), "schema_version": schema_version,
-                    "ts": int(time.time())}).encode(),
+        json.dumps(payload).encode(),
         "application/json",
     )
 

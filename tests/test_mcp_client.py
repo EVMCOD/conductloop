@@ -66,10 +66,14 @@ def _add_stdio(tmp, **kw):
     out = tmp / "side.txt"
     mcp_hub.save_server("notes", "stdio", command=STDIO_CMD, env={"FAKE_MCP_OUT": str(out)},
                         secret_env={"FAKE_API_TOKEN": "child-only-secret"}, **kw)
+    # The user installed this server and trusts it, so its read-only
+    # annotations count (2026-10-23).
+    mcp_hub.set_server_trust("notes", True)
     return out
 
 
 # ── client / transports ─────────────────────────────────────────────────────
+
 
 def test_safe_env_drops_parent_secrets():
     base = {"PATH": "/usr/bin", "HOME": "/h", "ANTHROPIC_API_KEY": "sk-ant-x", "GITHUB_TOKEN": "ghp_x",
@@ -163,11 +167,21 @@ def test_keychain_unavailable_refuses_secrets(env):
 def test_refresh_connects_lists_and_logs(env):
     kc, tmp = env
     _add_stdio(tmp)
+    # A server must not grant itself a no-approval write by setting
+    # readOnlyHint: until the user trusts this server, every tool in "auto"
+    # mode goes through the approval gate (2026-10-23).
+    mcp_hub.set_server_trust("notes", False)
     v = mcp_hub.refresh("notes")
     assert v["status"] == "connected" and v["server_label"] == "fake-mcp 1.0"
     kinds = {t["name"]: t["kind"] for t in v["tools"]}
+    assert kinds == {"search_notes": "write", "create_note": "write", "delete_all": "write",
+                     "env_probe": "write", "inject": "write"}               # "bad name!" rejected
+    # With the server trusted, its read-only annotations count again.
+    mcp_hub.set_server_trust("notes", True)
+    v = mcp_hub.refresh("notes")
+    kinds = {t["name"]: t["kind"] for t in v["tools"]}
     assert kinds == {"search_notes": "read", "create_note": "write", "delete_all": "write",
-                     "env_probe": "read", "inject": "read"}                 # "bad name!" rejected
+                     "env_probe": "read", "inject": "read"}
     assert "\u200b" not in next(t for t in v["tools"] if t["name"] == "inject")["description"]
     log = store.list_audit(connector_id="mcp-notes")
     assert [e["event"] for e in log][:1] == ["mcp_connected"]
@@ -190,6 +204,7 @@ def test_stdio_child_gets_no_parent_secrets(env, monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "ghp_parent")
     _add_stdio(tmp)
     mcp_hub.refresh("notes")
+
     res = mcp_hub.invoke("notes", "env_probe")
     keys = json.loads(res["result"]["text"])
     assert "ANTHROPIC_API_KEY" not in keys and "GITHUB_TOKEN" not in keys
@@ -204,6 +219,7 @@ def test_read_tool_runs_and_result_is_untrusted(env):
     kc, tmp = env
     _add_stdio(tmp)
     mcp_hub.refresh("notes")
+
     res = mcp_hub.invoke("notes", "search_notes", {"q": "Pro"})
     assert res["status"] == "done" and res["result"]["untrusted"] is True
     assert res["result"]["source"] == "mcp:notes/search_notes" and "plan Pro" in res["result"]["text"]
@@ -213,6 +229,7 @@ def test_write_tools_blocked_while_read_only_then_queued(env):
     kc, tmp = env
     out = _add_stdio(tmp)
     mcp_hub.refresh("notes")
+
     for tool in ("create_note", "delete_all"):
         with pytest.raises(actions.ActionError) as e:
             mcp_hub.invoke("notes", tool, {"title": "x"})
@@ -240,6 +257,7 @@ def test_tool_modes_and_rug_pull(env, monkeypatch):
     kc, tmp = env
     _add_stdio(tmp)
     mcp_hub.refresh("notes")
+
     mcp_hub.set_tool_mode("notes", "create_note", "read")              # user decision
     mcp_hub.set_tool_mode("notes", "inject", "disabled")
     with pytest.raises(actions.ActionError) as e:
@@ -261,6 +279,7 @@ def test_untrusted_result_and_fence_resist_injection(env):
     kc, tmp = env
     _add_stdio(tmp)
     mcp_hub.refresh("notes")
+
     r = mcp_hub.invoke("notes", "inject")["result"]
     assert r["dropped_blocks"] == 1 and "\u202e" not in r["text"] and "\u200b" not in r["text"] and "\x07" not in r["text"]
     fenced = mcp_hub.fence_for_llm(r)
@@ -272,6 +291,7 @@ def test_untrusted_result_and_fence_resist_injection(env):
 def test_http_server_token_in_keychain_and_calls(env, http_fake):
     kc, tmp = env
     mcp_hub.save_server("issues", "http", url=HTTP_URL, token=TOKEN)
+    mcp_hub.set_server_trust("issues", True)   # the user trusts this server
     assert kc.items == {"mcp-token:issues": TOKEN}
     v = mcp_hub.refresh("issues")
     assert v["status"] == "connected" and v["token_set"] is True and "token" not in json.dumps(v["tools"])
@@ -291,6 +311,7 @@ def test_remove_server_cleans_keychain_and_pending(env):
     kc, tmp = env
     _add_stdio(tmp)
     mcp_hub.refresh("notes")
+
     mcp_hub.set_permission("notes", "write")
     q = mcp_hub.invoke("notes", "create_note", {"title": "x"})
     mcp_hub.remove_server("notes")
@@ -307,6 +328,7 @@ def test_legacy_mcp_module_delegates(env, tmp_path):
     kc, tmp = env
     _add_stdio(tmp)
     mcp_hub.refresh("notes")
+
     res, err = mcp.call_tool({"name": "notes"}, "search_notes", {"q": "x"})
     assert err is None and res["untrusted"] is True
     mcp_hub.set_permission("notes", "write")

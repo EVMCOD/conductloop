@@ -24,7 +24,7 @@ AUDIT_EVENTS = (
     "write_expired", "write_done", "write_failed", "write_blocked",
     # MCP servers (mcp_hub): connection log + configuration changes.
     "mcp_added", "mcp_updated", "mcp_removed", "mcp_connected", "mcp_connect_failed",
-    "mcp_tools_changed", "mcp_tool_mode", "mcp_secret_saved",
+    "mcp_tools_changed", "mcp_tool_mode", "mcp_secret_saved", "mcp_server_trust",
 )
 
 
