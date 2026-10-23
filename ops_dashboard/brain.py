@@ -145,6 +145,12 @@ def _classify_provider_error(e: Exception, provider_name: str) -> ProviderError:
 
 CONFIG_PATH = _app_paths.config_path()
 
+# MiniMax's monthly Coding Plan is served on its Anthropic-compatible API, not
+# on the pay-as-you-go balance (api.minimaxi.chat/v1).
+MINIMAX_CODING_PLAN_URL = "https://api.minimax.io/anthropic"
+# M3 reasons before answering, and the reasoning counts against max_tokens.
+CODING_PLAN_MAX_TOKENS = 8000
+
 DEFAULT_MODELS = {
     "anthropic": "claude-3-5-sonnet-latest",
     "openai":    "gpt-4o-mini",
@@ -312,17 +318,24 @@ class MockProvider(Provider):
 class AnthropicProvider(Provider):
     name = "anthropic"
 
-    def __init__(self, api_key: str, model: str | None = None):
+    def __init__(self, api_key: str, model: str | None = None, *, base_url: str | None = None):
         self.api_key = api_key
         self.model = model or DEFAULT_MODELS["anthropic"]
+        # Anthropic-compatible endpoints (MiniMax's Coding Plan) take a base URL.
+        self.base_url = base_url
 
     def available(self) -> bool:
         return bool(self.api_key)
 
+    def _client(self):
+        import anthropic
+        if self.base_url:
+            return anthropic.Anthropic(api_key=self.api_key, base_url=self.base_url)
+        return anthropic.Anthropic(api_key=self.api_key)
+
     @_retry_transient
     def ask(self, system: str, messages: list[dict], **kwargs) -> str:
-        import anthropic
-        client = anthropic.Anthropic(api_key=self.api_key)
+        client = self._client()
         out = []
         for m in messages:
             out.append({"role": m["role"], "content": m["content"]})
@@ -342,8 +355,7 @@ class AnthropicProvider(Provider):
         return "\n".join(parts).strip() or "(empty response)"
 
     def stream(self, system: str, messages: list[dict], **kwargs):
-        import anthropic
-        client = anthropic.Anthropic(api_key=self.api_key)
+        client = self._client()
         out = []
         for m in messages:
             out.append({"role": m["role"], "content": m["content"]})
@@ -362,10 +374,8 @@ class AnthropicProvider(Provider):
         return True
 
     def ask_with_tools(self, system: str, messages: list[dict], tools: list[dict], on_tool_call=None, **kwargs) -> str:
-        import anthropic
-
         from . import tools as brain_tools
-        client = anthropic.Anthropic(api_key=self.api_key)
+        client = self._client()
         out = []
         for m in messages:
             out.append({"role": m["role"], "content": m["content"]})
@@ -447,9 +457,12 @@ class OpenAIProvider(Provider):
 
 
 class MiniMaxProvider(Provider):
-    """MiniMax provider (OpenAI-compatible API).
+    """MiniMax provider.
 
-    Defaults: model 'MiniMax-M3', base 'https://api.minimaxi.chat/v1'.
+    Defaults: model 'MiniMax-M3', base 'https://api.minimaxi.chat/v1' (OpenAI-
+    compatible, pay-as-you-go balance). A base URL ending in '/anthropic' — e.g.
+    MINIMAX_CODING_PLAN_URL, where the monthly Coding Plan subscription is
+    served — switches every call to MiniMax's Anthropic-compatible API.
     """
     name = "minimax"
 
@@ -463,6 +476,12 @@ class MiniMaxProvider(Provider):
     def available(self) -> bool:
         return bool(self.api_key)
 
+    def _anthropic(self) -> AnthropicProvider | None:
+        """The Anthropic-compatible client when the base URL points there."""
+        if not self.base_url.endswith("/anthropic"):
+            return None
+        return AnthropicProvider(api_key=self.api_key, model=self.model, base_url=self.base_url)
+
     def _client(self):
         try:
             import openai
@@ -472,6 +491,11 @@ class MiniMaxProvider(Provider):
 
     @_retry_transient
     def ask(self, system: str, messages: list[dict], **kwargs) -> str:
+        if (a := self._anthropic()) is not None:
+            kwargs.setdefault("max_tokens", CODING_PLAN_MAX_TOKENS)
+            out = a.ask(system, messages, **kwargs)
+            self.last_usage = a.last_usage
+            return out
         client = self._client()
         msgs = [{"role": "system", "content": system}] + messages
         self.last_usage = None
@@ -485,6 +509,10 @@ class MiniMaxProvider(Provider):
         return (resp.choices[0].message.content or "").strip() or "(empty response)"
 
     def stream(self, system: str, messages: list[dict], **kwargs):
+        if (a := self._anthropic()) is not None:
+            kwargs.setdefault("max_tokens", CODING_PLAN_MAX_TOKENS)
+            yield from a.stream(system, messages, **kwargs)
+            return
         client = self._client()
         msgs = [{"role": "system", "content": system}] + messages
         with client.chat.completions.create(
@@ -502,6 +530,9 @@ class MiniMaxProvider(Provider):
         return True
 
     def ask_with_tools(self, system: str, messages: list[dict], tools: list[dict], on_tool_call=None, **kwargs) -> str:
+        if (a := self._anthropic()) is not None:
+            kwargs.setdefault("max_tokens", CODING_PLAN_MAX_TOKENS)
+            return a.ask_with_tools(system, messages, tools, on_tool_call, **kwargs)
         from . import tools as brain_tools
         client = self._client()
         msgs = [{"role": "system", "content": system}] + messages
@@ -866,8 +897,11 @@ def list_providers_status() -> list[dict]:
             p = OllamaProvider(model=os.environ.get("OLLAMA_MODEL") or cfg.get("ollama_model"))
         else:
             p = MockProvider()
-        out.append({"name": name, "available": p.available(), "model": getattr(p, "model", None),
-                    "key_storage": byok_keys.key_storage(name, cfg) if name in byok_keys.PROVIDERS else None})
+        row = {"name": name, "available": p.available(), "model": getattr(p, "model", None),
+               "key_storage": byok_keys.key_storage(name, cfg) if name in byok_keys.PROVIDERS else None}
+        if name == "minimax":
+            row["plan"] = "coding" if isinstance(p, MiniMaxProvider) and p._anthropic() else "payg"
+        out.append(row)
     return out
 
 

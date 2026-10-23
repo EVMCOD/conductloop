@@ -60,13 +60,22 @@
       </div>
       <label>Model <span style="opacity:.6">(optional)</span></label>
       <input id="model" placeholder="leave blank for default" />
+      <div id="planwrap">
+        <label>MiniMax plan</label>
+        <select id="mm_plan">
+          <option value="https://api.minimax.io/anthropic">Coding Plan (monthly subscription)</option>
+          <option value="https://api.minimaxi.chat/v1">Pay as you go (account balance)</option>
+        </select>
+        <div class="hint">The subscription and the balance use different keys and endpoints: paste the key of the plan you pick.</div>
+      </div>
       <div id="baseurlwrap">
         <label>Base URL <span style="opacity:.6">(optional)</span></label>
         <input id="base_url" placeholder="https://api.MiniMax.chat/v1" />
       </div>
       <div class="chk"><input type="checkbox" id="make_default" checked /><label for="make_default" style="margin:0">Use as default for agents &amp; brain</label></div>
       <button id="save">Save key</button>
-      <div class="hint">MiniMax is OpenAI-compatible. Get a key at <a href="https://www.minimaxi.com" target="_blank">minimaxi.com</a>.</div>
+      <div id="savemsg" class="hint" role="status"></div>
+      <div class="hint">MiniMax: the Coding Plan key is in your MiniMax account, on the Coding Plan page of <a href="https://platform.minimax.io" target="_blank">platform.minimax.io</a>; a pay-as-you-go key needs account balance.</div>
     </div>
 
     <p class="hint">Next: <a href="/agents">create an agent →</a></p>
@@ -80,6 +89,7 @@
         const list = await r.json();
         el.innerHTML = list.map(p =>
           '<div class="row"><div><strong>'+p.name+'</strong>'+(p.model?' <span class="hint">'+p.model+'</span>':'')+
+          (p.plan?' <span class="hint">· '+(p.plan==='coding'?'Coding Plan':'pay as you go')+'</span>':'')+
           '</div><span class="badge '+(p.available?'on':'off')+'">'+(p.available?'connected':'not set')+'</span></div>'
         ).join('');
       }catch(e){ el.innerHTML = '<span class="hint">Could not load.</span>'; }
@@ -87,10 +97,10 @@
     function syncFields(){
       const p = document.getElementById('provider').value;
       document.getElementById('keywrap').style.display = (p==='ollama')?'none':'block';
-      document.getElementById('baseurlwrap').style.display = (p==='minimax'||p==='gateway')?'block':'none';
+      document.getElementById('baseurlwrap').style.display = (p==='gateway')?'block':'none';
+      document.getElementById('planwrap').style.display = (p==='minimax')?'block':'none';
       const bu = document.getElementById('base_url');
       if(p==='gateway' && !bu.value) bu.placeholder='https://ai-gateway.vercel.sh/v1';
-      else if(p==='minimax' && !bu.value) bu.placeholder='https://api.MiniMax.chat/v1';
     }
     document.getElementById('provider').onchange = syncFields;
     document.getElementById('save').onclick = async () => {
@@ -100,7 +110,9 @@
           provider: document.getElementById('provider').value,
           api_key: document.getElementById('api_key').value || null,
           model: document.getElementById('model').value || null,
-          base_url: document.getElementById('base_url').value || null,
+          base_url: document.getElementById('provider').value==='minimax'
+            ? document.getElementById('mm_plan').value
+            : (document.getElementById('base_url').value || null),
           make_default: document.getElementById('make_default').checked,
         };
         const r = await fetch('/api/brain/providers/key', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -108,8 +120,8 @@
         if(!d.ok) throw new Error(d.error||'failed');
         document.getElementById('api_key').value='';
         await loadStatus();
-        alert('Saved.');
-      }catch(e){ alert('Error: '+e.message); }
+        document.getElementById('savemsg').textContent = '✓ Saved.';
+      }catch(e){ document.getElementById('savemsg').textContent = '✗ ' + e.message; }
       finally{ btn.disabled=false; btn.textContent='Save key'; }
     };
     async function loadUsage(){
