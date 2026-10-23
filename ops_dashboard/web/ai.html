@@ -53,12 +53,13 @@
         <option value="minimax">MiniMax</option>
         <option value="gateway">Gateway (Vercel AI Gateway / OpenRouter)</option>
         <option value="anthropic">Anthropic (Claude)</option>
-        <option value="openai">OpenAI (GPT)</option>
+        <option value="openai">OpenAI-compatible (OpenAI, DeepSeek, Groq, LM Studio…)</option>
         <option value="ollama">Ollama (local, no key)</option>
       </select>
       <div id="keywrap">
         <label>API key</label>
         <input id="api_key" type="password" placeholder="paste your API key" autocomplete="off" />
+        <div class="hint" id="keyhint" style="display:none">A local server usually needs no key. Leave it empty and the base URL is enough — with no model, the server is asked which models it has.</div>
       </div>
       <label>Model <span style="opacity:.6">(optional)</span></label>
       <input id="model" placeholder="leave blank for default" />
@@ -89,20 +90,52 @@
       try{
         const r = await fetch('/api/brain/providers');
         const list = await r.json();
-        el.innerHTML = list.map(p =>
-          '<div class="row"><div><strong>'+p.name+'</strong>'+(p.model?' <span class="hint">'+p.model+'</span>':'')+
-          (p.plan?' <span class="hint">· '+(p.plan==='coding'?'Coding Plan':'pay as you go')+'</span>':'')+
-          '</div><span class="badge '+(p.available?'on':'off')+'">'+(p.available?'connected':'not set')+'</span></div>'
-        ).join('');
-      }catch(e){ el.innerHTML = '<span class="hint">Could not load.</span>'; }
+        el.textContent = '';
+        list.forEach(function(p){
+          // Built with the DOM, not with innerHTML: the model name can come
+          // from a server this machine talks to, and that is not text to trust.
+          const row = document.createElement('div');
+          row.className = 'row';
+          const left = document.createElement('div');
+          const name = document.createElement('strong');
+          name.textContent = p.name;
+          left.appendChild(name);
+          if(p.model){
+            const m = document.createElement('span');
+            m.className = 'hint';
+            m.textContent = ' ' + p.model;
+            left.appendChild(m);
+          }
+          if(p.base_url){
+            const b = document.createElement('span');
+            b.className = 'hint';
+            b.textContent = ' · ' + p.base_url + (p.local ? ' (local)' : '');
+            left.appendChild(b);
+          }
+          if(p.plan){
+            const pl = document.createElement('span');
+            pl.className = 'hint';
+            pl.textContent = ' · ' + (p.plan==='coding' ? 'Coding Plan' : 'pay as you go');
+            left.appendChild(pl);
+          }
+          row.appendChild(left);
+          const badge = document.createElement('span');
+          badge.className = 'badge ' + (p.available ? 'on' : 'off');
+          badge.textContent = p.available ? 'connected' : 'not set';
+          row.appendChild(badge);
+          el.appendChild(row);
+        });
+      }catch(e){ el.textContent = 'Could not load.'; }
     }
     function syncFields(){
       const p = document.getElementById('provider').value;
       document.getElementById('keywrap').style.display = (p==='ollama')?'none':'block';
-      document.getElementById('baseurlwrap').style.display = (p==='gateway')?'block':'none';
+      document.getElementById('baseurlwrap').style.display = (p==='gateway'||p==='openai')?'block':'none';
       document.getElementById('planwrap').style.display = (p==='minimax')?'block':'none';
       const bu = document.getElementById('base_url');
       if(p==='gateway' && !bu.value) bu.placeholder='https://ai-gateway.vercel.sh/v1';
+      if(p==='openai' && !bu.value) bu.placeholder='blank for OpenAI · http://127.0.0.1:1234/v1 for LM Studio';
+      document.getElementById('keyhint').style.display = (p==='openai')?'block':'none';
     }
     document.getElementById('provider').onchange = syncFields;
     document.getElementById('save').onclick = async () => {
