@@ -57,3 +57,36 @@ def library_index(handler) -> None:
 
     threading.Thread(target=work, name="library-index", daemon=True).start()
     _send_json(handler, 202, {"ok": True, "started": True, "indexing": True})
+
+
+@router.get("/api/library/structure")
+@_local_only
+def library_structure(handler) -> None:
+    """The map of the work: projects, ideas, and the projects still unnamed."""
+    from . import notes_structure
+
+    try:
+        data = notes_structure.structure()
+    except Exception as e:
+        _err(handler, 500, "structure_failed", str(e))
+        return
+    _send_json(handler, 200, {"ok": True, **data})
+
+
+@router.post("/api/library/export")
+@_local_only
+def library_export(handler) -> None:
+    """Write the map where the next agent will find it.
+
+    The point of a second brain is that it does not matter which agent is
+    looking at it: the map is a file in the agent's workspace, not a memory
+    one agent happens to have.
+    """
+    from . import notes_structure
+
+    try:
+        written = notes_structure.write_agent_map()
+    except Exception as e:
+        _err(handler, 500, "export_failed", str(e))
+        return
+    _send_json(handler, 200, {"ok": True, **written})

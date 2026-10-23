@@ -89,9 +89,19 @@ def settings() -> dict:
 
 def refresh(*, embed: bool = True) -> dict:
     """Incremental re-index of notes, memory and repos, then embeddings for new
-    documents when the model is available (the lean desktop build has none)."""
+    documents when the model is available (the lean desktop build has none).
+
+    After the notes are in, the map is drawn: which project each note
+    belongs to, which ideas belong to nobody yet.
+    """
     from .indexers import memory, obsidian, repos
     out: dict = {"obsidian": obsidian.run(), "memory": memory.run(), "repos": repos.run()}
+    try:
+        from . import notes_structure
+
+        out["structure"] = notes_structure.attribute_documents()
+    except Exception as e:
+        out["structure"] = {"skipped": type(e).__name__}
     if embed:
         try:
             from . import embeddings

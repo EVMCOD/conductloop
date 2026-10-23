@@ -28,6 +28,20 @@ def _extract_title(text: str, fallback: str) -> str:
     return m.group(1).strip() if m else fallback
 
 
+FENCED_CODE_RE = re.compile(r"```.*?```", re.DOTALL)
+INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
+
+
+def _strip_code(text: str) -> str:
+    """The text without the code.
+
+    A ``#include`` or a ``#define`` inside a snippet is code, not a tag.
+    Counting them as tags put "include" and "define" among the themes of
+    the vault, which is noise that then shows up in the map. 2026-10-23.
+    """
+    return INLINE_CODE_RE.sub(" ", FENCED_CODE_RE.sub(" ", text))
+
+
 def _extract_tags(text: str, frontmatter: dict | None) -> list[str]:
     tags: list[str] = []
     if frontmatter:
@@ -37,7 +51,7 @@ def _extract_tags(text: str, frontmatter: dict | None) -> list[str]:
         elif isinstance(fm_tags, str):
             tags.extend(t.strip().lstrip("#") for t in fm_tags.split(","))
     seen = set()
-    for m in TAG_RE.finditer(text):
+    for m in TAG_RE.finditer(_strip_code(text)):
         t = m.group(1).strip().rstrip(".,;:")
         if t and t not in seen and not t.startswith("http"):
             seen.add(t)
@@ -91,6 +105,10 @@ def index_path(path: Path) -> dict:
             "tags": tags,
             "wikilinks": wikilinks[:50],
             "frontmatter_keys": list(frontmatter.keys()) if frontmatter else [],
+            # The values too: a note that says "project: deepwick" in its
+            # frontmatter is telling us which project it belongs to, and
+            # that is the strongest signal there is (2026-10-23).
+            "frontmatter": {k: v for k, v in (frontmatter or {}).items()},
         }
 
         was_upserted = db.upsert_document(
@@ -101,6 +119,11 @@ def index_path(path: Path) -> dict:
             metadata=metadata,
             mtime=int(stat.st_mtime),
             size=stat.st_size,
+            # The metadata is part of what this indexer produces, so a file
+            # whose *tags* changed has to be re-indexed even when the file
+            # itself did not change: otherwise a fixed parser leaves the old
+            # reading in the index for ever (2026-10-23).
+            compare_content=True,
         )
         if was_upserted:
             counters["indexed"] += 1
@@ -134,15 +157,29 @@ def _run_one(vault_root: Path) -> dict:
     total = {"indexed": 0, "skipped": 0, "errors": 0}
     md_files = list(vault_root.rglob("*.md"))
     print(f"obsidian: scanning {len(md_files)} markdown files under {vault_root}")
+    seen: set[str] = set()
 
     for i, path in enumerate(md_files, 1):
         if any(part in SKIP_DIRS for part in path.parts):
             continue
+        seen.add(str(path))
         c = index_path(path)
         for k, v in c.items():
             total[k] += v
         if i % 100 == 0:
             print(f"  [{i}/{len(md_files)}] indexed={total['indexed']} skipped={total['skipped']}")
+
+    # The notes that are no longer in the folder go away with it: a deleted
+    # note must not keep answering questions from the index (2026-10-23).
+    #
+    # The folder existed and was read without failures, so what is missing
+    # from it is really missing. (A folder that is not there — a disk that
+    # is not mounted — returned above and never prunes anything.)
+    removed = 0
+    if not total["errors"]:
+        removed = db.prune_documents(str(vault_root), seen)
+        if removed:
+            print(f"  removed {removed} notes that are no longer in the vault")
 
     db.end_run(run_id, **total, notes=f"vault={vault_root} files={len(md_files)}")
     print(f"obsidian: done. indexed={total['indexed']} skipped={total['skipped']} errors={total['errors']}")
