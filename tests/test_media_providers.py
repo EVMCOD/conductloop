@@ -399,3 +399,44 @@ def test_a_missing_fastembed_is_not_retried_on_every_call():
             provider.embed(["hola"])
         assert "fastembed" in str(exc.value)
     assert time.time() - started < 1.0
+
+
+# ── one endpoint for the whole product ─────────────────────────────────────
+
+def test_the_media_provider_uses_the_server_the_product_is_pointed_at(monkeypatch):
+    """The brain and the media pipeline talk to the same kind of server.
+
+    Pointing ConductLoop at a local runtime once has to mean the chat and
+    the images come from the same place, so the media provider inherits the
+    url when it has none of its own.
+    """
+    from ops_dashboard import brain, byok_keys
+
+    monkeypatch.setattr(brain, "_load_config", lambda: {"openai_base_url": "http://127.0.0.1:1234/v1"})
+    monkeypatch.setattr(byok_keys, "get_api_key", lambda provider, cfg=None: "sk-local")
+
+    provider = mp.build("openai")
+    assert provider.base_url == "http://127.0.0.1:1234/v1"
+    assert provider.api_key == "sk-local"
+
+
+def test_its_own_base_url_wins(monkeypatch):
+    from ops_dashboard import brain, byok_keys
+
+    monkeypatch.setattr(brain, "_load_config", lambda: {"openai_base_url": "http://127.0.0.1:1234/v1"})
+    monkeypatch.setattr(byok_keys, "get_api_key", lambda provider, cfg=None: "sk-local")
+
+    provider = mp.build("openai")
+    provider.config["base_url"] = "https://api.deepseek.com/v1"
+    provider.config["api_key"] = "sk-own"
+    assert provider.base_url == "https://api.deepseek.com/v1"
+    assert provider.api_key == "sk-own"
+
+
+def test_the_catalogue_says_where_the_work_goes(monkeypatch):
+    from ops_dashboard import brain, byok_keys
+
+    monkeypatch.setattr(brain, "_load_config", lambda: {"openai_base_url": "http://127.0.0.1:1234/v1"})
+    monkeypatch.setattr(byok_keys, "get_api_key", lambda provider, cfg=None: "")
+    entry = next(e for e in mp.catalogue() if e["key"] == "openai")
+    assert entry["effective_base_url"] == "http://127.0.0.1:1234/v1"

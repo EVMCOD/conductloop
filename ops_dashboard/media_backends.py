@@ -118,8 +118,37 @@ class OpenAIProvider(Provider):
     LM Studio, llama.cpp's ``--server``, vLLM, Ollama's
     ``/v1`` compatibility layer. One class, one contract, any model.
 
-    The base url decides which one you are talking to.
+    The base url decides which one you are talking to. And when this
+    provider has none of its own, it uses the server the product is
+    already pointed at: the brain and the media pipeline talk to the same
+    kind of server, so pointing ConductLoop at a local runtime once means
+    the chat and the images come from the same place.
     """
+
+    def _product_server(self) -> tuple[str, str]:
+        """The OpenAI-compatible server the product is pointed at."""
+        try:
+            from ops_dashboard import brain, byok_keys
+
+            cfg = brain._load_config()
+            base = os.environ.get("OPENAI_BASE_URL") or cfg.get("openai_base_url") or ""
+            key = byok_keys.get_api_key("openai", cfg) or ""
+            return str(base).strip().rstrip("/"), str(key).strip()
+        except Exception:
+            return "", ""
+
+    @property
+    def base_url(self) -> str:
+        own = super().base_url
+        return own or self._product_server()[0]
+
+    @property
+    def api_key(self) -> str:
+        own = super().api_key
+        return own or self._product_server()[1]
+
+    def effective_base_url(self) -> str:
+        return self.base_url
 
     def _headers(self) -> dict[str, str]:
         head = {"Content-Type": "application/json"}
@@ -889,11 +918,15 @@ mp.register(ProviderSpec(
     kind="remote",
     needs_key=False,
     doc=("Anything that speaks the OpenAI API: OpenAI, DeepSeek, Together, Groq, "
-         "LM Studio, llama.cpp's server, vLLM, Ollama's /v1 endpoint."),
-    default_config={"base_url": "http://127.0.0.1:1234/v1", "model": "",
+         "LM Studio, llama.cpp's server, vLLM, Ollama's /v1 endpoint. "
+         "With no base URL of its own it uses the server the product is already "
+         "pointed at, so one setting covers the chat and the images."),
+    default_config={"base_url": "", "model": "",
                     "image_model": "gpt-image-1", "embed_model": "text-embedding-3-small"},
     config_fields=(
-        _field("base_url", "Base URL", placeholder="http://127.0.0.1:1234/v1"),
+        _field("base_url", "Base URL", placeholder="http://127.0.0.1:1234/v1 for LM Studio",
+               help=("Leave it empty to use the server the product is already "
+                     "pointed at (set it in Connect AI).")),
         _field("api_key", "API key", kind="password", secret=True),
         _field("model", "Text model", placeholder="the model name for chat"),
         _field("image_model", "Image model", placeholder="gpt-image-1"),

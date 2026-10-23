@@ -465,8 +465,13 @@
       fields.push({ key: "daily_cap", label: "Daily cap (calls per day, 0 = no cap)",
                     type: "text", placeholder: "0",
                     help: "The provider stops accepting work once it reaches this." });
-      if (fields.length) {
-        const form = el("div", "provider__fields");
+      if (fields.length) {        const form = el("div", "provider__fields");
+        if (p.effective_base_url) {
+          // Where the work really goes, which is not always what is stored
+          // here: a provider can inherit the server from the product.
+          form.appendChild(el("p", "provider__health",
+            "Work goes to: " + p.effective_base_url));
+        }
         fields.forEach((f) => {
           const field = el("div", "field");
           const label = document.createElement("label");
