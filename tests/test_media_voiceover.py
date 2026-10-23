@@ -15,6 +15,13 @@ import pytest
 
 from ops_dashboard import db_media, media
 
+# The CI installs ffmpeg and sets CONDUCTLOOP_REQUIRE_FFMPEG=1: there the
+# mixing has to be proven with the real tool, so a missing ffmpeg is a
+# failure and not a skip. Everywhere else the test is skipped.
+needs_ffmpeg = pytest.mark.skipif(
+    not (media.ffmpeg_available() or os.environ.get("CONDUCTLOOP_REQUIRE_FFMPEG")),
+    reason="ffmpeg not installed")
+
 
 @pytest.fixture
 def vault(tmp_path, monkeypatch):
@@ -57,10 +64,9 @@ def _silent_video(tmp_path: Path) -> str:
 
 # ── the mix itself ─────────────────────────────────────────────────────────
 
+@needs_ffmpeg
 def test_the_mix_puts_audio_under_the_picture(vault):
     tmp_path = vault
-    if not media.ffmpeg_available():
-        pytest.skip("ffmpeg not installed")
     video = _silent_video(tmp_path)
     voice = tmp_path / "media" / "p" / "voice.mp3"
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi",
@@ -74,12 +80,14 @@ def test_the_mix_puts_audio_under_the_picture(vault):
     assert info["width"] == 320
 
 
+@needs_ffmpeg
 def test_the_mix_refuses_a_file_outside_the_library(vault):
     tmp_path = vault
     with pytest.raises(media.MediaError, match="media library"):
         media.mix_voiceover("/etc/hosts", "/etc/hosts", str(tmp_path / "out.mp4"))
 
 
+@needs_ffmpeg
 def test_the_mix_needs_both_a_video_and_a_voice(vault):
     tmp_path = vault
     video = _silent_video(tmp_path)
@@ -89,9 +97,8 @@ def test_the_mix_needs_both_a_video_and_a_voice(vault):
 
 # ── the product operation ──────────────────────────────────────────────────
 
+@needs_ffmpeg
 def test_a_narrated_clip_is_recorded_as_an_asset(vault):
-    if not media.ffmpeg_available():
-        pytest.skip("ffmpeg not installed")
     video = _silent_video(vault)
     res = media.voiceover(video, "Hola, esto es una prueba de narración.",
                           project_key="conductloop")
@@ -104,9 +111,8 @@ def test_a_narrated_clip_is_recorded_as_an_asset(vault):
     assert rows[0]["meta"].get("voiceover") is True
 
 
+@needs_ffmpeg
 def test_a_narrated_clip_remembers_its_voice(vault):
-    if not media.ffmpeg_available():
-        pytest.skip("ffmpeg not installed")
     video = _silent_video(vault)
     media.voiceover(video, "Texto.", project_key="p",
                     voice_id="Spanish_Narrator", emotion="neutral", speed=1.0)
@@ -115,6 +121,7 @@ def test_a_narrated_clip_remembers_its_voice(vault):
     assert row["meta"]["emotion"] == "neutral"
 
 
+@needs_ffmpeg
 def test_an_empty_script_is_refused(vault):
     with pytest.raises(media.MediaError, match="script is required"):
         media.voiceover(_silent_video(vault), "   ")
@@ -127,10 +134,9 @@ def test_a_video_outside_the_library_is_refused(vault):
 
 # ── the endpoint ───────────────────────────────────────────────────────────
 
+@needs_ffmpeg
 def test_a_library_clip_can_be_narrated_end_to_end(vault):
     """The path the endpoint takes: a stored asset in, a narrated asset out."""
-    if not media.ffmpeg_available():
-        pytest.skip("ffmpeg not installed")
     video = _silent_video(vault)
     asset_id = db_media.add_asset(kind="video", prompt="clip", path=video, status="ready")
     assert asset_id

@@ -18,6 +18,14 @@ import pytest
 
 from ops_dashboard import media
 
+# The CI installs ffmpeg and sets CONDUCTLOOP_REQUIRE_FFMPEG=1: there the
+# mixing has to be proven with the real tool, so a missing ffmpeg is a
+# failure and not a skip. Everywhere else the test is skipped.
+needs_ffmpeg = pytest.mark.skipif(
+    not (media.ffmpeg_available() or os.environ.get("CONDUCTLOOP_REQUIRE_FFMPEG")),
+    reason="ffmpeg not installed")
+
+
 # ── a recording engine, so we can assert on what would be sent ─────────────
 
 class _RecordingEngine(media.MediaEngine):
@@ -367,6 +375,8 @@ def test_animate_image_picks_a_duration_the_model_actually_takes(tmp_path, monke
         return {"job_id": 1, "task_id": "t", "status": "queued"}
 
     monkeypatch.setattr(media, "submit_video", _submit)
+    # The product asks a provider for the work; the stub is what answers.
+    media.set_engine(_RecordingEngine())
     media.animate_image(str(_keyframe(tmp_path)), "breathe")
     # 6 is the first duration Hailuo really accepts; 8 would be rejected.
     assert seen["duration"] == 6
@@ -377,6 +387,7 @@ def test_animate_image_picks_a_duration_the_model_actually_takes(tmp_path, monke
 def test_animate_image_keeps_a_valid_requested_duration(tmp_path, monkeypatch):
     seen: dict = {}
     monkeypatch.setattr(media, "submit_video", lambda p, **kw: seen.update(kw) or {})
+    media.set_engine(_RecordingEngine())
     media.animate_image(str(_keyframe(tmp_path)), "breathe", duration=10)
     assert seen["duration"] == 10
 
@@ -468,9 +479,8 @@ def test_a_keyframe_cannot_be_taken_from_outside_the_media_library(tmp_path, mon
 
 # ── probing reports whether there is actually sound ────────────────────────
 
+@needs_ffmpeg
 def test_probe_reports_the_audio_track(tmp_path):
-    if not media.ffmpeg_available():
-        pytest.skip("ffmpeg not installed")
     silent = tmp_path / "s.mp4"
     with_audio = tmp_path / "a.mp4"
     subprocess_ok = os.system(
