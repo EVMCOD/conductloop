@@ -21,6 +21,7 @@ the folder belongs to the user.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -115,16 +116,21 @@ def _documents() -> list[dict[str, Any]]:
     """Every indexed note, with the project it was attributed to."""
     with db.db() as conn:
         rows = conn.execute(
-            "SELECT path, title, project_key, mtime FROM documents ORDER BY mtime DESC"
+            "SELECT path, title, project_key, mtime, metadata FROM documents ORDER BY mtime DESC"
         ).fetchall()
     out: list[dict[str, Any]] = []
     for row in rows:
         path = str(row["path"])
+        try:
+            metadata = json.loads(row["metadata"] or "{}")
+        except (TypeError, ValueError):
+            metadata = {}
         out.append({
             "path": path,
             "title": str(row["title"] or Path(path).stem),
             "project_key": str(row["project_key"] or ""),
             "mtime": int(row["mtime"] or 0),
+            "frontmatter": metadata.get("frontmatter") or {},
         })
     return out
 
@@ -163,6 +169,102 @@ def _group(documents: list[dict[str, Any]], areas: bool) -> dict[str, list[dict[
     return out
 
 
+# ── the handoffs ───────────────────────────────────────────────────────────
+
+_DATE_IN_NAME = re.compile(r"^(\d{4}-\d{2}-\d{2})")
+_BLOCKQUOTE = re.compile(r"^>\s?(.*)$")
+
+
+def _is_handoff(doc: dict[str, Any]) -> bool:
+    """Is this note a handoff — "here is where I left off"?
+
+    Two conventions say so: ``type: handoff`` in the frontmatter, and the
+    folder the vault keeps them in. Either one is enough.
+    """
+    front = doc.get("frontmatter") or {}
+    if str(front.get("type") or "").strip().lower() == "handoff":
+        return True
+    parts = Path(doc.get("path") or "").parts
+    return any(part.lower() in ("handoff", "handoffs") for part in parts)
+
+
+def _handoff_date(doc: dict[str, Any]) -> str:
+    """The day of the handoff: the frontmatter, the name, or the file."""
+    front = doc.get("frontmatter") or {}
+    for value in (front.get("date"), front.get("created")):
+        text = str(value or "").strip()[:10]
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", text):
+            return text
+    match = _DATE_IN_NAME.match(Path(doc.get("path") or "").stem)
+    if match:
+        return match.group(1)
+    return _stamp(int(doc.get("mtime") or 0))
+
+
+def _encargo(content: str) -> str:
+    """The ask of a handoff: the first blockquote under the title.
+
+    In Enrique's handoffs that blockquote is the encargo — what was
+    actually asked, in his words. It is the one line that says what the
+    work is, and it is worth more than the rest of the note.
+    """
+    quote: list[str] = []
+    for line in (content or "").splitlines():
+        match = _BLOCKQUOTE.match(line.strip())
+        if match:
+            text = match.group(1).strip()
+            # "[!success] El encargo" is a callout label, not the ask.
+            if text.startswith("[!"):
+                continue
+            if text:
+                quote.append(text)
+        elif quote:
+            break
+    text = " ".join(quote).strip()
+    text = re.sub(r"\s+", " ", text)
+    if len(text) > 320:
+        text = text[:317].rstrip() + "…"
+    return text
+
+
+def _handoffs(documents: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """The handoffs of every project, newest first.
+
+    The content of the note is only read for the ones that are handoffs:
+    the vault is a thousand notes and most of them are not.
+    """
+    candidates = [doc for doc in documents if _is_handoff(doc)]
+    if not candidates:
+        return {}
+
+    contents: dict[str, str] = {}
+    try:
+        with db.db() as conn:
+            for doc in candidates:
+                row = conn.execute(
+                    "SELECT content FROM documents WHERE path = ?", (doc["path"],)
+                ).fetchone()
+                contents[doc["path"]] = str(row["content"] or "") if row else ""
+    except Exception as e:
+        log.warning("could not read the handoffs: %s", e)
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    for doc in candidates:
+        key = doc.get("project_key") or ""
+        if not key:
+            continue
+        front = doc.get("frontmatter") or {}
+        out.setdefault(key, []).append({
+            "path": doc["path"],
+            "title": str(front.get("title") or doc.get("title") or ""),
+            "date": _handoff_date(doc),
+            "encargo": _encargo(contents.get(doc["path"], "")),
+        })
+    for rows in out.values():
+        rows.sort(key=lambda row: row["date"], reverse=True)
+    return out
+
+
 # ── the pages ─────────────────────────────────────────────────────────────
 
 def _header(kind: str, key: str, title: str, intro: str, facts: list[str]) -> list[str]:
@@ -187,7 +289,8 @@ def _header(kind: str, key: str, title: str, intro: str, facts: list[str]) -> li
 
 def _project_page(proj: dict[str, Any], notes: list[dict[str, Any]], *,
                   vault: Path | None, page_path: Path, index_path: Path,
-                  unlinked: dict[str, list[dict[str, Any]]]) -> str:
+                  unlinked: dict[str, list[dict[str, Any]]],
+                  handoffs: list[dict[str, Any]]) -> str:
     """One project: its notes, its repos, and what its page is missing."""
     links = Links(vault, page_path)
     key = proj["key"]
@@ -207,6 +310,18 @@ def _project_page(proj: dict[str, Any], notes: list[dict[str, Any]], *,
         facts)
     lines.append(links.page(index_path, "← the map"))
     lines.append("")
+
+    if handoffs:
+        lines.append("## Where this stands")
+        lines.append("")
+        lines.append("What the last person who worked on this wrote down. Start here.")
+        lines.append("")
+        for row in handoffs[:5]:
+            when = row["date"] or "—"
+            lines.append(f"- **{when}** — {links.note(row['path'], row['title'] or 'Handoff')}")
+            if row.get("encargo"):
+                lines.append(f"  > {row['encargo']}")
+        lines.append("")
 
     lines.append("## Notes")
     lines.append("")
@@ -264,7 +379,8 @@ def _area_page(area: str, notes: list[dict[str, Any]], *,
 
 def _index_page(data: dict[str, Any], projects_out: list[dict[str, Any]],
                 areas_out: list[dict[str, Any]], *, vault: Path | None,
-                index_path: Path) -> str:
+                index_path: Path,
+                handoffs: dict[str, list[dict[str, Any]]]) -> str:
     """The map of content: every page, linked."""
     links = Links(vault, index_path)
     totals = data.get("totals") or {}
@@ -277,6 +393,28 @@ def _index_page(data: dict[str, Any], projects_out: list[dict[str, Any]],
          _plural(len(projects_out), "project"),
          _plural(len(areas_out), "area")])
     lines.append("")
+
+    # Where to start: the projects somebody wrote a handoff about, newest
+    # first. This is the answer to "what was I doing" without reading a
+    # thousand notes.
+    started = []
+    for item in projects_out:
+        rows = handoffs.get(item["key"]) or []
+        if not rows:
+            continue
+        newest = rows[0]
+        started.append((newest.get("date") or "", item, newest))
+    started.sort(key=lambda row: row[0], reverse=True)
+    if started:
+        lines.append("## Where to start")
+        lines.append("")
+        lines.append("The projects somebody left a handoff about, newest first.")
+        lines.append("")
+        for when, item, newest in started[:8]:
+            page = index_path.parent / f"{item['file']}.md"
+            lines.append(f"- **{when}** — {links.page(page, item['name'])}: "
+                         f"{newest.get('title') or 'Handoff'}")
+        lines.append("")
 
     if projects_out:
         lines.append("## Projects")
@@ -407,6 +545,16 @@ def _unlinked_by_project(unlinked: list[dict[str, Any]],
     return out
 
 
+def latest_handoffs() -> dict[str, dict[str, Any]]:
+    """The newest handoff of every project: the ask, in their words.
+
+    It is what the daily note needs: what was asked, for the projects that
+    moved that day.
+    """
+    handoffs = _handoffs(_documents())
+    return {key: rows[0] for key, rows in handoffs.items() if rows}
+
+
 def export_pages(*, destinations: list[Path],
                  data: dict[str, Any] | None = None) -> dict[str, Any]:
     """Write the map as pages, in every destination.
@@ -441,6 +589,7 @@ def export_pages(*, destinations: list[Path],
         item["file"] = area_names[item["area"]]
 
     unlinked = _unlinked_by_project(list(data.get("unlinked") or []), by_project)
+    handoffs = _handoffs(documents)
 
     out: dict[str, Any] = {"folders": [], "pages": 0, "written": 0, "removed": 0}
     for destination in destinations:
@@ -450,7 +599,8 @@ def export_pages(*, destinations: list[Path],
         written = 0
 
         index_text = _index_page(data, projects_out, areas_out,
-                                 vault=vault, index_path=index_path)
+                                 vault=vault, index_path=index_path,
+                                 handoffs=handoffs)
         if _write_if_changed(index_path, index_text):
             written += 1
 
@@ -460,7 +610,8 @@ def export_pages(*, destinations: list[Path],
             page = folder / f"{proj['file']}.md"
             text = _project_page(proj, by_project.get(key, []), vault=vault,
                                  page_path=page, index_path=index_path,
-                                 unlinked=unlinked)
+                                 unlinked=unlinked,
+                                 handoffs=handoffs.get(key) or [])
             if _write_if_changed(page, text):
                 written += 1
             keep.add(page.name)

@@ -86,14 +86,22 @@ def test_the_map_becomes_one_page_per_project(vault):
 
 
 def test_every_link_points_at_a_note_that_is_really_there(vault):
-    """The whole point of the pages: the links resolve."""
+    """The whole point of the pages: the links resolve.
+
+    The quoted text of a handoff is the user's own and is left as it is —
+    a dead link in his note stays a dead link in the quote. What the
+    product writes itself has to resolve.
+    """
     _export(vault)
     pages = vault["export"] / "pages"
     checked = 0
     for page in sorted(pages.rglob("*.md")):
-        for target in WIKILINK.findall(page.read_text(encoding="utf-8")):
-            checked += 1
-            assert (vault["root"] / f"{target}.md").exists(), f"{target} in {page.name}"
+        for line in page.read_text(encoding="utf-8").splitlines():
+            if line.strip().startswith(">"):
+                continue          # quoted text: his words, his links
+            for target in WIKILINK.findall(line):
+                checked += 1
+                assert (vault["root"] / f"{target}.md").exists(), f"{target} in {page.name}"
     assert checked >= 4
 
 
@@ -207,3 +215,92 @@ def test_the_product_does_not_index_its_own_pages(vault):
     paths = [str(r["path"]) for r in rows]
     assert paths, "the notes of the user must still be indexed"
     assert not [p for p in paths if "/pages/" in p]
+
+
+# ── where each project stands ──────────────────────────────────────────────
+
+def _handoff(root, name, project, date, encargo):
+    """A note that says 'here is where I left off'.
+
+    Returns the path and the body the index would keep (no frontmatter).
+    """
+    folder = root / "handoff"
+    folder.mkdir(exist_ok=True)
+    body = ("\n"
+            f"# {name}\n"
+            "\n"
+            "> [!success] El encargo\n"
+            f"> {encargo}\n"
+            "\n"
+            "## Lo que encontré\n"
+            "Detalle que no cabe en el encargo.\n")
+    (folder / name).write_text(
+        "---\n"
+        f"title: {name}\n"
+        "type: handoff\n"
+        f"date: {date}\n"
+        f"project: {project}\n"
+        "---\n"
+        + body,
+        encoding="utf-8")
+    return folder / name, body
+
+
+def test_the_project_page_says_where_the_work_stands(vault):
+    """The point of departure: what the last person wrote down."""
+    from ops_dashboard import db
+
+    path, body = _handoff(vault["root"], "2026-10-23-evql-to-deepwick", "rentcla", "2026-10-23",
+                          "que todo pase al plan maximo")
+    db.upsert_document(source="obsidian", path=str(path), title="EVQL to Deepwick",
+                       content=body, metadata={"frontmatter": {"type": "handoff",
+                                                              "date": "2026-10-23",
+                                                              "title": "EVQL → Deepwick"}},
+                       mtime=1780000000, size=1)
+    with db.db() as conn:
+        conn.execute("UPDATE documents SET project_key='rentcla' WHERE path=?", (str(path),))
+        conn.commit()
+
+    _export(vault)
+    text = (vault["export"] / "pages" / "rentcla.md").read_text(encoding="utf-8")
+    assert "## Where this stands" in text
+    assert "2026-10-23" in text
+    assert "que todo pase al plan maximo" in text
+    assert "[[handoff/2026-10-23-evql-to-deepwick|EVQL → Deepwick]]" in text
+
+
+def test_the_index_says_where_to_start(vault):
+    """One line per project that somebody left a handoff about."""
+    from ops_dashboard import db
+
+    path, body = _handoff(vault["root"], "2026-10-23-h", "rentcla", "2026-10-23", "el encargo")
+    db.upsert_document(source="obsidian", path=str(path), title="H",
+                       content=body, metadata={"frontmatter": {"type": "handoff",
+                                                             "date": "2026-10-23"}},
+                       mtime=1780000000, size=1)
+    with db.db() as conn:
+        conn.execute("UPDATE documents SET project_key='rentcla' WHERE path=?", (str(path),))
+        conn.commit()
+
+    _export(vault)
+    text = (vault["export"] / "pages" / "Index.md").read_text(encoding="utf-8")
+    assert "## Where to start" in text
+    assert "rentcla" in text
+
+
+def test_a_project_with_no_handoff_says_nothing(vault):
+    """A section that is always there and always empty is noise."""
+    _export(vault)
+    text = (vault["export"] / "pages" / "rentcla.md").read_text(encoding="utf-8")
+    assert "## Where this stands" not in text
+
+
+def test_the_encargo_is_the_blockquote_and_not_the_label(vault):
+    """The callout label is a label, not the ask."""
+    from ops_dashboard.vault_pages import _encargo
+
+    content = ("\n# Title\n\n> [!success] El encargo\n"
+               "> lo que hay que hacer\n> y por qué\n\n## Detalle\n")
+    assert _encargo(content) == "lo que hay que hacer y por qué"
+    # And a note without a blockquote has no encargo.
+    assert _encargo("# Title\n\nTexto normal\n") == ""

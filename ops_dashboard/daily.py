@@ -177,6 +177,14 @@ def vault_summary(day: str) -> dict:
         out["ideas"] = notes_structure.propose_ideas()[:5]
     except Exception:
         out["ideas"] = []
+    # What was asked, for the projects that moved: the newest handoff of
+    # each one. It is the line that says what the work is.
+    try:
+        from . import vault_pages
+
+        out["handoffs"] = vault_pages.latest_handoffs()
+    except Exception:
+        out["handoffs"] = {}
     return out
 
 
@@ -192,8 +200,12 @@ def render_vault(data: dict) -> list[str]:
         names = {p.key: p.name for p in _projects()}
         lines.append("**Proyectos que se movieron**")
         lines.append("")
+        handoffs = data.get("handoffs") or {}
         for key, count in projects[:8]:
             lines.append(f"- {names.get(key, key)} — {count} nota(s)")
+            row = handoffs.get(key) or {}
+            if row.get("encargo"):
+                lines.append(f"  > {row['encargo']}")
         lines.append("")
     ideas = data.get("ideas") or []
     if ideas:
