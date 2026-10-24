@@ -450,7 +450,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._send(200, pp.read_bytes(), "text/html; charset=utf-8")
             else:
                 self._send(404, b"not found", "text/plain")
-        elif path in ("/ai", "/agents", "/runs", "/setup", "/brain", "/servers"):
+        elif path in ("/ai", "/agents", "/runs", "/setup", "/brain", "/servers", "/credentials"):
             page = STATIC_DIR / (path.lstrip("/") + ".html")
             if page.exists():
                 self._send(200, page.read_bytes(), "text/html; charset=utf-8")

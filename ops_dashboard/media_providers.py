@@ -33,9 +33,12 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
+
+log = logging.getLogger("conductloop.providers")
 
 # ── the capabilities the product speaks ─────────────────────────────────────
 
@@ -359,7 +362,11 @@ def stored_configs() -> dict[str, dict[str, Any]]:
 
 
 def build(key: str) -> Provider:
-    """Instantiate a provider with its stored configuration."""
+    """Instantiate a provider with its stored configuration.
+
+    The key is not in the database: it is in the vault, and the database
+    only keeps the name of the place where it is.
+    """
     spec = spec_for(key)
     if spec is None:
         raise ProviderError(f"unknown provider '{key}'")
@@ -367,8 +374,50 @@ def build(key: str) -> Provider:
     if backend is None:
         raise ProviderError(f"provider '{key}' has no implementation")
     stored = stored_configs().get(key) or {}
-    config = dict(stored.get("config") or {})
+    config = _with_secret(key, dict(stored.get("config") or {}))
     return backend(config)
+
+
+def _with_secret(key: str, config: dict[str, Any]) -> dict[str, Any]:
+    """Put the key back into the configuration, from the vault.
+
+    A provider whose credentials are locked says so, instead of pretending
+    it has no key: "no key" and "the vault is closed" are different
+    problems with different answers.
+    """
+    from . import secret_vault
+
+    out = dict(config)
+    ref = out.get("api_key_ref")
+    if not ref:
+        return out
+    try:
+        value = secret_vault.get(str(ref))
+    except secret_vault.VaultLocked:
+        raise ProviderError(
+            "the credentials are locked: open them to use this provider"
+        ) from None
+    if value:
+        out["api_key"] = value
+    return out
+
+
+def _has_key(config: dict[str, Any]) -> bool:
+    """Is there a key for this provider, wherever it is stored?
+
+    The key may be in the vault (the normal case) or still in the database
+    from before the vault existed: that one is plaintext, and the migration
+    is what takes it out of there.
+    """
+    from . import secret_vault
+
+    ref = config.get("api_key_ref")
+    if not ref:
+        return bool(config.get("api_key"))
+    try:
+        return secret_vault.where(str(ref)) != "nowhere"
+    except Exception:
+        return False
 
 
 def enabled_keys(capability: str | None = None) -> list[str]:
@@ -442,7 +491,7 @@ def catalogue() -> list[dict[str, Any]]:
         enabled = bool(row.get("enabled")) if row else spec.default_enabled
         entry = spec.to_dict(
             enabled=enabled,
-            configured=(bool(config.get("api_key")) if spec.needs_key else True),
+            configured=(_has_key(config) if spec.needs_key else True),
         )
         # The page shows what is actually stored, not what the defaults are.
         # The secret never travels back.
@@ -600,8 +649,46 @@ def http_bytes(url: str, *, method: str = "GET", headers: dict[str, str] | None 
 
 def save_config(key: str, config: dict[str, Any], *, enabled: bool | None = None,
                 priority: int | None = None) -> None:
-    """Store a provider's configuration."""
-    _dbmod().set_provider_config(key, config, enabled=enabled, priority=priority)
+    """Store a provider's configuration.
+
+    The key goes to the vault. When there is no keychain and the vault is
+    closed, the error says so: the key is not stored anywhere else.
+    """
+    from . import secret_vault
+
+    try:
+        _dbmod().set_provider_config(key, config, enabled=enabled, priority=priority)
+    except secret_vault.VaultLocked as e:
+        raise ProviderError(str(e)) from None
+
+
+def migrate_plaintext_keys() -> dict[str, Any]:
+    """Move the keys that are in the database, in plain text, into the vault.
+
+    The database is the thing people copy around, sync and back up. A key
+    that is in there is a key in the open, and this is the way out.
+    """
+    from . import secret_vault
+
+    moved: list[str] = []
+    failed: list[str] = []
+    for key, row in stored_configs().items():
+        config = dict(row.get("config") or {})
+        value = str(config.get("api_key") or "").strip()
+        if not value:
+            continue
+        name = secret_vault.media_key_name(key)
+        try:
+            secret_vault.set(name, value)
+        except Exception as e:
+            log.warning("could not move the key of %s into the vault: %s", key, e)
+            failed.append(key)
+            continue
+        config.pop("api_key", None)
+        config["api_key_ref"] = name
+        _dbmod().set_provider_config(key, config)
+        moved.append(key)
+    return {"moved": moved, "failed": failed}
 
 
 def describe_all() -> list[dict[str, Any]]:
@@ -612,12 +699,11 @@ def describe_all() -> list[dict[str, Any]]:
     for spec in PROVIDER_SPECS:
         row = rows.get(spec.key) or {}
         enabled = bool(row.get("enabled")) if row else spec.default_enabled
+        stored = row.get("config") or {}
         entry = spec.to_dict(
             enabled=enabled,
-            configured=(bool((row.get("config") or {}).get("api_key"))
-                        if spec.needs_key else True),
+            configured=(_has_key(stored) if spec.needs_key else True),
         )
-        stored = row.get("config") or {}
         entry["default_config"] = {
             **entry["default_config"],
             **{k: v for k, v in stored.items() if k not in ("api_key", "token")},

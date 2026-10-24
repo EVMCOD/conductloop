@@ -208,14 +208,29 @@ def set_provider_config(key: str, config: dict, *, enabled: bool | None = None,
     The api_key is write-only from the API's point of view: it is never sent
     back to the client, and a request that omits it leaves the stored one
     alone.
+
+    It is also not in the database. The key goes to the vault — the OS
+    keychain, or an encrypted file — and the database keeps only the name
+    of the place where it is. A database is the thing people copy around,
+    sync and back up; a secret does not belong in it.
     """
+    from . import secret_vault
+
     now = int(time.time())
     current = get_provider_config(key) or {}
     merged = dict(current.get("config") or {})
     for k, v in (config or {}).items():
-        if k == "api_key" and not str(v or "").strip():
-            continue          # an empty key means "keep the one I have"
+        if k == "api_key":
+            value = str(v or "").strip()
+            if not value:
+                continue          # an empty key means "keep the one I have"
+            name = secret_vault.media_key_name(key)
+            secret_vault.set(name, value)
+            merged["api_key_ref"] = name
+            continue
         merged[k] = v
+    # A key that was here before the vault existed does not stay here.
+    merged.pop("api_key", None)
     with _dbmod().db() as conn:
         conn.execute(
             "INSERT INTO media_providers (key, enabled, priority, config_json, updated_at) "

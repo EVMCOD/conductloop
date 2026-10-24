@@ -17,6 +17,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
+import pytest
+
 _SANDBOX = Path(tempfile.mkdtemp(prefix="conductloop-tests-"))
 atexit.register(shutil.rmtree, _SANDBOX, ignore_errors=True)
 
@@ -26,7 +28,29 @@ os.environ["OPS_CONFIG_PATH"] = str(_SANDBOX / "config.json")
 (_SANDBOX / "projects.local.json").write_text("[]")
 os.environ["OPS_PROJECTS_FILE"] = str(_SANDBOX / "projects.local.json")
 os.environ.pop("CONDUCTLOOP_DB_PATH", None)
+# No test writes to the keychain of the machine that runs it. A key typed
+# into a test would end up in the login keychain of whoever is developing,
+# and the keychain of a CI runner is nobody's business. The tests that
+# need a keychain patch one in (or turn this off on purpose).
+os.environ["OPS_DISABLE_KEYCHAIN"] = "1"
 
 from ops_dashboard import app_paths  # noqa: E402  (must run after the env above)
 
 app_paths.LEGACY_HOME = _SANDBOX / "legacy-home"
+
+# The passphrase every test opens the vault with. There is no keychain in a
+# test (see above), so the vault is the encrypted file, and a test that
+# stores a key needs it open. The passphrase is a constant of the test
+# suite and lands in a throwaway directory.
+TEST_PASSPHRASE = "conductloop-tests"
+
+
+@pytest.fixture(autouse=True)
+def _vault_open():
+    """Open the vault for every test, and close it afterwards."""
+    from ops_dashboard import secret_vault
+
+    secret_vault.lock()
+    secret_vault.unlock(TEST_PASSPHRASE)
+    yield
+    secret_vault.lock()

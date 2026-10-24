@@ -99,8 +99,9 @@ def key_storage(provider: str, cfg: dict) -> str | None:
 def store_api_key(provider: str, api_key: str, cfg: dict) -> str:
     """Store a newly entered key; mutates ``cfg`` (caller saves it).
 
-    Returns the storage used: "keychain", "config" (keychain unavailable or
-    write/verify failed — historic behaviour) or "cleared" (empty key)."""
+    Returns the storage used: "keychain", "vault" (an encrypted file, for
+    a machine with no keychain), "config" (plaintext — the last resort, and
+    the one the Credentials page points at) or "cleared" (empty key)."""
     provider = _check(provider)
     value = (api_key or "").strip()
     if not value:
@@ -116,6 +117,20 @@ def store_api_key(provider: str, api_key: str, cfg: dict) -> str:
             return "keychain"
         log.warning("BYOK key for %s did not verify after keychain write; keeping config.json",
                     provider)
+    # No keychain on this machine: the encrypted vault, when it is open.
+    try:
+        from . import secret_vault
+
+        secret_vault.set(ref, value)
+        _invalidate(ref)
+        if secret_vault.get(ref) == value:
+            cfg[REF_FIELD[provider]] = ref
+            cfg.pop(PLAINTEXT_FIELD[provider], None)
+            return "vault"
+    except Exception as e:
+        log.warning("the key of %s could not go into the vault: %s", provider, e)
+    # Last resort: plain text in config.json, on this machine only. The
+    # Credentials page says so out loud and the migration offers to move it.
     cfg[PLAINTEXT_FIELD[provider]] = value
     cfg.pop(REF_FIELD[provider], None)
     return "config"
