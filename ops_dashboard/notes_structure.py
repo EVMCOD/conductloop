@@ -433,43 +433,58 @@ def propose_index_lines(*, roots: list[Path] | None = None) -> dict[str, Any]:
             if projects_listed > best_hub[0]:
                 best_hub = (projects_listed, path.name, parsed)
     for section in best_hub[2]:
-        tags: set[str] = set()
-        for stem in section["entries"]:
-            note = by_stem.get(stem)
-            if note:
-                tags |= set(note["tags"])
+        listed = [by_stem.get(stem) for stem in section["entries"]]
+        listed = [n for n in listed if n]
         sections.append({
             "title": section["title"],
             "group": section["group"],
-            "tags": tags,
+            "notes": listed,
             "count": len(section["entries"]),
             "hub": best_hub[1],
         })
+
+    headings = [m.group(2).strip() for m in
+                re.finditer(r"^(#{1,6})\s+(.+?)\s*$", text, re.M)] \
+        if (text := _index_text(roots)) else []
 
     proposals: list[dict[str, Any]] = []
     for stem in drift["missing_from_index"]:
         note = by_stem.get(stem)
         if not note:
             continue
+        wanted_tags = set(note["tags"]) - {"project"}
         best = None
-        best_score = 0
+        best_score = 0.0
         for section in sections:
-            if not section["tags"]:
+            listed = section.get("notes") or []
+            if not listed or not wanted_tags:
                 continue
-            shared = set(note["tags"]) & section["tags"]
-            # The project tag itself says nothing about the section.
-            shared -= {"project"}
-            if len(shared) > best_score:
-                best, best_score = section, len(shared)
+            # How many of the notes this section already lists carry the
+            # tags of the candidate. A section of eleven notes has eleven
+            # notes' worth of tags, so "the union contains it" would say
+            # yes to everything.
+            with_tag = sum(1 for n in listed if wanted_tags & set(n["tags"]))
+            score = with_tag / len(listed)
+            if score > best_score:
+                best, best_score = section, score
         proposals.append({
             "stem": stem,
             "title": note["title"],
             "status": note["status"] or "(no status)",
             "tags": [t for t in note["tags"] if t != "project"],
             "line": f"- [[{stem}]] — {note['title']}",
-            "section": best["title"] if best and best_score else "",
-            "section_group": best["group"] if best and best_score else "",
-            "confidence": best_score,
+            # The group the status decides is a fact; the subsection is a
+            # hint, and a tag can mislead (an iOS app listed under the
+            # trading bots pulls every other iOS note with it).
+            "status_section": _status_group(note["status"]),
+            "section": best["title"] if best and best_score >= 0.8 else "",
+            "section_group": best["group"] if best and best_score >= 0.8 else "",
+            "confidence": round(best_score, 2),
+            # Where it goes by default: the group the status decides, which
+            # is a fact. A subsection is only offered when the tags are
+            # unmistakable.
+            "default_section": _group_heading(_status_group(note["status"]),
+                                              headings) or "",
         })
 
     # Grouped the way the index groups things: by status, then by section.
@@ -495,6 +510,302 @@ def propose_index_lines(*, roots: list[Path] | None = None) -> dict[str, Any]:
         "sections": [{"title": s["title"], "group": s["group"], "notes": s["count"]}
                      for s in sections],
     }
+
+
+# ── putting the index back in order ───────────────────────────────────────
+
+# Where a status belongs, by the words the section uses. The words, not the
+# emoji: another vault calls the same section "Active" or "Live".
+STATUS_KEYWORDS = {
+    "active": ("activo", "active", "🟢"),
+    "paused": ("pausado", "paused", "🟡"),
+    "archived": ("archiv", "muerto", "dead", "⚫"),
+    "idea": ("idea",),
+}
+
+COUNTS_RE = re.compile(
+    r"\d+\s+proyectos\s*\(\s*\d+\s+notas activas\s*\+\s*\d+\s+ideas\s*\)")
+
+
+def index_path(*, roots: list[Path] | None = None) -> Path | None:
+    """The index of the projects: the hub that lists the most of them."""
+    roots = roots if roots is not None else _vault_roots()
+    notes = _read_notes(roots)
+    project_stems = {n["stem"] for n in notes
+                     if n["type"] == "project" and n["is_project_page"]}
+    best: tuple[int, Path] | None = None
+    for root in roots:
+        for path in root.rglob("*.md"):
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if _frontmatter(text).get("type", "").lower() != "hub":
+                continue
+            listed = sum(1 for stem in _link_targets(text) if stem in project_stems)
+            if best is None or listed > best[0]:
+                best = (listed, path)
+    return best[1] if best and best[0] else None
+
+
+def _section_of(text: str, heading: str) -> tuple[int, int] | None:
+    """The line range of a section: where it starts and where it ends."""
+    lines = text.splitlines()
+    start = None
+    level = 0
+    for i, line in enumerate(lines):
+        m = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
+        if not m:
+            continue
+        if start is None and heading.lower() in m.group(2).lower():
+            start = i
+            level = len(m.group(1))
+            continue
+        if start is not None and len(m.group(1)) <= level:
+            return (start, i)
+    if start is None:
+        return None
+    return (start, len(lines))
+
+
+def _insert_into_section(lines: list[str], heading: str, entries: list[str]) -> tuple[list[str], bool]:
+    """Put the entries in the section, where they cannot be mistaken for
+    something else.
+
+    A section with subsections (the active ones do) gets the entries right
+    after its own heading: at the end of the group they would read as part
+    of the last subsection, which is how a project ends up filed under
+    "Clientes / agencia" for ever.
+    """
+    start = level = None
+    for i, line in enumerate(lines):
+        m = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
+        if not m:
+            continue
+        if start is None and heading.lower() in m.group(2).lower():
+            start, level = i, len(m.group(1))
+            continue
+        if start is not None and len(m.group(1)) <= level:
+            end = i
+            break
+    else:
+        end = len(lines)
+    if start is None:
+        return lines, False
+    has_subsections = any(
+        re.match(r"^(#{2,6})\s+", ln) and len(re.match(r"^(#{1,6})", ln).group(1)) > level
+        for ln in lines[start + 1:end])
+    if has_subsections:
+        # Right after the heading, before the first subsection.
+        insert_at = start + 1
+        while insert_at < end and not lines[insert_at].strip():
+            insert_at += 1
+        block = [""] + entries + [""]
+        return lines[:insert_at] + block + lines[insert_at:], True
+    # The last non-empty line of the section is where the list ends.
+    insert_at = end
+    while insert_at > start + 1 and not lines[insert_at - 1].strip():
+        insert_at -= 1
+    return lines[:insert_at] + entries + lines[insert_at:], True
+
+
+def _index_text(roots: list[Path]) -> str:
+    """The text of the projects index, or nothing."""
+    path = index_path(roots=roots)
+    if path is None:
+        return ""
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _group_heading(group: str, headings: list[str]) -> str:
+    """The level-two heading that holds this group, by its words."""
+    if not group:
+        return ""
+    words = group.lower().split(" / ")[0].split()
+    for heading in headings:
+        low = heading.lower()
+        if any(w and w in low for w in words):
+            return heading
+    return ""
+
+
+def _status_group(status: str) -> str:
+    """The group a status belongs to, by what the status means.
+
+    This is the one thing the product knows for sure: the note says what
+    it is. The subsection inside the group is a different matter.
+    """
+    if status in ("", "active", "in-progress", "live", "ready", "shipped-to-review"):
+        return "Activos"
+    if status == "paused":
+        return "Pausados"
+    if status in ("archived", "done", "resolved"):
+        return "Muertos / archivados"
+    if status == "idea":
+        return "Ideas"
+    return ""
+
+
+def _home_for(status: str, guessed: str, text: str) -> str:
+    """The section a project of this status belongs to, in this index.
+
+    The status decides (active goes with the active ones); the guess from
+    the tags decides which subsection inside it. A section that is not
+    there is not invented: the line is left for the user to place.
+    """
+    headings = [m.group(2).strip() for m in
+                re.finditer(r"^(#{1,6})\s+(.+?)\s*$", text, re.M)]
+    # The guess from the tags is more precise than the status: it knows
+    # WHICH subsection, and not only which group.
+    if guessed and any(h.strip() == guessed.strip() for h in headings):
+        return guessed
+    keywords = STATUS_KEYWORDS.get(status)
+    if keywords:
+        for heading in headings:
+            low = heading.lower()
+            if any(k in low for k in keywords):
+                return heading
+    return ""
+
+
+def apply_index_lines(stems: list[str] | list[dict[str, Any]], *,
+                      dry_run: bool = True,
+                      roots: list[Path] | None = None) -> dict[str, Any]:
+    """Put the chosen projects back in the index.
+
+    The index is the user's prose, so the product only does three things
+    and nothing else: it adds the lines it was told to add, at the end of
+    the section they belong to, and it updates the counts in the header.
+    Every word the user wrote stays.
+
+    With ``dry_run`` (the default) nothing is touched: the result says
+    what would change, so the user sees it before it happens.
+    """
+    roots = roots if roots is not None else _vault_roots()
+    path = index_path(roots=roots)
+    if path is None:
+        return {"ok": False, "error": "no projects index found"}
+    text = path.read_text(encoding="utf-8", errors="replace")
+    original = text
+
+    proposal = propose_index_lines(roots=roots)
+    by_stem = {p["stem"]: p for p in proposal["proposals"]}
+    # The caller may send just the names, or a name with the section the
+    # user chose for it.
+    chosen: dict[str, str] = {}
+    for entry in stems:
+        if isinstance(entry, dict):
+            if entry.get("stem") in by_stem:
+                chosen[entry["stem"]] = str(entry.get("section") or "")
+        elif entry in by_stem:
+            chosen[entry] = ""
+    wanted = [s for s in chosen if s in by_stem]
+
+    # Which section each one goes to.
+    grouped: dict[str, list[str]] = {}
+    no_home: list[str] = []
+    for stem in wanted:
+        item = by_stem[stem]
+        heading = chosen[stem] or _home_for(item["status"], item["section"], text)
+        if not heading:
+            no_home.append(stem)
+            continue
+        grouped.setdefault(heading, []).append(item["line"])
+
+    lines = text.splitlines()
+    applied: list[str] = []
+    for heading, entries in grouped.items():
+        lines, ok = _insert_into_section(lines, heading, entries)
+        if ok:
+            applied.extend(entries)
+
+    # The counts in the header, and only those.
+    drift = index_drift(roots=roots)
+    active = drift["by_status"].get("active", 0)
+    ideas = drift["by_status"].get("idea", 0)
+    total = drift["projects"]
+    new_text = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+    new_text = COUNTS_RE.sub(f"{total} proyectos ({active} notas activas + {ideas} ideas)",
+                              new_text, count=1)
+
+    out: dict[str, Any] = {
+        "ok": True,
+        "path": str(path),
+        "added": applied,
+        "no_home": no_home,
+        "counts": {"total": total, "active": active, "ideas": ideas},
+        "changed": new_text != original,
+    }
+    if dry_run:
+        out["preview"] = new_text
+        return out
+
+    if new_text == original:
+        out["written"] = False
+        return out
+    # A copy before the change: the index is the user's prose. The first
+    # copy is the one that matters, so it is never overwritten: a second
+    # change must not replace the original with an intermediate state.
+    backup = path.with_suffix(path.suffix + ".conductloop-backup")
+    if not backup.exists():
+        backup.write_text(original, encoding="utf-8")
+    path.write_text(new_text, encoding="utf-8")
+    out["written"] = True
+    out["backup"] = str(backup)
+    _remember_index_change(path, applied, original)
+    return out
+
+
+def _remember_index_change(path: Path, added: list[str], before: str) -> None:
+    """What the product added, so it can take it back."""
+    from . import app_paths
+
+    state_path = app_paths.path("library_index_state.json")
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        if not isinstance(state, dict):
+            state = {}
+    except (OSError, ValueError):
+        state = {}
+    state[str(path)] = {"added": added, "before": before,
+                        "at": int(time.time())}
+    try:
+        state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def undo_index_lines(*, roots: list[Path] | None = None) -> dict[str, Any]:
+    """Take back the lines the product added."""
+    from . import app_paths
+
+    state_path = app_paths.path("library_index_state.json")
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"ok": False, "error": "nothing to undo"}
+    if not isinstance(state, dict) or not state:
+        return {"ok": False, "error": "nothing to undo"}
+    path = Path(list(state.keys())[0])
+    entry = state[str(path)]
+    if not path.exists():
+        return {"ok": False, "error": "the index is not there any more"}
+    text = path.read_text(encoding="utf-8", errors="replace")
+    removed = []
+    for line in entry.get("added") or []:
+        if line in text:
+            text = text.replace(line + "\n", "", 1)
+            removed.append(line)
+    path.write_text(text, encoding="utf-8")
+    state.pop(str(path), None)
+    try:
+        state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+    return {"ok": True, "path": str(path), "removed": removed}
 
 
 def structure(*, attribute: bool = True) -> dict[str, Any]:

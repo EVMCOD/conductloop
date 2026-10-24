@@ -32,6 +32,8 @@ tags: [hub, project]
 
 # Projects
 
+42 proyectos (33 notas activas + 9 ideas), estructura plana.
+
 ## Active
 - [[alpha]] — the first one
 - [[beta]] — the second one
@@ -235,3 +237,70 @@ def test_nothing_is_written_to_the_index(roots):
     before = index.read_text(encoding="utf-8")
     notes_structure.propose_index_lines(roots=roots)
     assert index.read_text(encoding="utf-8") == before
+
+
+# ── putting the index back in order ───────────────────────────────────────
+
+def test_a_dry_run_changes_nothing(roots):
+    from ops_dashboard import notes_structure
+
+    index = roots[0] / "projects" / "_index.md"
+    before = index.read_text(encoding="utf-8")
+    result = notes_structure.apply_index_lines(["gamma"], dry_run=True, roots=roots)
+    assert result["ok"] is True
+    assert index.read_text(encoding="utf-8") == before
+    assert "- [[gamma]] — Gamma" in result["preview"]
+
+
+def test_the_line_goes_in_the_section_it_belongs_to(roots):
+    from ops_dashboard import notes_structure
+
+    result = notes_structure.apply_index_lines(["gamma"], dry_run=False, roots=roots)
+    text = (roots[0] / "projects" / "_index.md").read_text(encoding="utf-8")
+    assert "- [[gamma]] — Gamma" in text
+    assert result["written"] is True
+    # The user's own words are still there.
+    assert "# Projects" in text
+    assert "the first one" in text
+
+
+def test_the_counts_are_updated_and_nothing_else(roots):
+    from ops_dashboard import notes_structure
+
+    before = (roots[0] / "projects" / "_index.md").read_text(encoding="utf-8")
+    notes_structure.apply_index_lines(["gamma"], dry_run=False, roots=roots)
+    after = (roots[0] / "projects" / "_index.md").read_text(encoding="utf-8")
+    # The only difference is the added line and the counts.
+    added = [ln for ln in after.splitlines() if ln not in before.splitlines()]
+    # Two things change: the line that was added, and the counts.
+    assert len(added) == 2, added
+    assert any(ln.startswith("- [[gamma]]") for ln in added)
+    # The counts in the header now say what the vault holds.
+    assert "42 proyectos (33 notas activas" not in after
+    assert "proyectos (" in after
+
+
+def test_there_is_a_copy_before_the_change(roots):
+    from ops_dashboard import notes_structure
+
+    index = roots[0] / "projects" / "_index.md"
+    before = index.read_text(encoding="utf-8")
+    result = notes_structure.apply_index_lines(["gamma"], dry_run=False, roots=roots)
+    assert result["backup"]
+    assert (roots[0] / "projects" / "_index.md.conductloop-backup").read_text(
+        encoding="utf-8") == before
+
+
+def test_it_can_be_taken_back(roots, tmp_path, monkeypatch):
+    import ops_dashboard.app_paths as app_paths
+    from ops_dashboard import notes_structure
+
+    monkeypatch.setattr(app_paths, "path",
+                        lambda rel, legacy=None: tmp_path / rel)
+    index = roots[0] / "projects" / "_index.md"
+    before = index.read_text(encoding="utf-8")
+    notes_structure.apply_index_lines(["gamma"], dry_run=False, roots=roots)
+    assert index.read_text(encoding="utf-8") != before
+    undone = notes_structure.undo_index_lines()
+    assert undone["ok"] is True
+    assert "- [[gamma]] — Gamma" not in index.read_text(encoding="utf-8")
