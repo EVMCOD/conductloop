@@ -37,6 +37,8 @@ PAGES_DIRNAME = "pages"
 AREAS_DIRNAME = "areas"
 INDEX_NAME = "Index.md"
 PAGE_MARKER = "<!-- conductloop:page -->"
+# How many open things a page shows. The rest are in the note, one click away.
+MAX_OPEN_ITEMS = 12
 
 # \w keeps the letters of every alphabet: a key with an accent is still a
 # readable filename, and the ones that are not letters become dashes.
@@ -88,13 +90,19 @@ class Links:
         self.vault = vault
         self.here = here
 
-    def note(self, path: str | Path, label: str) -> str:
-        """A link to a note of the user: a wikilink when it is in the vault."""
+    def note(self, path: str | Path, label: str, anchor: str = "") -> str:
+        """A link to a note of the user: a wikilink when it is in the vault.
+
+        With an ``anchor`` it points at a heading inside the note, which is
+        how a line of open work finds the exact place where it was
+        written.
+        """
         target = Path(path)
         if self.vault is not None:
             rel = _relative(target, self.vault)
             if rel is not None:
-                return f"[[{rel}|{label}]]"
+                suffix = f"#{anchor}" if anchor else ""
+                return f"[[{rel}{suffix}|{label}]]"
         return f"{label} — `{target}`"
 
     def page(self, path: Path, label: str) -> str:
@@ -146,6 +154,16 @@ def _plural(count: int, singular: str, plural: str | None = None) -> str:
     """'1 note', '3 notes'."""
     word = singular if count == 1 else (plural or f"{singular}s")
     return f"{count} {word}"
+
+
+def _plain(text: str) -> str:
+    """A label without the markdown marks.
+
+    The label of a wikilink is plain text: Obsidian does not render
+    emphasis inside it, so the asterisks would be shown as they are.
+    """
+    out = re.sub(r"[*_`~]", "", text or "")
+    return re.sub(r"\s+", " ", out).strip()
 
 
 def _group(documents: list[dict[str, Any]], areas: bool) -> dict[str, list[dict[str, Any]]]:
@@ -290,7 +308,9 @@ def _header(kind: str, key: str, title: str, intro: str, facts: list[str]) -> li
 def _project_page(proj: dict[str, Any], notes: list[dict[str, Any]], *,
                   vault: Path | None, page_path: Path, index_path: Path,
                   unlinked: dict[str, list[dict[str, Any]]],
-                  handoffs: list[dict[str, Any]]) -> str:
+                  handoffs: list[dict[str, Any]],
+                  open_items: list[dict[str, Any]],
+                  open_total: int = 0) -> str:
     """One project: its notes, its repos, and what its page is missing."""
     links = Links(vault, page_path)
     key = proj["key"]
@@ -321,6 +341,28 @@ def _project_page(proj: dict[str, Any], notes: list[dict[str, Any]], *,
             lines.append(f"- **{when}** — {links.note(row['path'], row['title'] or 'Handoff')}")
             if row.get("encargo"):
                 lines.append(f"  > {row['encargo']}")
+        lines.append("")
+
+    if open_items:
+        lines.append("## What remains open")
+        lines.append("")
+        if open_total > len(open_items):
+            lines.append(f"{open_total} things are open. The ones that block, "
+                         f"and the newest of the rest.")
+            lines.append("")
+        section = ""
+        for row in open_items:
+            if row["section"] != section:
+                section = row["section"]
+                mark = " ⚠️" if row.get("blocking") else ""
+                lines.append(f"**{section}**{mark}")
+                lines.append("")
+            plain = _plain(row["text"])
+            if len(plain) > 120:
+                plain = plain[:119].rstrip() + "…"
+            owner = row.get("owner") or ""
+            label = f"{owner} · {plain}" if owner else plain
+            lines.append(f"- {links.note(row['path'], label, anchor=row['section'])}")
         lines.append("")
 
     lines.append("## Notes")
@@ -590,6 +632,14 @@ def export_pages(*, destinations: list[Path],
 
     unlinked = _unlinked_by_project(list(data.get("unlinked") or []), by_project)
     handoffs = _handoffs(documents)
+    # What is still open, and where he wrote it down.
+    try:
+        from . import open_work
+
+        open_all = open_work.scan()
+    except Exception as e:
+        log.warning("could not read the open work: %s", e)
+        open_all = {}
 
     out: dict[str, Any] = {"folders": [], "pages": 0, "written": 0, "removed": 0}
     for destination in destinations:
@@ -608,10 +658,13 @@ def export_pages(*, destinations: list[Path],
         for proj in projects_out:
             key = proj["key"]
             page = folder / f"{proj['file']}.md"
+            rows_open = open_all.get(key) or []
             text = _project_page(proj, by_project.get(key, []), vault=vault,
                                  page_path=page, index_path=index_path,
                                  unlinked=unlinked,
-                                 handoffs=handoffs.get(key) or [])
+                                 handoffs=handoffs.get(key) or [],
+                                 open_items=rows_open[:MAX_OPEN_ITEMS],
+                                 open_total=len(rows_open))
             if _write_if_changed(page, text):
                 written += 1
             keep.add(page.name)
