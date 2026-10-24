@@ -101,7 +101,13 @@ def test_every_link_points_at_a_note_that_is_really_there(vault):
                 continue          # quoted text: his words, his links
             for target in WIKILINK.findall(line):
                 checked += 1
-                assert (vault["root"] / f"{target}.md").exists(), f"{target} in {page.name}"
+                note, _, anchor = target.partition("#")
+                path = vault["root"] / f"{note}.md"
+                assert path.exists(), f"{target} in {page.name}"
+                if anchor:
+                    # An anchor has to be a heading that is really there.
+                    assert f"## {anchor}" in path.read_text(encoding="utf-8"), \
+                        f"the heading '{anchor}' is not in {path.name}"
     assert checked >= 4
 
 

@@ -1,0 +1,160 @@
+"""What is still open, and where it was written down.
+
+Enrique writes the open work as unchecked boxes under a heading that names
+the project. The product was indexing the boxes and losing the two things
+that make them useful: **the section they are in** (his own
+classification) and **the project the section belongs to**.
+
+These tests are about that handover: the item finds its project, keeps
+the heading, and lands in the page where somebody will look for it.
+"""
+from __future__ import annotations
+
+import pytest
+
+from ops_dashboard import projects
+
+
+@pytest.fixture()
+def env(tmp_path, monkeypatch):
+    """A vault with one note of open work, and two projects to attribute to."""
+    from ops_dashboard import db
+
+    monkeypatch.setenv("CONDUCTLOOP_DB_PATH", str(tmp_path / "open.db"))
+    monkeypatch.setenv("OPS_DATA_DIR", str(tmp_path))
+    db.DB_PATH = tmp_path / "open.db"  # type: ignore[attr-defined]
+    db.init_db()
+    monkeypatch.setattr(projects, "PROJECTS", [
+        projects.Project(key="deepwick", name="DeepWick", aliases=["dw"]),
+        projects.Project(key="rentcla", name="Rentcla", aliases=[]),
+    ])
+    return tmp_path
+
+
+def _note_with_work(env, name="TODO.md", body="", project=None):
+    """A note with open boxes, indexed the way the product indexes it."""
+    from ops_dashboard import db, db_todos
+
+    root = env / "vault"
+    root.mkdir(exist_ok=True)
+    # A vault is a folder with .obsidian in it: that is what makes the
+    # links of the pages resolve.
+    (root / ".obsidian").mkdir(exist_ok=True)
+    path = root / name
+    path.write_text(body, encoding="utf-8")
+    db.upsert_document(source="obsidian", path=str(path), title=name, content=body,
+                       metadata={}, mtime=1780000000, size=len(body))
+    with db.db() as conn:
+        row = conn.execute("SELECT id FROM documents WHERE path = ?", (str(path),)).fetchone()
+    doc_id = int(row["id"])
+    db_todos.replace_todos("obsidian", [
+        {"doc_id": doc_id, "content": "algo abierto", "done": False, "mtime": 1780000000,
+         "project_key": project},
+    ])
+    return path
+
+
+def test_an_open_item_inherits_the_project_of_its_section(env):
+    """The section names the project; the item is in that section."""
+    from ops_dashboard import open_work
+
+    _note_with_work(env, body=(
+        "## 🤖 Deepwick — Lenguaje e IA (estado real: 23-oct, 13:50)\n"
+        "\n"
+        "- [ ] Leer el script de demanda cuando haya volumen\n"
+        "- [x] Algo ya hecho\n"
+    ))
+    data = open_work.scan()
+    assert "deepwick" in data
+    rows = data["deepwick"]
+    assert len(rows) == 1, "a done box is not open work"
+    assert rows[0]["text"].startswith("Leer el script")
+    assert rows[0]["section"] == "🤖 Deepwick — Lenguaje e IA (estado real: 23-oct, 13:50)"
+
+
+def test_the_owner_at_the_end_of_the_line_is_read(env):
+    """'- [ ] hacer X — Claude' says whose it is."""
+    from ops_dashboard import open_work
+
+    _note_with_work(env, body=(
+        "## 🤖 Deepwick — Lenguaje e IA\n"
+        "\n"
+        "- [ ] Leer el script de demanda — Claude\n"
+    ))
+    rows = open_work.scan()["deepwick"]
+    assert rows[0]["owner"] == "Claude"
+    assert rows[0]["text"] == "Leer el script de demanda"
+
+
+def test_a_section_that_says_it_blocks_is_flagged(env):
+    from ops_dashboard import open_work
+
+    _note_with_work(env, body=(
+        "## 🤖 Deepwick — Decisiones pendientes (bloqueantes)\n"
+        "\n"
+        "- [ ] Decidir si se ocultan las funciones sin uso\n"
+    ))
+    rows = open_work.scan()["deepwick"]
+    assert rows[0]["blocking"] is True
+
+
+def test_the_date_of_the_section_is_understood(env):
+    from ops_dashboard import open_work
+
+    _note_with_work(env, body=(
+        "## 🤖 Deepwick — Retención (estado real: 24-oct, 22:45)\n"
+        "\n"
+        "- [ ] Probar a mano en el navegador\n"
+    ))
+    rows = open_work.scan()["deepwick"]
+    assert rows[0]["date"] == "2026-10-24"
+
+
+def test_what_blocks_comes_first(env):
+    from ops_dashboard import open_work
+
+    _note_with_work(env, body=(
+        "## 🤖 Deepwick — Retención (estado real: 24-oct)\n"
+        "\n"
+        "- [ ] Algo normal\n"
+        "\n"
+        "## 🤖 Deepwick — Decisiones pendientes (bloqueantes)\n"
+        "\n"
+        "- [ ] Algo que bloquea\n"
+    ))
+    rows = open_work.scan()["deepwick"]
+    assert rows[0]["text"] == "Algo que bloquea"
+    assert rows[0]["blocking"] is True
+
+
+def test_the_page_shows_it_and_links_to_the_exact_place(env, tmp_path):
+    """The item lands in the page of its project, pointing at the heading."""
+    from ops_dashboard import db, vault_pages
+
+    _note_with_work(env, body=(
+        "## 🤖 Deepwick — Lenguaje e IA (estado real: 23-oct, 13:50)\n"
+        "\n"
+        "- [ ] Leer el script de demanda — Claude\n"
+    ))
+    with db.db() as conn:
+        conn.execute("UPDATE documents SET project_key='deepwick'")
+        conn.commit()
+
+    # The map is written inside the vault, where it belongs.
+    export = env / "vault" / "ConductLoop"
+    export.mkdir(exist_ok=True)
+    vault_pages.export_pages(destinations=[export], data={
+        "projects": [{"key": "deepwick", "name": "DeepWick", "parent": None, "notes": 1,
+                      "ids": [1], "recent": [], "repos": [], "known": True}],
+        "ideas": [], "drift": {"missing_from_index": [], "links_to_nothing": []},
+        "unlinked": [], "suggestions": [],
+        "totals": {"documents": 1, "attributed": 1, "loose": 0},
+    })
+    text = (export / "pages" / "deepwick.md").read_text(encoding="utf-8")
+    assert "## What remains open" in text
+    assert "Leer el script de demanda" in text
+    assert "Claude" in text
+    # The link points at the heading, and the heading is really there.
+    assert "#🤖 Deepwick — Lenguaje e IA (estado real: 23-oct, 13:50)" in text
+    note = (env / "vault" / "TODO.md").read_text(encoding="utf-8")
+    assert "## 🤖 Deepwick — Lenguaje e IA (estado real: 23-oct, 13:50)" in note
