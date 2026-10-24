@@ -222,3 +222,45 @@ def test_an_item_whose_text_names_the_project_finds_it(env):
     data = open_work.scan()
     assert "deepwick" in data, "the line names the project"
     assert len(data["deepwick"]) == 1
+
+
+def test_the_agent_gets_the_waiting_page_in_its_own_folder(env, tmp_path):
+    """The agent's first read is a page, not a 39 KB map."""
+    from ops_dashboard import db, notes_structure
+
+    _note_with_work(env, body=(
+        "## 🤖 Deepwick — Decisiones pendientes (bloqueantes)\n"
+        "\n"
+        "- [ ] Decidir si se ocultan las funciones sin uso\n"
+    ))
+    with db.db() as conn:
+        conn.execute("UPDATE documents SET project_key='deepwick'")
+        conn.commit()
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    export = env / "vault" / "ConductLoop"
+    export.mkdir(exist_ok=True)
+    with db.db() as conn:
+        conn.execute("UPDATE documents SET project_key='deepwick'")
+        conn.commit()
+
+    import ops_dashboard.library as lib
+
+    original = lib.memory_workspace
+    try:
+        lib.memory_workspace = lambda: workspace
+        notes_structure.write_agent_map(filename="PROJECTS.md", pointer=True, also_to=[export])
+    finally:
+        lib.memory_workspace = original
+    waiting = workspace / "WAITING.md"
+    assert waiting.exists(), "the agent must find it without touching the vault"
+    text = waiting.read_text(encoding="utf-8")
+    assert "Decidir si se ocultan las funciones sin uso" in text
+    # The paths are whole, because a wikilink means nothing outside Obsidian.
+    assert "TODO.md" in text
+
+    # And the pointer sends the agent there first.
+    pointer = (workspace / "AGENTS.md").read_text(encoding="utf-8")
+    assert "WAITING.md" in pointer
+    assert pointer.index("WAITING.md") < pointer.index("PROJECTS.md")

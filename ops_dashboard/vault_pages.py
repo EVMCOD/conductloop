@@ -37,6 +37,9 @@ PAGES_DIRNAME = "pages"
 AREAS_DIRNAME = "areas"
 INDEX_NAME = "Index.md"
 WAITING_NAME = "Waiting.md"
+# The name it has in the agent's own folder: it is not a page of a vault
+# there, it is a file the agent reads before it does anything else.
+WAITING_FILENAME = "WAITING.md"
 PAGE_MARKER = "<!-- conductloop:page -->"
 # How many open things a page shows. The rest are in the note, one click away.
 MAX_OPEN_ITEMS = 12
@@ -82,6 +85,28 @@ def _relative(target: Path, root: Path) -> str | None:
     except (ValueError, OSError):
         return None
     return rel.with_suffix("").as_posix()
+
+
+class AgentLinks:
+    """Links for a reader that is not Obsidian.
+
+    A wikilink is beautiful inside a vault and opaque outside it: an agent
+    that reads ``WAITING.md`` in its own workspace needs the whole path
+    and the heading to go and look at the note.
+    """
+
+    def __init__(self, vault: Path | None):
+        self.vault = vault
+
+    def note(self, path: str | Path, label: str, anchor: str = "") -> str:
+        target = Path(path)
+        where = f"`{target}`"
+        if anchor:
+            where += f" → \"{anchor}\""
+        return f"{label} — {where}"
+
+    def page(self, path: Path, label: str) -> str:
+        return f"{label} — `{path}`"
 
 
 class Links:
@@ -310,14 +335,14 @@ def _header(kind: str, key: str, title: str, intro: str, facts: list[str]) -> li
 
 def _waiting_page(open_all: dict[str, list[dict[str, Any]]], *, vault: Path | None,
                   page_path: Path, projects_out: list[dict[str, Any]],
-                  files: dict[str, str]) -> str:
+                  files: dict[str, str], for_agent: bool = False) -> str:
     """What is waiting for you: the open work of every project at once.
 
     The page of a project tells you about that project. This one tells you
     what is blocking everything, which is a question that does not belong
     to any single project.
     """
-    links = Links(vault, page_path)
+    links = AgentLinks(vault) if for_agent else Links(vault, page_path)
     blocking = [row for rows in open_all.values() for row in rows if row.get("blocking")]
     total = sum(len(rows) for rows in open_all.values())
 
@@ -676,6 +701,37 @@ def latest_handoffs() -> dict[str, dict[str, Any]]:
     return {key: rows[0] for key, rows in handoffs.items() if rows}
 
 
+def open_work() -> dict[str, list[dict[str, Any]]]:
+    """The open work of every project.
+
+    The scan lives in its own module; this is the door to it, and it never
+    lets a broken scan take the map down with it.
+    """
+    from . import open_work as _open_work
+
+    try:
+        return _open_work.scan()
+    except Exception as e:
+        log.warning("could not read the open work: %s", e)
+        return {}
+
+
+def waiting_pages(*, data: dict[str, Any],
+                  open_all: dict[str, list[dict[str, Any]]],
+                  vault: Path | None, pages_dir: Path) -> tuple[str, str]:
+    """The waiting page, twice: the one for the vault and the one for an agent.
+
+    The agent's copy carries the whole path of every note, because a
+    wikilink means nothing outside Obsidian.
+    """
+    projects_out = [p for p in data.get("projects") or [] if p.get("notes")]
+    files = _unique([p["key"] for p in projects_out])
+    common = {"vault": vault, "page_path": pages_dir / WAITING_NAME,
+              "projects_out": projects_out, "files": files}
+    return (_waiting_page(open_all, **common),
+            _waiting_page(open_all, **common, for_agent=True))
+
+
 def export_pages(*, destinations: list[Path],
                  data: dict[str, Any] | None = None) -> dict[str, Any]:
     """Write the map as pages, in every destination.
@@ -712,13 +768,7 @@ def export_pages(*, destinations: list[Path],
     unlinked = _unlinked_by_project(list(data.get("unlinked") or []), by_project)
     handoffs = _handoffs(documents)
     # What is still open, and where he wrote it down.
-    try:
-        from . import open_work
-
-        open_all = open_work.scan()
-    except Exception as e:
-        log.warning("could not read the open work: %s", e)
-        open_all = {}
+    open_all = open_work()
 
     out: dict[str, Any] = {"folders": [], "pages": 0, "written": 0, "removed": 0}
     for destination in destinations:
