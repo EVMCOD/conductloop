@@ -94,3 +94,32 @@ def test_the_vault_half_says_what_moved(vault, monkeypatch):
     assert "## 🗺️ El vault" in text
     assert "DeepWick" in text or "deepwick" in text
     assert "Research" in text
+
+
+def test_the_daily_note_says_what_was_asked(vault, monkeypatch):
+    """The project that moved, and the encargo of its newest handoff.
+
+    "6 notes touched" says that something happened. The encargo says what
+    the work is — and that is the line a new agent (or a Monday morning)
+    needs.
+    """
+    from ops_dashboard import daily, db
+
+    daily_dir, _note = vault
+    db.upsert_document(source="obsidian", path="/v/deepwick.md", title="Deepwick",
+                       content="x", metadata={}, mtime=1780000000, size=1)
+    with db.db() as conn:
+        conn.execute("UPDATE documents SET project_key='deepwick'")
+        conn.commit()
+    monkeypatch.setattr(daily, "vault_summary",
+                        lambda day: {"notes": [{"title": "Deepwick", "path": "/v/deepwick.md",
+                                                "project": "deepwick", "source": "obsidian"}],
+                                     "projects": [("deepwick", 6)],
+                                     "ideas": [],
+                                     "handoffs": {"deepwick": {
+                                         "title": "EVQL → Deepwick",
+                                         "date": "2026-10-23",
+                                         "encargo": "que todo pase a deepwick"}}})
+    out = daily.write_daily("2026-10-24", out_dir=daily_dir)
+    text = out.read_text(encoding="utf-8")
+    assert "que todo pase a deepwick" in text
