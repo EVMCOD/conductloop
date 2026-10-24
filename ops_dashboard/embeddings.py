@@ -20,12 +20,15 @@ documents (not playbook entries, not live_urls).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import urllib.error
 import urllib.request
 
 from . import db
+
+log = logging.getLogger("conductloop.embeddings")
 
 # Lazy-loaded so the rest of the app doesn't pay the model import cost.
 _MODEL = None
@@ -123,14 +126,20 @@ def _embed_remote(text: str, *, kind: str = "db") -> list[float]:
 
 
 def engine() -> str:
-    """Which engine is in use: "local", "onnx", "provider", "remote" or "none"."""
+    """Which engine is in use: "provider", "local", "remote" or "none".
+
+    The provider comes first, for the same reason :func:`embed` prefers
+    it: the configured choice is the user's, and a development checkout
+    that quietly used a different engine would index the world differently
+    than the app does.
+    """
+    if _provider_engine() is not None:
+        return "provider"
     try:
         _model()
         return "local"
     except EmbeddingsUnavailable:
         pass
-    if _provider_engine() is not None:
-        return "provider"
     key, _ = _remote_config()
     return "remote" if key else "none"
 
@@ -164,22 +173,13 @@ def ensure_schema() -> None:
 
 
 def embed(text: str, *, kind: str = "db") -> list[float]:
-    """Embed a text with whichever engine is available.
+    """Embed a text with whichever engine is configured.
 
-    The order is: the local torch model, then a local ONNX model, then
-    whatever embedding provider is set up (Ollama, an OpenAI-compatible
-    server…), and only then the remote API. The local ones come first
-    because they are free, private and not rate limited; the remote one
-    costs money per call.
+    The provider comes first, even where torch is installed: the whole
+    point of configuring a provider is that the choice is the user's, and a
+    development checkout that quietly used a different model than the app
+    would index the world differently than the app does.
     """
-    try:
-        m = _model()
-    except EmbeddingsUnavailable:
-        m = None
-    if m is not None:
-        v = m.encode(text, normalize_embeddings=True)
-        return [float(x) for x in v]
-
     provider = _provider_engine()
     if provider is not None:
         try:
@@ -187,10 +187,16 @@ def embed(text: str, *, kind: str = "db") -> list[float]:
             if vectors:
                 return [float(x) for x in vectors[0]]
         except Exception:
-            # A provider that is set up but not answering must not be the end
-            # of the road: the remote API may still be there.
-            pass
-    return _embed_remote(text, kind=kind)
+            # A provider that is set up but not answering must not be the
+            # end of the road: the next engine may still work.
+            log.debug("the embedding provider failed; trying the next engine",
+                      exc_info=True)
+    try:
+        m = _model()
+    except EmbeddingsUnavailable:
+        return _embed_remote(text, kind=kind)
+    v = m.encode(text, normalize_embeddings=True)
+    return [float(x) for x in v]
 
 
 def _provider_engine():
@@ -249,26 +255,22 @@ def index_document(doc_id: int, content: str, model_name: str | None = None) -> 
 
 
 def run(limit: int | None = None) -> dict:
-    """Embed all documents that don't have an embedding yet (or whose content changed)."""
+    """Embed all documents that don't have an embedding yet (or whose content changed).
+
+    A document whose vector was made with a *different* model is embedded
+    again: the vectors of two models are not comparable, so keeping them
+    would leave the search answering with the old model's view of the world.
+    """
     ensure_schema()
+    model = engine_model()
     with db.db() as conn:
         rows = conn.execute(
             """
-            SELECT d.id, d.content
-            FROM documents d
-            LEFT JOIN embeddings e ON e.doc_id = d.id
-            WHERE e.doc_id IS NULL
-               OR length(d.content) != (
-                   SELECT length(d2.content) FROM documents d2 WHERE d2.id = d.id
-               )
-            LIMIT ?
-            """ if False else
-            """
             SELECT d.id, d.content FROM documents d
             LEFT JOIN embeddings e ON e.doc_id = d.id
-            WHERE e.doc_id IS NULL
+            WHERE e.doc_id IS NULL OR e.model IS NOT ?
             """ + (" LIMIT ?" if limit else ""),
-            (limit,) if limit else (),
+            (model,) + ((limit,) if limit else ()),
         ).fetchall()
 
     n = 0

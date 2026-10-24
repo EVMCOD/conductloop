@@ -507,6 +507,7 @@ def propose_index_lines(*, roots: list[Path] | None = None) -> dict[str, Any]:
     # and inventing one is a decision about the index, not about a note.
     unplaced = [p for p in proposals if not p["default_section"]]
     orphans = unlinked_notes(roots=roots)
+    ideas = propose_ideas(roots=roots)
 
     return {
         "count": len(proposals),
@@ -515,6 +516,8 @@ def propose_index_lines(*, roots: list[Path] | None = None) -> dict[str, Any]:
         "unplaced": unplaced,
         "unplaced_section": NEW_SECTION_TITLE,
         "orphans": orphans,
+        "ideas": ideas,
+        "ideas_section": IDEAS_SECTION_TITLE,
         "sections": [{"title": s["title"], "group": s["group"], "notes": s["count"]}
                      for s in sections],
     }
@@ -531,10 +534,20 @@ STATUS_KEYWORDS = {
     "idea": ("idea",),
 }
 
+# Tags that say nothing about what a note is about. A daily note tagged
+# "daily" is not an idea about daily notes.
+NOT_A_THEME = {
+    "daily", "log", "note", "notes", "inbox", "todo", "wip", "draft", "temp",
+    "tmp", "journal", "meeting", "meta", "misc", "n/a", "none", "readme",
+    "changelog", "index", "moc", "home",
+}
+
 # The section the product offers for the projects that fit nowhere else.
 NEW_SECTION_TITLE = "📥 Sin clasificar"
 # The section it adds to a project page for the notes it forgot to link.
 ORPHAN_SECTION_TITLE = "📚 Documentación"
+# The section it offers for the ideas that keep coming back.
+IDEAS_SECTION_TITLE = "💡 Ideas"
 
 COUNTS_RE = re.compile(
     r"\d+\s+proyectos\s*\(\s*\d+\s+notas activas\s*\+\s*\d+\s+ideas\s*\)")
@@ -900,6 +913,126 @@ def undo_index_lines(*, roots: list[Path] | None = None) -> dict[str, Any]:
     except OSError:
         pass
     return {"ok": True, "path": str(path), "removed": removed}
+
+
+def propose_ideas(*, roots: list[Path] | None = None,
+                  min_notes: int = 5) -> list[dict[str, Any]]:
+    """The ideas that keep coming back.
+
+    The loose notes are not noise: they are the ideas that have not found a
+    project yet. A theme with notes in it is an idea, and the more notes it
+    has the more it is one.
+
+    The theme is a tag, because a tag is what the notes themselves say.
+    """
+    roots = roots if roots is not None else _vault_roots()
+    notes = _read_notes(roots)
+    project_stems = {n["stem"] for n in notes
+                     if n["type"] == "project" and n["is_project_page"]}
+    # The notes that are not a project page of their own.
+    loose = [n for n in notes if n["stem"] not in project_stems]
+
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for note in loose:
+        for tag in note["tags"]:
+            if tag in ("project", "idea", "hub") or tag in NOT_A_THEME:
+                continue
+            groups.setdefault(tag, []).append(note)
+
+    out: list[dict[str, Any]] = []
+    for tag, items in groups.items():
+        if len(items) < min_notes:
+            continue
+        items.sort(key=lambda n: -n["mtime"])
+        out.append({
+            "theme": tag,
+            "title": tag.replace("-", " ").replace("_", " ").capitalize(),
+            "notes": len(items),
+            "lines": [f"- [[{n['stem']}]] — {n['title']}" for n in items[:12]],
+            "recent": [{"stem": n["stem"], "title": n["title"], "path": n["path"]}
+                       for n in items[:5]],
+        })
+    out.sort(key=lambda item: -item["notes"])
+    return out
+
+
+PROPOSAL_FILENAME = "PROPOSAL.md"
+
+
+def write_proposal(*, filename: str = PROPOSAL_FILENAME) -> dict[str, Any] | None:
+    """Write what the product would do, for the user to find in the morning.
+
+    The nightly pass draws the map and notices what fell out of the index;
+    this writes it down where the next agent — and the user — will see it.
+    It proposes; it does not touch the user's files.
+    """
+    from . import library
+
+    workspace = library.memory_workspace()
+    path = workspace / filename
+    proposal = propose_index_lines()
+    drift = proposal and index_drift()
+    ideas = proposal.get("ideas") or []
+    orphans = proposal.get("orphans") or []
+    unplaced = proposal.get("unplaced") or []
+
+    pending = len(proposal.get("proposals") or []) + len(unplaced) + len(orphans)
+    if not pending:
+        # Nothing to propose: the file is removed rather than left saying
+        # "nothing to do" for ever.
+        if path.exists():
+            path.unlink()
+        return None
+
+    lines = ["# What the product would do", "",
+             "Drawn by the nightly pass. Nothing has been changed: these are the",
+             "lines that would go where they belong.", ""]
+    if proposal.get("proposals"):
+        lines.append(f"## Projects that are in no index ({len(proposal['proposals'])})")
+        lines.append("")
+        for block in proposal["blocks"]:
+            lines.append(f"### {block['status']}")
+            lines.extend(block["lines"])
+            lines.append("")
+    if unplaced:
+        lines.append(f"## Projects that fit in no section ({len(unplaced)})")
+        lines.append("")
+        for item in unplaced:
+            lines.append(f"- {item['line']}")
+        lines.append("")
+        lines.append(f"A section for them would be called “{proposal['unplaced_section']}”.")
+        lines.append("")
+    if orphans:
+        lines.append(f"## Notes a project page does not link ({len(orphans)})")
+        lines.append("")
+        for row in orphans:
+            lines.append(f"- **{row['title']}** — {row['count']} note(s): "
+                         + ", ".join(f"[[{s}]]" for s in row["orphans"]))
+        lines.append("")
+    if ideas:
+        lines.append(f"## Ideas that keep coming back ({len(ideas)})")
+        lines.append("")
+        for idea in ideas[:10]:
+            sample = ", ".join(f"[[{n['stem']}]]" for n in idea["recent"][:3])
+            lines.append(f"- **{idea['title']}** — {idea['notes']} notes · {sample}")
+        if len(ideas) > 10:
+            lines.append(f"- … and {len(ideas) - 10} more")
+        lines.append("")
+    if drift:
+        broken = drift.get("links_to_nothing") or []
+        if broken:
+            lines.append(f"## Links that point to nothing ({len(broken)})")
+            lines.append("")
+            for stem in broken:
+                lines.append(f"- {stem}")
+            lines.append("")
+    lines.append(f"_Drawn {time.strftime('%Y-%m-%d %H:%M')} · "
+                 f"{drift['projects'] if drift else 0} projects in the vault_")
+
+    workspace.mkdir(parents=True, exist_ok=True)
+    text = "\n".join(lines) + "\n"
+    _write_if_changed(path, text)
+    return {"path": str(path), "bytes": len(text.encode("utf-8")), "pending": pending}
 
 
 def structure(*, attribute: bool = True) -> dict[str, Any]:
@@ -1268,7 +1401,8 @@ def write_agent_map(*, filename: str = MAP_FILENAME, pointer: bool = True,
         "change": change,
     }
     if pointer:
-        out["pointer"] = write_agent_pointer(workspace, summary=summarize_change(change))
+        out["pointer"] = write_agent_pointer(workspace, summary=summarize_change(change),
+                                             proposal=proposal_path(workspace))
     # The same map where the notes live, so it travels with them.
     copies: list[str] = []
     for destination in (also_to or []):
@@ -1284,8 +1418,19 @@ def write_agent_map(*, filename: str = MAP_FILENAME, pointer: bool = True,
     return out
 
 
+def proposal_path(workspace: Path | None = None) -> str:
+    """The proposal file, when there is one waiting."""
+    if workspace is None:
+        from . import library
+
+        workspace = library.memory_workspace()
+    path = workspace / PROPOSAL_FILENAME
+    return str(path) if path.exists() else ""
+
+
 def write_agent_pointer(workspace: Path | None = None, *,
-                        summary: str | None = None) -> dict[str, Any]:
+                        summary: str | None = None,
+                        proposal: str = "") -> dict[str, Any]:
     """Make the agent's own instructions point at the map.
 
     The block is marked, so it can be refreshed without touching the rest
@@ -1299,6 +1444,10 @@ def write_agent_pointer(workspace: Path | None = None, *,
         workspace = library.memory_workspace()
     path = workspace / "AGENTS.md"
     block = _pointer_block(summary or "> Last change: the map has just been drawn.")
+    if proposal:
+        block = block.replace(
+            f"{POINTER_END}",
+            f">\n> There are things waiting for you in `{PROPOSAL_FILENAME}`.\n{POINTER_END}")
     try:
         current = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
