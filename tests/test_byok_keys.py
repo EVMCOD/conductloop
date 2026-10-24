@@ -96,12 +96,22 @@ def test_new_key_goes_to_keychain_and_config_keeps_only_ref(monkeypatch):
     assert next(s for s in status if s["name"] == "openai")["key_storage"] == "keychain"
 
 
-def test_new_key_without_keychain_keeps_historic_config_storage(monkeypatch):
+def test_new_key_without_keychain_goes_to_the_encrypted_vault(monkeypatch):
+    """Without a keychain the key is not left in plain text.
+
+    It used to stay in ``config.json`` where anybody who could read the file
+    could read the key. Now it goes into the vault: an encrypted file whose
+    key comes from the passphrase the user typed in the app.
+    """
+    from ops_dashboard import secret_vault
+
     FakeKeychain(enabled=False).install(monkeypatch)
     brain.set_provider_key("openai", api_key=FAKE)
-    assert _cfg() == {"openai_api_key": FAKE}
-    assert not (brain.CONFIG_PATH.parent / "secrets").exists()  # no file fallback either
+    assert _cfg() == {"openai_api_key_ref": "byok.openai.default"}
+    assert FAKE not in brain.CONFIG_PATH.read_text()
     assert byok_keys.status(_cfg())["keychain_available"] is False
+    # And it really is in the vault.
+    assert secret_vault.get("byok.openai.default") == FAKE
 
 
 def test_unverified_keychain_write_falls_back_to_config(monkeypatch):
