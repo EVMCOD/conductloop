@@ -135,6 +135,38 @@ def library_apply(handler) -> None:
     _send_json(handler, 200, {"ok": True, **result})
 
 
+@router.post("/api/library/link-orphans")
+@_local_only
+def library_link_orphans(handler) -> None:
+    """Link the notes of a project that its page forgot.
+
+    The notes are in the project's own folder and they keep naming it, but
+    the page does not link them: they are in the vault and in nobody's view.
+    """
+    from . import notes_structure
+
+    data = _body(handler) or {}
+    project = str(data.get("project") or "").strip()
+    stems = data.get("stems")
+    if not project:
+        _err(handler, 400, "bad_request", "project is required")
+        return
+    if stems is not None and not isinstance(stems, list):
+        _err(handler, 400, "bad_request", "stems must be a list")
+        return
+    dry_run = bool(data.get("dry_run", True))
+    try:
+        result = notes_structure.apply_orphan_links(
+            project, [str(s) for s in (stems or [])], dry_run=dry_run)
+    except Exception as e:
+        _err(handler, 500, "link_failed", str(e))
+        return
+    if not result.get("ok"):
+        _err(handler, 400, "bad_request", str(result.get("error") or "failed"))
+        return
+    _send_json(handler, 200, {"ok": True, **result})
+
+
 @router.post("/api/library/undo")
 @_local_only
 def library_undo(handler) -> None:
