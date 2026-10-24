@@ -97,6 +97,16 @@ def signals_for(row: Any) -> list[tuple[str, float, str]]:
                 if value and (value == needle or value in (proj.aliases or [])
                               or value == proj.key.lower()):
                     best = max(best or (0.0, ""), (1.0, f"frontmatter says {original}"))
+            # 1b. The registry itself resolves the name it was given: the
+            # frontmatter says "polymarket-bot" and the project is called
+            # "polymarketea", and the registry knows they are the same.
+            for field in EXPLICIT_FIELDS:
+                value = str(front.get(field) or "").strip()
+                if not value:
+                    continue
+                resolved = projects.find_project(value)
+                if resolved is not None and resolved.key == proj.key:
+                    best = max(best or (0.0, ""), (1.2, f"frontmatter says {original}"))
             # 2. A tag carries it.
             for tag in tags:
                 if _norm(tag) == needle:
@@ -235,10 +245,16 @@ def _read_notes(roots: list[Path]) -> list[dict[str, Any]]:
                 "frontmatter": fm,
                 "type": (fm.get("type") or "").lower(),
                 "status": (fm.get("status") or "").lower(),
+                "tags": [t.strip().lstrip("#").lower()
+                         for t in re.findall(r"[^\[\],\s]+", fm.get("tags", ""))],
                 "title": fm.get("title") or path.stem,
                 "links": _link_targets(text),
                 "mtime": int(path.stat().st_mtime),
                 "in_projects": rel.startswith("projects/"),
+                # A project page sits directly in the projects folder; the
+                # notes inside its own folder are its documentation.
+                "is_project_page": rel.startswith("projects/")
+                and rel.count("/") == 1,
             })
     return out
 
@@ -262,10 +278,12 @@ def index_drift(*, roots: list[Path] | None = None) -> dict[str, Any]:
     hubs = sorted((n for n in notes if n["type"] == "hub"),
                   key=lambda n: -len(n["links"]))
 
-    # A project says so in its frontmatter. The other notes in the projects
-    # folder are its documentation — not projects — and they are what the
-    # "unlinked" report is about.
-    project_notes = [n for n in notes if n["type"] == "project"]
+    # A project page says so in its frontmatter and sits directly in the
+    # projects folder. The notes inside a project's own folder are its
+    # documentation — not projects — and they are what the "unlinked"
+    # report is about.
+    project_notes = [n for n in notes
+                     if n["type"] == "project" and n["is_project_page"]]
     project_notes.sort(key=lambda n: n["stem"])
 
     listed: set[str] = set()
@@ -340,6 +358,143 @@ def unlinked_notes(*, roots: list[Path] | None = None, limit: int = 12) -> list[
                 })
     out.sort(key=lambda item: -item["count"])
     return out
+
+
+def _sections_of(text: str) -> list[dict[str, Any]]:
+    """The sections of an index, with the notes each one lists.
+
+    A heading opens a section; the entries under it are the notes it
+    mentions. The heading hierarchy is kept, so a section knows the group
+    it belongs to ("SaaS" under "🟢 Activos").
+    """
+    sections: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    group = ""
+    for line in text.splitlines():
+        heading = re.match(r"^(#{2,3})\s+(.+?)\s*$", line)
+        if heading:
+            level = len(heading.group(1))
+            title = heading.group(2).strip()
+            if level == 2:
+                group = title
+            current = {"title": title, "group": group, "entries": []}
+            sections.append(current)
+            continue
+        entry = re.match(r"^\s*[-*]\s+\[\[([^\]|]+)", line)
+        if entry and current is not None:
+            target = entry.group(1).strip().rstrip("\\").split("/")[-1].removesuffix(".md")
+            if target:
+                current["entries"].append(target)
+    return sections
+
+
+def propose_index_lines(*, roots: list[Path] | None = None) -> dict[str, Any]:
+    """The lines that would put the missing projects back in the index.
+
+    The index is the user's prose, so nothing is written. What the product
+    offers is the list of lines that are missing, in the format the index
+    already uses, and — where the notes give a clear hint — the section
+    each one belongs in.
+
+    The section is guessed from the tags of the projects the section
+    already lists: if everything under "SaaS" is tagged ``saas``, a note
+    tagged ``saas`` probably belongs there too. The guess is a guess, and
+    it is marked as one.
+    """
+    roots = roots if roots is not None else _vault_roots()
+    drift = index_drift(roots=roots)
+    notes = _read_notes(roots)
+    by_stem: dict[str, dict[str, Any]] = {}
+    for note in notes:
+        by_stem.setdefault(note["stem"], note)
+
+    # The sections of the index, with the tags of the notes they list.
+    #
+    # Only the hub that lists the projects matters here: the other hubs
+    # (the TODO, the map) have their own sections, and guessing from those
+    # would put a project in "🔧 Mantenimiento" because that is where a
+    # shared tag happened to appear.
+    project_stems = {n["stem"] for n in notes if n["type"] == "project"
+                     and n["is_project_page"]}
+    sections: list[dict[str, Any]] = []
+    best_hub: tuple[int, str, list[dict[str, Any]]] = (0, "", [])
+    for root in roots:
+        for path in root.rglob("*.md"):
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if not _frontmatter(text).get("type", "").lower() == "hub":
+                continue
+            parsed = _sections_of(text)
+            projects_listed = sum(
+                1 for section in parsed
+                for stem in section["entries"] if stem in project_stems)
+            if projects_listed > best_hub[0]:
+                best_hub = (projects_listed, path.name, parsed)
+    for section in best_hub[2]:
+        tags: set[str] = set()
+        for stem in section["entries"]:
+            note = by_stem.get(stem)
+            if note:
+                tags |= set(note["tags"])
+        sections.append({
+            "title": section["title"],
+            "group": section["group"],
+            "tags": tags,
+            "count": len(section["entries"]),
+            "hub": best_hub[1],
+        })
+
+    proposals: list[dict[str, Any]] = []
+    for stem in drift["missing_from_index"]:
+        note = by_stem.get(stem)
+        if not note:
+            continue
+        best = None
+        best_score = 0
+        for section in sections:
+            if not section["tags"]:
+                continue
+            shared = set(note["tags"]) & section["tags"]
+            # The project tag itself says nothing about the section.
+            shared -= {"project"}
+            if len(shared) > best_score:
+                best, best_score = section, len(shared)
+        proposals.append({
+            "stem": stem,
+            "title": note["title"],
+            "status": note["status"] or "(no status)",
+            "tags": [t for t in note["tags"] if t != "project"],
+            "line": f"- [[{stem}]] — {note['title']}",
+            "section": best["title"] if best and best_score else "",
+            "section_group": best["group"] if best and best_score else "",
+            "confidence": best_score,
+        })
+
+    # Grouped the way the index groups things: by status, then by section.
+    by_status: dict[str, list[dict[str, Any]]] = {}
+    for proposal in proposals:
+        by_status.setdefault(proposal["status"], []).append(proposal)
+
+    blocks: list[dict[str, Any]] = []
+    for status, items in sorted(by_status.items(), key=lambda kv: -len(kv[1])):
+        lines = [item["line"] for item in items]
+        blocks.append({
+            "status": status,
+            "count": len(items),
+            "lines": lines,
+            "markdown": "\n".join(lines),
+            "sections": sorted({i["section"] for i in items if i["section"]}),
+        })
+
+    return {
+        "count": len(proposals),
+        "proposals": proposals,
+        "blocks": blocks,
+        "sections": [{"title": s["title"], "group": s["group"], "notes": s["count"]}
+                     for s in sections],
+    }
 
 
 def structure(*, attribute: bool = True) -> dict[str, Any]:

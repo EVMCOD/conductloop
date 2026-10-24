@@ -78,6 +78,26 @@ def library_structure(handler) -> None:
     _send_json(handler, 200, {"ok": True, **data})
 
 
+@router.get("/api/library/proposal")
+@_local_only
+def library_proposal(handler) -> None:
+    """The lines that would put the missing projects back in the index.
+
+    The index is written by hand, so it goes out of date. This proposes the
+    lines that are missing, in the format the index already uses. Nothing is
+    written: the index is the user's prose and the choice of what to paste
+    is theirs.
+    """
+    from . import notes_structure
+
+    try:
+        data = notes_structure.propose_index_lines()
+    except Exception as e:
+        _err(handler, 500, "proposal_failed", str(e))
+        return
+    _send_json(handler, 200, {"ok": True, **data})
+
+
 @router.post("/api/library/export")
 @_local_only
 def library_export(handler) -> None:
