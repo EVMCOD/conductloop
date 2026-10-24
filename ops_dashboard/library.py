@@ -145,6 +145,11 @@ def refresh(*, embed: bool = True) -> dict:
             also_to=map_export_destinations())
         if refreshed:
             out["map"] = refreshed
+        # What the product would do, written where the user will find it in
+        # the morning. It proposes; it does not touch the user's files.
+        proposal = notes_structure.write_proposal()
+        if proposal:
+            out["proposal"] = proposal
     except Exception as e:
         out["structure"] = {"skipped": type(e).__name__}
     if embed:

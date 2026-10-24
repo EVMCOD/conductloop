@@ -440,3 +440,50 @@ def test_the_catalogue_says_where_the_work_goes(monkeypatch):
     monkeypatch.setattr(byok_keys, "get_api_key", lambda provider, cfg=None: "")
     entry = next(e for e in mp.catalogue() if e["key"] == "openai")
     assert entry["effective_base_url"] == "http://127.0.0.1:1234/v1"
+
+
+def test_the_local_engine_is_used_when_torch_is_absent(monkeypatch):
+    """The desktop app has no torch: the ONNX engine is the one that must work.
+
+    It used to fall through to the remote API — which is rate limited — and
+    index nothing, because the health check said "the model is not
+    downloaded yet" and that was treated as "not available". The model is
+    fetched on first use, so not having it is not a failure.
+    """
+    from ops_dashboard import embeddings
+
+    monkeypatch.setattr(
+        embeddings, "_model",
+        lambda: (_ for _ in ()).throw(embeddings.EmbeddingsUnavailable("no torch")))
+    provider = mp.build("local_onnx")
+    # The engine is installed, so the provider can embed: the model is
+    # downloaded when it is first needed.
+    ok, detail = provider.health()
+    assert ok is True, detail
+    assert "fetched on first use" in detail or "ready" in detail
+
+
+def test_changing_the_model_embeds_the_documents_again(tmp_path, monkeypatch):
+    """The vectors of two models are not comparable.
+
+    Keeping the old ones would leave the search answering with the previous
+    model's view of the world.
+    """
+    from ops_dashboard import db, embeddings
+
+    monkeypatch.setenv("CONDUCTLOOP_DB_PATH", str(tmp_path / "emb.db"))
+    db.DB_PATH = tmp_path / "emb.db"  # type: ignore[attr-defined]
+    db.init_db()
+    db.upsert_document(source="obsidian", path="/v/a.md", title="A",
+                       content="un gato duerme", metadata={}, mtime=1, size=10)
+    embeddings.run()
+    with db.db() as conn:
+        rows = conn.execute("SELECT model FROM embeddings").fetchall()
+    assert rows and rows[0]["model"] == embeddings.engine_model()
+
+    # The model changes: the document must be embedded again.
+    monkeypatch.setattr(embeddings, "engine_model", lambda: "otro-modelo")
+    embeddings.run()
+    with db.db() as conn:
+        rows = conn.execute("SELECT model FROM embeddings").fetchall()
+    assert rows and rows[0]["model"] == "otro-modelo"

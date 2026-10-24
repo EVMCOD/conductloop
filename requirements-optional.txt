@@ -2,6 +2,11 @@
 # All are imported lazily inside their indexer/feature, so the app runs without
 # them (the feature is simply unavailable).
 
+# Local semantic search embeddings without torch (the desktop app uses this
+# one): the same MiniLM model, ONNX instead of PyTorch.
+fastembed>=0.7.0
+onnxruntime>=1.20.0
+
 # Voice notes transcription (Whisper).
 faster-whisper>=1.2.1
 

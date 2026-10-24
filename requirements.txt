@@ -10,5 +10,10 @@
 anthropic>=0.111.0
 openai>=2.43.0
 
-# Local semantic search embeddings (all-MiniLM-L6-v2).
+# Local semantic search embeddings.
+# The full runtime uses sentence-transformers (torch); the lean runtime and
+# the desktop app use the ONNX engine instead (fastembed + onnxruntime):
+# the same model, a fraction of the size, and no torch in the bundle.
 sentence-transformers>=5.6.0
+fastembed>=0.7.0
+onnxruntime>=1.20.0

@@ -275,6 +275,25 @@
         // The lines that would put the missing projects back in the index.
         loadProposal();
 
+        // The ideas that keep coming back: themes with notes in them.
+        const ideas = d.ideas || [];
+        if (ideas.length) {
+          const body = mapGroup('Ideas that keep coming back (' + ideas.length + ')');
+          ideas.slice(0, 10).forEach(function (idea) {
+            const row = el('div', 'detail');
+            row.textContent = idea.title + ' — ' + idea.notes + ' notes';
+            body.appendChild(row);
+          });
+          if (ideas.length > 10) {
+            const row = el('div', 'detail');
+            row.textContent = '… and ' + (ideas.length - 10) + ' more';
+            body.appendChild(row);
+          }
+          const where = el('p', 'hint');
+          where.textContent = 'The nightly pass writes these, and everything else that fell out, into PROPOSAL.md in the agent\'s workspace.';
+          body.appendChild(where);
+        }
+
         const topics = d.topics || [];
         if (topics.length) {
           const body = mapGroup('Themes in the loose notes', topics.length);

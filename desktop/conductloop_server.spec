@@ -10,7 +10,8 @@ the ops_dashboard package and its web/ assets bundled.
 """
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all, collect_submodules  # noqa: F821
+from PyInstaller.utils.hooks import (  # noqa: F821
+    collect_all, collect_dynamic_libs, collect_submodules)
 
 ROOT = Path(SPECPATH).parent  # repo root (spec lives in desktop/)  # noqa: F821
 
@@ -28,6 +29,19 @@ hidden = (
     + ["typer", "rich", "httpx", "segno", "sqlite3"]
 )
 
+# The local embedding engine: ONNX instead of torch, so the app embeds
+# offline without carrying a 2 GB runtime. The model itself is downloaded
+# once, on demand, into the data dir.
+for _mod in ("fastembed", "onnxruntime", "tokenizers", "huggingface_hub"):
+    _d, _b, _h = collect_all(_mod)
+    datas += _d
+    pkg_binaries += _b
+    hidden += _h
+pkg_binaries += collect_dynamic_libs("onnxruntime")
+# fastembed imports these lazily, so the analyser never sees them: without
+# them the engine cannot load a model.
+hidden += ["numpy", "PIL", "PIL.Image", "PIL.ImageOps"]
+
 a = Analysis(
     [str(ROOT / "desktop" / "server_entry.py")],
     pathex=[str(ROOT)],
@@ -36,14 +50,15 @@ a = Analysis(
     hiddenimports=hidden,
     hookspath=[],
     runtime_hooks=[],
-    # The embedder (sentence-transformers → torch) is optional; embeddings.py
-    # degrades to keyword search when it's absent. Excluding the whole ML stack
-    # keeps the desktop bundle small (MB, not GB).
+    # torch is out (GB of runtime for a model that runs on ONNX just as
+    # well); numpy, PIL and the tokenizers stay, because the ONNX engine
+    # needs them. embeddings.py degrades to keyword search if the engine is
+    # missing all the same.
     excludes=[
         "tkinter", "matplotlib", "pandas",
         "torch", "torchvision", "torchaudio",
-        "sentence_transformers", "transformers", "tokenizers", "safetensors",
-        "huggingface_hub", "sklearn", "scipy", "numpy", "PIL",
+        "sentence_transformers", "transformers",
+        "sklearn", "scipy", "matplotlib",
     ],
     noarchive=False,
 )

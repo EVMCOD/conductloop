@@ -887,11 +887,36 @@ class LocalEmbedProvider(Provider):
         return name.split("/")[-1] if name.startswith("sentence-transformers/") else name
 
     def health(self) -> tuple[bool, str]:
+        """Is the engine ready? Without downloading anything.
+
+        The model is fetched the first time it is needed (86 MB, once), and
+        a health check that downloads it would hang the page that asks.
+
+        "Not downloaded yet" is the normal first-run state, not a failure:
+        the provider *can* embed, it just fetches the model when it does.
+        Treating it as unavailable made the whole thing fall through to the
+        remote API — which is rate limited — and index nothing at all.
+        """
         try:
-            self._embedder()
-            return True, "the local embedding model is ready"
+            import fastembed  # noqa: F401
         except Exception as e:
-            return False, str(e)[:200]
+            return False, (f"the local embedding engine is not installed ({e})")[:200]
+        if not self._model_downloaded():
+            return True, ("the local embedding model is fetched on first use "
+                          "(86 MB, once)")
+        return True, "the local embedding model is ready"
+
+    def _model_downloaded(self) -> bool:
+        """Is the model already on this machine?"""
+        from . import app_paths
+
+        name = self.get("model", "sentence-transformers/all-MiniLM-L6-v2")
+        cache = app_paths.path("models", "data/models")
+        if not cache.exists():
+            return False
+        # fastembed keeps one folder per model.
+        folder = cache / ("models--" + name.replace("/", "--"))
+        return any(folder.rglob("*.onnx"))
 
 
 # ── registration ───────────────────────────────────────────────────────────

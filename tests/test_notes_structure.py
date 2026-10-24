@@ -416,3 +416,55 @@ def test_the_state_file_is_what_makes_the_change_knowable(env, tmp_path):
     state = json.loads((workspace / "PROJECTS.state.json").read_text(encoding="utf-8"))
     assert "fingerprint" in state
     assert state["fingerprint"]["projects"]
+
+
+# ── the nightly pass ──────────────────────────────────────────────────────
+
+def test_the_nightly_pass_writes_what_it_would_do(env, tmp_path, monkeypatch):
+    """The user finds the proposal in the morning; the product proposes."""
+    import ops_dashboard.library as lib
+    from ops_dashboard import notes_structure
+
+    # A vault with a project the index does not list.
+    vault = tmp_path / "vault"
+    (vault / "projects").mkdir(parents=True)
+    (vault / "projects" / "_index.md").write_text(
+        "---\ntype: hub\n---\n\n## Activos\n- [[alpha]]\n", encoding="utf-8")
+    (vault / "projects" / "alpha.md").write_text(
+        "---\ntitle: Alpha\ntype: project\nstatus: active\n---\n\n# Alpha\n",
+        encoding="utf-8")
+    (vault / "projects" / "delta.md").write_text(
+        "---\ntitle: Delta\ntype: project\nstatus: active\n---\n\n# Delta\n",
+        encoding="utf-8")
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    original_ws = lib.memory_workspace
+    original_folders = lib.index_folders
+    try:
+        lib.memory_workspace = lambda: workspace
+        lib.index_folders = lambda: [vault]
+        result = notes_structure.write_proposal()
+        assert result is not None
+        assert result["pending"] >= 1
+        text = (workspace / "PROPOSAL.md").read_text(encoding="utf-8")
+        assert "What the product would do" in text
+        assert "delta" in text
+    finally:
+        lib.memory_workspace = original_ws
+        lib.index_folders = original_folders
+
+
+def test_no_proposal_file_when_there_is_nothing_to_say(env, tmp_path, monkeypatch):
+    import ops_dashboard.library as lib
+    from ops_dashboard import notes_structure
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    original = lib.memory_workspace
+    try:
+        lib.memory_workspace = lambda: workspace
+        assert notes_structure.write_proposal() is None
+        assert not (workspace / "PROPOSAL.md").exists()
+    finally:
+        lib.memory_workspace = original
