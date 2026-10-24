@@ -350,6 +350,74 @@
       pre.textContent = text;
       body.appendChild(pre);
 
+      // The ones that fit nowhere: the index has no section for their
+      // status, and inventing one is a decision about the index.
+      const unplaced = d.unplaced || [];
+      if (unplaced.length) {
+        const box = el('div', 'pick');
+        const label = el('label', 'pick__label');
+        label.textContent = unplaced.length + ' no encajan en ninguna sección (' +
+          unplaced.map(function (u) { return u.stem; }).join(', ') + ')';
+        box.appendChild(label);
+        const newSection = document.createElement('input');
+        newSection.type = 'text';
+        newSection.className = 'pick__section';
+        newSection.value = d.unplaced_section || '';
+        newSection.title = 'La sección nueva que se crearía en el índice';
+        box.appendChild(newSection);
+        body.appendChild(box);
+        const mk = document.createElement('button');
+        mk.type = 'button';
+        mk.className = 'cl-btn cl-btn--ghost small';
+        mk.textContent = 'Create that section with them';
+        mk.onclick = async () => {
+          const title = newSection.value.trim();
+          if (!title) return;
+          const stems2 = unplaced.map(function (u) { return {stem: u.stem, section: title}; });
+          await applyToIndex(stems2, mk);
+        };
+        body.appendChild(mk);
+      }
+
+      // The notes of a project that its own page does not link.
+      (d.orphans || []).forEach(function (o) {
+        const row = el('div', 'pick');
+        const label = el('label', 'pick__label');
+        label.textContent = o.title + ' — ' + o.count + ' note(s) in its folder that its page does not link: ' +
+          o.orphans.join(', ');
+        row.appendChild(label);
+        const link = document.createElement('button');
+        link.type = 'button';
+        link.className = 'cl-btn cl-btn--ghost small';
+        link.textContent = 'Link them';
+        link.onclick = async () => {
+          link.disabled = true;
+          try {
+            const r = await fetch('/api/library/link-orphans', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({project: o.project, stems: o.orphans, dry_run: true})
+            });
+            const preview = await r.json();
+            if (!preview.ok) throw new Error(preview.message || 'failed');
+            const shown = window.confirm(
+              'This adds ' + preview.added.length + ' link(s) to:\n' + preview.path +
+              '\n\n' + preview.added.join('\n') + '\n\nApply?');
+            if (!shown) { link.disabled = false; return; }
+            const r2 = await fetch('/api/library/link-orphans', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({project: o.project, stems: o.orphans, dry_run: false})
+            });
+            const done = await r2.json();
+            if (!done.ok) throw new Error(done.message || 'failed');
+            note.textContent = '✓ ' + done.added.length + ' link(s) added to ' + done.path;
+            loadMap();
+          } catch (e) { note.textContent = '✗ ' + e.message; }
+          finally { link.disabled = false; }
+        };
+        row.appendChild(link);
+        body.appendChild(row);
+      });
+
       const actions = el('div', 'row row--tight');
       const copy = document.createElement('button');
       copy.type = 'button';
@@ -373,33 +441,37 @@
           return {stem: b.dataset.stem, section: sel ? sel.value : ''};
         });
         if (!stems.length) { note.textContent = 'Tick the ones you want first.'; return; }
-        apply.disabled = true;
-        try {
-          const r = await fetch('/api/library/apply', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({stems: stems, dry_run: true})
-          });
-          const preview = await r.json();
-          if (!preview.ok) throw new Error(preview.message || 'failed');
-          const shown = window.confirm(
-            'This adds ' + preview.added.length + ' line(s) to:\n' +
-            preview.path + '\n\n' + preview.added.join('\n') +
-            '\n\nThe counts are updated too. Apply?');
-          if (!shown) { apply.disabled = false; return; }
-          const r2 = await fetch('/api/library/apply', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({stems: stems, dry_run: false})
-          });
-          const done = await r2.json();
-          if (!done.ok) throw new Error(done.message || 'failed');
-          note.textContent = '✓ ' + done.added.length + ' line(s) added to ' + done.path +
-            (done.backup ? ' · copy before: ' + done.backup : '');
-          loadMap();
-        } catch (e) { note.textContent = '✗ ' + e.message; }
-        finally { apply.disabled = false; }
+        await applyToIndex(stems, apply);
       };
       actions.appendChild(apply);
       body.appendChild(actions);
+    }
+    async function applyToIndex(stems, button) {
+      const note = document.getElementById('map-note');
+      if (button) { button.disabled = true; }
+      try {
+        const r = await fetch('/api/library/apply', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({stems: stems, dry_run: true})
+        });
+        const preview = await r.json();
+        if (!preview.ok) throw new Error(preview.message || 'failed');
+        const shown = window.confirm(
+          'This adds ' + preview.added.length + ' line(s) to:\n' +
+          preview.path + '\n\n' + preview.added.join('\n') +
+          '\n\nThe counts are updated too. Apply?');
+        if (!shown) return;
+        const r2 = await fetch('/api/library/apply', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({stems: stems, dry_run: false})
+        });
+        const done = await r2.json();
+        if (!done.ok) throw new Error(done.message || 'failed');
+        note.textContent = '✓ ' + done.added.length + ' line(s) added to ' + done.path +
+          (done.backup ? ' · copy before: ' + done.backup : '');
+        loadMap();
+      } catch (e) { note.textContent = '✗ ' + e.message; }
+      finally { if (button) button.disabled = false; }
     }
     document.getElementById('btn-map').onclick = () => loadMap();
     document.getElementById('btn-map-export').onclick = async () => {

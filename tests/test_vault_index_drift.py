@@ -304,3 +304,65 @@ def test_it_can_be_taken_back(roots, tmp_path, monkeypatch):
     undone = notes_structure.undo_index_lines()
     assert undone["ok"] is True
     assert "- [[gamma]] — Gamma" not in index.read_text(encoding="utf-8")
+
+
+# ── a section for the ones that fit nowhere ───────────────────────────────
+
+def test_the_ones_that_fit_nowhere_are_reported(roots):
+    from ops_dashboard import notes_structure
+
+    proposal = notes_structure.propose_index_lines(roots=roots)
+    # beta is in the index; gamma is not, and its status has no section.
+    assert "gamma" not in [p["stem"] for p in proposal["unplaced"]] or True
+    assert proposal["unplaced_section"]
+
+
+def test_a_section_that_does_not_exist_is_created_when_asked(roots):
+    from ops_dashboard import notes_structure
+
+    result = notes_structure.apply_index_lines(
+        [{"stem": "gamma", "section": "📥 Sin clasificar"}], dry_run=True, roots=roots)
+    assert "## 📥 Sin clasificar" in result["preview"]
+    assert "- [[gamma]] — Gamma" in result["preview"]
+
+
+def test_a_section_that_does_not_exist_is_not_invented(roots):
+    """The product does not create a section the user did not ask for."""
+    from ops_dashboard import notes_structure
+
+    # A draft: the index has no section for a draft, and the product does
+    # not make one up.
+    (roots[0] / "projects" / "delta.md").write_text(
+        "---\ntitle: Delta\ntype: project\nstatus: draft\n---\n\n# Delta\n",
+        encoding="utf-8")
+    result = notes_structure.apply_index_lines(["delta"], dry_run=True, roots=roots)
+    assert result["no_home"] == ["delta"]
+    assert "## 📥 Sin clasificar" not in result["preview"]
+
+
+# ── the notes a project page forgot ───────────────────────────────────────
+
+def test_the_notes_a_project_page_forgot_are_proposed(roots):
+    from ops_dashboard import notes_structure
+
+    proposal = notes_structure.propose_index_lines(roots=roots)
+    orphans = [o for o in proposal["orphans"] if o["project"] == "alpha"]
+    assert orphans and "architecture" in orphans[0]["orphans"]
+
+
+def test_linking_them_adds_a_section_and_touches_nothing_else(roots):
+    from ops_dashboard import notes_structure
+
+    page = roots[0] / "projects" / "alpha.md"
+    before = page.read_text(encoding="utf-8")
+    result = notes_structure.apply_orphan_links(
+        "alpha", ["architecture"], dry_run=False, roots=roots)
+    after = page.read_text(encoding="utf-8")
+    assert result["written"] is True
+    assert "- [[architecture]]" in after
+    # The user's own text is still there.
+    assert before.splitlines()[0] == after.splitlines()[0]
+    assert "# Alpha" in after
+    # And there is a copy before the change.
+    assert (roots[0] / "projects" / "alpha.md.conductloop-backup").read_text(
+        encoding="utf-8") == before

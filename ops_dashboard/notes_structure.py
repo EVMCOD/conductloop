@@ -503,10 +503,18 @@ def propose_index_lines(*, roots: list[Path] | None = None) -> dict[str, Any]:
             "sections": sorted({i["section"] for i in items if i["section"]}),
         })
 
+    # The ones that fit nowhere: the index has no section for their status,
+    # and inventing one is a decision about the index, not about a note.
+    unplaced = [p for p in proposals if not p["default_section"]]
+    orphans = unlinked_notes(roots=roots)
+
     return {
         "count": len(proposals),
         "proposals": proposals,
         "blocks": blocks,
+        "unplaced": unplaced,
+        "unplaced_section": NEW_SECTION_TITLE,
+        "orphans": orphans,
         "sections": [{"title": s["title"], "group": s["group"], "notes": s["count"]}
                      for s in sections],
     }
@@ -522,6 +530,11 @@ STATUS_KEYWORDS = {
     "archived": ("archiv", "muerto", "dead", "⚫"),
     "idea": ("idea",),
 }
+
+# The section the product offers for the projects that fit nowhere else.
+NEW_SECTION_TITLE = "📥 Sin clasificar"
+# The section it adds to a project page for the notes it forgot to link.
+ORPHAN_SECTION_TITLE = "📚 Documentación"
 
 COUNTS_RE = re.compile(
     r"\d+\s+proyectos\s*\(\s*\d+\s+notas activas\s*\+\s*\d+\s+ideas\s*\)")
@@ -546,6 +559,21 @@ def index_path(*, roots: list[Path] | None = None) -> Path | None:
             if best is None or listed > best[0]:
                 best = (listed, path)
     return best[1] if best and best[0] else None
+
+
+def _is_heading(line: str, heading: str) -> bool:
+    m = re.match(r"^#{1,6}\s+(.+?)\s*$", line)
+    return bool(m) and m.group(1).strip().lower() == heading.strip().lower()
+
+
+def stems_in(lines: list[str]) -> list[str]:
+    """The note names in a list of index lines."""
+    out = []
+    for line in lines:
+        m = re.match(r"^-\s+\[\[([^\]|]+)", line)
+        if m:
+            out.append(m.group(1).strip())
+    return out
 
 
 def _section_of(text: str, heading: str) -> tuple[int, int] | None:
@@ -718,6 +746,15 @@ def apply_index_lines(stems: list[str] | list[dict[str, Any]], *,
     lines = text.splitlines()
     applied: list[str] = []
     for heading, entries in grouped.items():
+        if not any(_is_heading(line, heading) for line in lines):
+            # A section that does not exist yet: the product can offer one,
+            # but only when the user asked for it by name.
+            if heading not in (chosen.values() or []):
+                no_home.extend(stems_in(entries))
+                continue
+            lines = lines + ["", f"## {heading}", ""] + entries + [""]
+            applied.extend(entries)
+            continue
         lines, ok = _insert_into_section(lines, heading, entries)
         if ok:
             applied.extend(entries)
@@ -776,6 +813,63 @@ def _remember_index_change(path: Path, added: list[str], before: str) -> None:
         state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
     except OSError:
         pass
+
+
+def apply_orphan_links(project: str, stems: list[str], *,
+                       dry_run: bool = True,
+                       roots: list[Path] | None = None) -> dict[str, Any]:
+    """Link the notes of a project that its page forgot.
+
+    The notes are in the project's own folder and they keep naming it, but
+    the page does not link them: in the vault, in the search, and in nobody's
+    view when they open the project.
+
+    The links go in a section of their own, at the end of the page. Nothing
+    of the user's is touched, and there is a copy before the change.
+    """
+    roots = roots if roots is not None else _vault_roots()
+    notes = _read_notes(roots)
+    by_stem: dict[str, dict[str, Any]] = {}
+    for note in notes:
+        by_stem.setdefault(note["stem"], note)
+    page = by_stem.get(project)
+    if page is None:
+        return {"ok": False, "error": f"no note called {project}"}
+    path = Path(page["path"])
+    text = path.read_text(encoding="utf-8", errors="replace")
+    original = text
+
+    lines = text.splitlines()
+    entries = []
+    for stem in stems:
+        note = by_stem.get(stem)
+        if not note:
+            continue
+        entries.append(f"- [[{stem}]] — {note['title']}")
+    if not entries:
+        return {"ok": False, "error": "nothing to link"}
+    block = ["", f"## {ORPHAN_SECTION_TITLE}", ""] + entries + [""]
+    new_text = "\n".join(lines + block) + ("\n" if text.endswith("\n") else "")
+
+    out: dict[str, Any] = {
+        "ok": True,
+        "path": str(path),
+        "added": entries,
+        "changed": new_text != original,
+    }
+    if dry_run:
+        out["preview"] = new_text
+        return out
+    if new_text == original:
+        out["written"] = False
+        return out
+    backup = path.with_suffix(path.suffix + ".conductloop-backup")
+    if not backup.exists():
+        backup.write_text(original, encoding="utf-8")
+    path.write_text(new_text, encoding="utf-8")
+    out["written"] = True
+    out["backup"] = str(backup)
+    return out
 
 
 def undo_index_lines(*, roots: list[Path] | None = None) -> dict[str, Any]:
