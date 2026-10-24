@@ -20,12 +20,15 @@ documents (not playbook entries, not live_urls).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import urllib.error
 import urllib.request
 
 from . import db
+
+log = logging.getLogger("conductloop.embeddings")
 
 # Lazy-loaded so the rest of the app doesn't pay the model import cost.
 _MODEL = None
