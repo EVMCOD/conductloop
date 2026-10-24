@@ -142,12 +142,127 @@ def render_markdown(data: dict) -> str:
     return "\n".join(lines)
 
 
+def vault_summary(day: str) -> dict:
+    """What happened in the vault itself that day.
+
+    The rest of the note is about the product (conversations, todos, URLs).
+    This is about the notes: which ones were touched, which projects they
+    belong to, and which ideas keep coming back.
+    """
+    from . import notes_structure
+
+    start = int(datetime.strptime(day, "%Y-%m-%d").timestamp())
+    end = start + 86399
+    out: dict = {"notes": [], "projects": [], "ideas": []}
+    try:
+        with db.db() as conn:
+            rows = conn.execute(
+                "SELECT title, path, project_key, source FROM documents "
+                "WHERE mtime >= ? AND mtime <= ? ORDER BY mtime DESC LIMIT 200",
+                (start, end),
+            ).fetchall()
+    except Exception:
+        rows = []
+    per_project: dict[str, int] = {}
+    for r in rows:
+        title = r["title"] or Path(r["path"]).stem
+        out["notes"].append({"title": title, "path": r["path"],
+                            "project": r["project_key"] or "",
+                            "source": r["source"]})
+        key = r["project_key"] or ""
+        if key:
+            per_project[key] = per_project.get(key, 0) + 1
+    out["projects"] = sorted(per_project.items(), key=lambda kv: -kv[1])
+    try:
+        out["ideas"] = notes_structure.propose_ideas()[:5]
+    except Exception:
+        out["ideas"] = []
+    return out
+
+
+def render_vault(data: dict) -> list[str]:
+    """The vault half of the daily note."""
+    lines: list[str] = []
+    if not data.get("notes") and not data.get("projects"):
+        return lines
+    lines.append("## 🗺️ El vault")
+    lines.append("")
+    projects = data.get("projects") or []
+    if projects:
+        names = {p.key: p.name for p in _projects()}
+        lines.append("**Proyectos que se movieron**")
+        lines.append("")
+        for key, count in projects[:8]:
+            lines.append(f"- {names.get(key, key)} — {count} nota(s)")
+        lines.append("")
+    ideas = data.get("ideas") or []
+    if ideas:
+        lines.append("**Temas que se repiten**")
+        lines.append("")
+        for idea in ideas:
+            lines.append(f"- {idea['title']} — {idea['notes']} notas")
+        lines.append("")
+    notes = data.get("notes") or []
+    if notes:
+        lines.append("**Notas tocadas**")
+        lines.append("")
+        for note in notes[:25]:
+            name = Path(note["path"]).stem
+            lines.append(f"- [[{name}]] — {note['title']}")
+        if len(notes) > 25:
+            lines.append(f"- … y {len(notes) - 25} más")
+        lines.append("")
+    return lines
+
+
+def _projects():
+    from . import projects as _p
+
+    try:
+        return _p.PROJECTS
+    except Exception:
+        return []
+
+
+BLOCK_BEGIN = "<!-- conductloop:daily -->"
+BLOCK_END = "<!-- /conductloop:daily -->"
+
+
 def write_daily(day: str | None = None, out_dir: Path | None = None) -> Path:
+    """Write the day's note, without ever destroying the user's own words.
+
+    The daily note is a note the user writes in, not a report the product
+    prints over: the generated part lives in a marked block and only that
+    block is ever replaced.
+    """
     day = day or datetime.now().strftime("%Y-%m-%d")
     out_dir = out_dir or VAULT_DAILY
     out_dir.mkdir(parents=True, exist_ok=True)
     data = collect_day(day)
     md = render_markdown(data)
+    vault_lines = render_vault(vault_summary(day))
+    if vault_lines:
+        md = md.rstrip() + "\n\n" + "\n".join(vault_lines)
+    block = f"{BLOCK_BEGIN}\n{md.rstrip()}\n{BLOCK_END}\n"
+
     out = out_dir / f"{day}.md"
-    out.write_text(md, encoding="utf-8")
+    current = ""
+    if out.exists():
+        try:
+            current = out.read_text(encoding="utf-8")
+        except OSError:
+            current = ""
+    if BLOCK_BEGIN in current and BLOCK_END in current:
+        start = current.index(BLOCK_BEGIN)
+        end = current.index(BLOCK_END) + len(BLOCK_END)
+        text = current[:start] + block.rstrip("\n") + current[end:]
+    elif current.strip():
+        # The user's note stays; the generated part goes under it.
+        text = current.rstrip() + "\n\n" + block
+    else:
+        # Even a fresh note carries the markers: the block has to be
+        # replaceable tomorrow, and it is what tells the product which part
+        # is not the user's.
+        text = block
+    out.write_text(text, encoding="utf-8")
     return out

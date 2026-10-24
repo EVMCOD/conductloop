@@ -74,12 +74,21 @@ def _system_jobs() -> list[tuple[str, str, object]]:
         from .learning import metrics
         return metrics.scheduled_maintenance()
 
+    def _daily_note():
+        # The daily note of the vault, with what happened in it. It runs
+        # after the library index (which is hourly, at :17) so the notes
+        # touched that day are already in the index.
+        from . import daily
+        out = daily.write_daily()
+        return {"note": str(out)}
+
     return [
         ("learning_maintenance", os.environ.get("LEARNING_MAINTENANCE_CRON", "15 4 * * *"), _learning),
         ("briefing", os.environ.get("BRIEFING_CRON", "0 8 * * *"), _briefing),
         ("obsidian_export", os.environ.get("OBSIDIAN_EXPORT_CRON", "0 3 * * *"), _export),
         ("analytics_poll", os.environ.get("ANALYTICS_POLL_CRON", "30 7 * * *"), _analytics),
         ("library_index", os.environ.get("LIBRARY_INDEX_CRON", "17 * * * *"), _library_index),
+        ("daily_note", os.environ.get("DAILY_NOTE_CRON", "40 8 * * *"), _daily_note),
     ]
 
 
