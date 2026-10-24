@@ -32,6 +32,9 @@
     button:disabled{opacity:.5;cursor:default}
     .note{font-size:13px;color:var(--muted);margin-top:10px;min-height:18px}
     .lib-label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+    .pick{display:flex;align-items:baseline;gap:8px;padding:3px 0}
+    .pick__label{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);flex:1}
+    .pick__section{font-size:12px;max-width:220px}
     .map-lines{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;margin:6px 0}
     #lib-folders,#lib-workspace{width:100%;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
     code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink)}
@@ -290,17 +293,64 @@
       }
     }
     async function loadProposal() {
+      const note = document.getElementById('map-note');
       let d;
       try {
         d = await (await fetch('/api/library/proposal')).json();
       } catch (e) { return; }
       if (!d.ok || !d.count) return;
       const body = mapGroup('Lines missing from your index (' + d.count + ')');
+
+      // One checkbox per line: which ones go in is the user's call.
+      const picks = [];
+      d.proposals.forEach(function (pr) {
+        const row = el('div', 'pick');
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = true;
+        box.dataset.stem = pr.stem;
+        const label = el('label', 'pick__label');
+        label.textContent = pr.line;
+        row.appendChild(box);
+        row.appendChild(label);
+        // The section is the user's call: the product knows the status for
+        // sure, and a tag can mislead (an iOS app listed under the trading
+        // bots pulls every other iOS note with it).
+        const sel = document.createElement('select');
+        sel.className = 'pick__section';
+        sel.dataset.stem = pr.stem;
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = pr.status_section
+          ? '§ ' + pr.status_section + '…' : '— elige sección —';
+        sel.appendChild(none);
+        let lastGroup = null;
+        (d.sections || []).forEach(function (sec) {
+          if (sec.group !== lastGroup) {
+            const og = document.createElement('optgroup');
+            og.label = sec.group || sec.title;
+            sel.appendChild(og);
+            lastGroup = sec.group;
+          }
+          const o = document.createElement('option');
+          o.value = sec.title;
+          o.textContent = sec.title;
+          sel.appendChild(o);
+        });
+        if (pr.default_section) sel.value = pr.default_section;
+        else if (pr.section) sel.value = pr.section;
+        row.appendChild(sel);
+        body.appendChild(row);
+        picks.push(box);
+      });
+
       const pre = el('pre', 'map-lines');
       const text = d.blocks.map(b =>
         '### ' + b.status + ' (' + b.count + ')\n' + b.markdown).join('\n\n');
       pre.textContent = text;
       body.appendChild(pre);
+
+      const actions = el('div', 'row row--tight');
       const copy = document.createElement('button');
       copy.type = 'button';
       copy.className = 'cl-btn cl-btn--ghost small';
@@ -311,7 +361,45 @@
           copy.textContent = '✓ Copied';
         } catch (e) { copy.textContent = '✗ ' + e.message; }
       };
-      body.appendChild(copy);
+      actions.appendChild(copy);
+
+      const apply = document.createElement('button');
+      apply.type = 'button';
+      apply.className = 'cl-btn small';
+      apply.textContent = 'Put the ticked ones in the index';
+      apply.onclick = async () => {
+        const stems = picks.filter(b => b.checked).map(function (b) {
+          const sel = body.querySelector('select[data-stem="' + b.dataset.stem + '"]');
+          return {stem: b.dataset.stem, section: sel ? sel.value : ''};
+        });
+        if (!stems.length) { note.textContent = 'Tick the ones you want first.'; return; }
+        apply.disabled = true;
+        try {
+          const r = await fetch('/api/library/apply', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({stems: stems, dry_run: true})
+          });
+          const preview = await r.json();
+          if (!preview.ok) throw new Error(preview.message || 'failed');
+          const shown = window.confirm(
+            'This adds ' + preview.added.length + ' line(s) to:\n' +
+            preview.path + '\n\n' + preview.added.join('\n') +
+            '\n\nThe counts are updated too. Apply?');
+          if (!shown) { apply.disabled = false; return; }
+          const r2 = await fetch('/api/library/apply', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({stems: stems, dry_run: false})
+          });
+          const done = await r2.json();
+          if (!done.ok) throw new Error(done.message || 'failed');
+          note.textContent = '✓ ' + done.added.length + ' line(s) added to ' + done.path +
+            (done.backup ? ' · copy before: ' + done.backup : '');
+          loadMap();
+        } catch (e) { note.textContent = '✗ ' + e.message; }
+        finally { apply.disabled = false; }
+      };
+      actions.appendChild(apply);
+      body.appendChild(actions);
     }
     document.getElementById('btn-map').onclick = () => loadMap();
     document.getElementById('btn-map-export').onclick = async () => {

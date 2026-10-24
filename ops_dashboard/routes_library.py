@@ -98,6 +98,60 @@ def library_proposal(handler) -> None:
     _send_json(handler, 200, {"ok": True, **data})
 
 
+@router.post("/api/library/apply")
+@_local_only
+def library_apply(handler) -> None:
+    """Put the chosen projects back in the index.
+
+    The index is the user's prose: the product adds the lines it was told
+    to add, at the end of the section they belong to, and updates the
+    counts in the header. Nothing else changes, and there is a copy before
+    the change.
+
+    The default is a dry run: the answer says what would change, so the
+    user sees it before it happens.
+    """
+    from . import notes_structure
+
+    data = _body(handler) or {}
+    stems = data.get("stems")
+    if stems is not None and not isinstance(stems, list):
+        _err(handler, 400, "bad_request", "stems must be a list")
+        return
+    for entry in (stems or []):
+        if not isinstance(entry, (str, dict)):
+            _err(handler, 400, "bad_request", "each entry must be a name or {stem, section}")
+            return
+    dry_run = bool(data.get("dry_run", True))
+    try:
+        result = notes_structure.apply_index_lines(
+            [str(s) for s in (stems or [])], dry_run=dry_run)
+    except Exception as e:
+        _err(handler, 500, "apply_failed", str(e))
+        return
+    if not result.get("ok"):
+        _err(handler, 400, "bad_request", str(result.get("error") or "failed"))
+        return
+    _send_json(handler, 200, {"ok": True, **result})
+
+
+@router.post("/api/library/undo")
+@_local_only
+def library_undo(handler) -> None:
+    """Take back the lines the product added to the index."""
+    from . import notes_structure
+
+    try:
+        result = notes_structure.undo_index_lines()
+    except Exception as e:
+        _err(handler, 500, "undo_failed", str(e))
+        return
+    if not result.get("ok"):
+        _err(handler, 400, "bad_request", str(result.get("error") or "failed"))
+        return
+    _send_json(handler, 200, {"ok": True, **result})
+
+
 @router.post("/api/library/export")
 @_local_only
 def library_export(handler) -> None:
