@@ -449,15 +449,15 @@ def test_the_local_engine_is_used_when_torch_is_absent(monkeypatch):
     index nothing, because the health check said "the model is not
     downloaded yet" and that was treated as "not available". The model is
     fetched on first use, so not having it is not a failure.
-    """
-    from ops_dashboard import embeddings
 
-    monkeypatch.setattr(
-        embeddings, "_model",
-        lambda: (_ for _ in ()).throw(embeddings.EmbeddingsUnavailable("no torch")))
+    The engine is faked here on purpose: this is about the decision, not
+    about having the package installed.
+    """
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, "fastembed", types.ModuleType("fastembed"))
     provider = mp.build("local_onnx")
-    # The engine is installed, so the provider can embed: the model is
-    # downloaded when it is first needed.
     ok, detail = provider.health()
     assert ok is True, detail
     assert "fetched on first use" in detail or "ready" in detail
@@ -467,23 +467,29 @@ def test_changing_the_model_embeds_the_documents_again(tmp_path, monkeypatch):
     """The vectors of two models are not comparable.
 
     Keeping the old ones would leave the search answering with the previous
-    model's view of the world.
+    model's view of the world. What matters is that the document is *chosen*
+    again, so the embedding itself is faked: this is about the selection.
     """
+    import json
+
     from ops_dashboard import db, embeddings
 
     monkeypatch.setenv("CONDUCTLOOP_DB_PATH", str(tmp_path / "emb.db"))
     db.DB_PATH = tmp_path / "emb.db"  # type: ignore[attr-defined]
     db.init_db()
+    embeddings.ensure_schema()
     db.upsert_document(source="obsidian", path="/v/a.md", title="A",
                        content="un gato duerme", metadata={}, mtime=1, size=10)
-    embeddings.run()
     with db.db() as conn:
-        rows = conn.execute("SELECT model FROM embeddings").fetchall()
-    assert rows and rows[0]["model"] == embeddings.engine_model()
+        doc_id = conn.execute("SELECT id FROM documents").fetchone()["id"]
+        # A vector from another model.
+        conn.execute(
+            "INSERT INTO embeddings (doc_id, vector, model, indexed_at) VALUES (?,?,?,?)",
+            (doc_id, json.dumps([0.1, 0.2]), "un-otro-modelo", 1))
+        conn.commit()
 
-    # The model changes: the document must be embedded again.
-    monkeypatch.setattr(embeddings, "engine_model", lambda: "otro-modelo")
+    chosen: list[int] = []
+    monkeypatch.setattr(embeddings, "index_document",
+                        lambda i, c, **kw: chosen.append(i))
     embeddings.run()
-    with db.db() as conn:
-        rows = conn.execute("SELECT model FROM embeddings").fetchall()
-    assert rows and rows[0]["model"] == "otro-modelo"
+    assert chosen == [doc_id], "the document must be embedded again"
