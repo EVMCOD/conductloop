@@ -160,15 +160,20 @@ def _run_one(vault_root: Path) -> dict:
     seen: set[str] = set()
 
     # The map the product writes names every project; indexing it would put
-    # one synthetic note among the real ones (2026-10-24).
-    from ..library import map_files
+    # one synthetic note among the real ones (2026-10-24). The same goes for
+    # the pages of the map, one per project: they are the map, not the work.
+    from ..library import map_files, map_folders
 
     skip_files = map_files()
+    skip_folders = map_folders()
 
     for i, path in enumerate(md_files, 1):
         if any(part in SKIP_DIRS for part in path.parts):
             continue
-        if str(path.resolve()) in skip_files:
+        resolved = path.resolve()
+        if str(resolved) in skip_files:
+            continue
+        if any(str(parent) in skip_folders for parent in resolved.parents):
             continue
         seen.add(str(path))
         c = index_path(path)

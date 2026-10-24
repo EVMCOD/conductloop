@@ -60,7 +60,7 @@
       <input id="lib-workspace" spellcheck="false" placeholder="~/agent-workspace" />
       <label class="lib-label" for="lib-mapfolder">Map export folder (optional)</label>
       <input id="lib-mapfolder" spellcheck="false" placeholder="~/Documents/Obsidian/MyVault/ConductLoop" />
-      <div class="hint">Where the map is also written as markdown, so it travels with your notes. The agent's own workspace always gets it too.</div>
+      <div class="hint">Where the map is also written, so it travels with your notes: one file with everything, and one page per project with links your vault can follow. The agent's own workspace always gets it too.</div>
       <div style="margin-top:12px">
         <button id="lib-save">Save folders</button>
         <button id="lib-index" class="ghost">Index now</button>
@@ -501,7 +501,8 @@
         const d = await r.json();
         if (!d.ok) throw new Error(d.message || d.error || 'failed');
         const copies = (d.copies || []).map(p => ' · ' + p).join('');
-        note.textContent = (d.changed ? '✓ Written to ' : '✓ Nothing changed — already up to date at ') + d.path + copies;
+        const pages = d.pages ? ` · ${d.pages.pages} pages (${d.pages.written} written) in ${(d.pages.folders || []).map(f => f.path).join(', ')}` : '';
+        note.textContent = (d.changed ? '✓ Written to ' : '✓ Nothing changed — already up to date at ') + d.path + copies + pages;
       } catch (e) { note.textContent = '✗ ' + e.message; }
     };
 

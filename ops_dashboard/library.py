@@ -115,6 +115,24 @@ def map_files() -> set[str]:
     return out
 
 
+def map_folders() -> set[str]:
+    """The folders the map is written into, page by page.
+
+    Same reason as ``map_files``: a page of the map names every project,
+    so indexing the pages would add dozens of synthetic notes that answer
+    questions about themselves.
+    """
+    from .vault_pages import PAGES_DIRNAME
+
+    out: set[str] = set()
+    for folder in map_export_destinations():
+        try:
+            out.add(str((folder / PAGES_DIRNAME).resolve()))
+        except OSError:
+            continue
+    return out
+
+
 def map_export_destinations() -> list[Path]:
     """Where the map is also written, so it travels with the notes."""
     cfg = _config()
