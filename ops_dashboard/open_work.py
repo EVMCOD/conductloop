@@ -67,6 +67,11 @@ def _section_date(heading: str, year: int) -> str:
     return ""
 
 
+def _fingerprint(text: str) -> str:
+    """A comparable form of a line, so the same item twice looks the same."""
+    return re.sub(r"\s+", " ", (text or "").strip().lower())
+
+
 def _project_of(heading: str) -> str:
     """The project a heading belongs to, if it names one."""
     from . import notes_structure
@@ -127,10 +132,13 @@ def scan(limit_per_project: int = 0) -> dict[str, list[dict[str, Any]]]:
             match = _OPEN_BOX.match(line)
             if not match:
                 continue
-            key = section_key or _project_of(heading)
+            item = match.group(1).strip()
+            # The section names the project; when it does not, the item
+            # usually names it itself ("EV Copy Engine: probar en Windows
+            # Server con MT5 real"). Both are Enrique's own words.
+            key = section_key or _project_of(item)
             if not key:
                 continue
-            item = match.group(1).strip()
             owner = ""
             found = _OWNER.search(item)
             if found:
@@ -138,6 +146,7 @@ def scan(limit_per_project: int = 0) -> dict[str, list[dict[str, Any]]]:
                 item = item[:found.start()].strip()
             out.setdefault(key, []).append({
                 "path": path,
+                "project": key,
                 "section": heading,
                 "date": _section_date(heading, year),
                 "blocking": bool(_BLOCKING.search(heading)),
@@ -146,10 +155,25 @@ def scan(limit_per_project: int = 0) -> dict[str, list[dict[str, Any]]]:
             })
 
     for key, rows in out.items():
+        # The same item written twice is one item. It happens: TODO.md
+        # repeats its own first half, and every pending shows up twice.
+        seen: set[tuple[str, str]] = set()
+        unique: list[dict[str, Any]] = []
+        for row in rows:
+            mark = (row["section"], _fingerprint(row["text"]))
+            if mark in seen:
+                continue
+            seen.add(mark)
+            unique.append(row)
+        rows = unique
         # Newest section first, and inside a section the order he wrote it.
+        # What blocks comes on top of that: two stable sorts.
         rows.sort(key=lambda row: (row["date"] or "9999"), reverse=True)
+        rows.sort(key=lambda row: not row["blocking"])
         if limit_per_project:
             out[key] = rows[:limit_per_project]
+        else:
+            out[key] = rows
     _ = notes_structure  # the import keeps the module honest about its dependency
     return out
 

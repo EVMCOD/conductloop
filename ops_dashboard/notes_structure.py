@@ -249,6 +249,9 @@ def _read_notes(roots: list[Path]) -> list[dict[str, Any]]:
                          for t in re.findall(r"[^\[\],\s]+", fm.get("tags", ""))],
                 "title": fm.get("title") or path.stem,
                 "links": _link_targets(text),
+                "headings": [(i + 1, line.lstrip("#").strip())
+                             for i, line in enumerate(text.splitlines())
+                             if line.startswith("#")],
                 "mtime": int(path.stat().st_mtime),
                 "in_projects": rel.startswith("projects/"),
                 # A project page sits directly in the projects folder; the
@@ -311,7 +314,42 @@ def index_drift(*, roots: list[Path] | None = None) -> dict[str, Any]:
         "links_to_nothing": ghosts,
         "ideas": ideas,
         "ideas_not_listed": sorted(i for i in ideas if i not in listed),
+        "repeats_itself": _notes_that_repeat_themselves(notes),
     }
+
+
+def _notes_that_repeat_themselves(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The notes that contain a copy of themselves.
+
+    It happens when a file is pasted into itself, or when a sync writes
+    the same block twice. The cost is not the size: it is that every
+    pending shows up twice and nobody can tell which one is the real one.
+
+    A heading that appears twice is not enough — two sections may have
+    the same name — so the copy has to be a long one: the same heading a
+    hundred lines further down means the note holds two of itself.
+    """
+    out: list[dict[str, Any]] = []
+    for note in notes:
+        heads = note.get("headings") or []
+        seen: dict[str, int] = {}
+        for line, head in heads:
+            seen.setdefault(head, line)
+        for head, first in seen.items():
+            again = [line for line, h in heads if h == head and line != first]
+            if not again:
+                continue
+            span = again[0] - first
+            if span < 100:
+                continue
+            out.append({
+                "stem": note["stem"],
+                "path": note.get("path") or "",
+                "heading": head,
+                "lines": span,
+            })
+            break
+    return out
 
 
 def unlinked_notes(*, roots: list[Path] | None = None, limit: int = 12) -> list[dict[str, Any]]:
