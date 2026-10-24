@@ -122,8 +122,10 @@ def test_an_empty_key_keeps_the_one_that_is_stored(server):
     _post(server, "/api/media/providers/stability", {
         "config": {"api_key": "", "model": "sd3"}, "enabled": True})
     stored = mp.stored_configs()["stability"]["config"]
-    assert stored["api_key"] == "sk-keep-me"
+    # The key is not in the database: it is in the vault.
+    assert "api_key" not in stored
     assert stored["model"] == "sd3"
+    assert mp.build("stability").api_key == "sk-keep-me"
 
 
 def test_a_provider_can_be_switched_off(server):

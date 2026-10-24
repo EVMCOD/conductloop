@@ -309,11 +309,14 @@ def test_the_api_key_is_never_handed_back():
 
 
 def test_saving_an_empty_key_keeps_the_one_that_is_stored():
+    """An empty key means "keep the one I have" — and the one I have is in
+    the vault, not in the database."""
     _enable("stability", api_key="sk-secret-value")
     mp.save_config("stability", {"api_key": "", "model": "sd3"}, enabled=True)
     stored = mp.stored_configs()["stability"]["config"]
-    assert stored["api_key"] == "sk-secret-value"
+    assert "api_key" not in stored
     assert stored["model"] == "sd3"
+    assert mp.build("stability").api_key == "sk-secret-value"
 
 
 # ── what the work costs ───────────────────────────────────────────────────

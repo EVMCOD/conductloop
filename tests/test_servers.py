@@ -147,6 +147,9 @@ def test_the_embeddings_say_how_much_is_indexed(clean_db, brain_config):
 
     db.upsert_document(source="obsidian", path="/v/one.md", title="One", content="x",
                        metadata={}, mtime=1780000000, size=1)
+    with db.db() as conn:
+        conn.execute("DELETE FROM embeddings")
+        conn.commit()
     rows = {row["key"]: row for row in servers.status()["capabilities"]}
     emb = rows["embeddings"]
     assert emb["indexed"] == 0

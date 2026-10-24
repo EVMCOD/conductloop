@@ -37,7 +37,10 @@ def _provider():
     from . import brain
     p = brain.resolve_provider()
     ok = getattr(p, "name", "mock") != "mock"
-    return ok, (f"provider: {p.name}" if ok else "no AI provider — set BRAIN_PROVIDER + a key (or run Ollama)")
+    if ok:
+        return True, f"provider: {p.name}"
+    # No environment variables and no files to edit: the key goes in the app.
+    return False, "no AI provider yet — add your key in Credentials"
 
 
 def _embeddings():
@@ -53,7 +56,17 @@ def _secrets():
     probe = "__setup_probe__"
     secrets_store.set_secret(probe, "ok")
     got = secrets_store.get_secret(probe)
-    return got == "ok", ("secret store read/write OK" if got == "ok" else "secret store not writable")
+    if got != "ok":
+        return False, "secret store not writable"
+    try:
+        from . import secret_vault
+
+        where = secret_vault.backend()
+    except Exception:
+        where = "keychain"
+    detail = ("the keychain of this Mac" if where == "keychain"
+              else "an encrypted file (this machine has no keychain)")
+    return True, f"secret store read/write OK — the keys live in {detail}"
 
 
 def _logging():

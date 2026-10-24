@@ -174,6 +174,24 @@ def keychain_set(name: str, value: str) -> bool:
     return _keychain_enabled() and _kc_set(name, value)
 
 
+def keychain_delete(name: str) -> bool:
+    """Remove an item from the OS keychain only.
+
+    Returns True when the item is gone afterwards — including when it was
+    never there. Never touches the file fallback: a caller that wants both
+    asks for both.
+    """
+    if not _keychain_enabled():
+        return False
+    _kc_delete(name)
+    return _kc_get(name) is None
+
+
+def secrets_dir() -> Path:
+    """Where the file fallback keeps the secrets."""
+    return _secrets_dir()
+
+
 def get_or_create_secret(name: str, factory) -> str:
     """Return the stored secret, or create+store one via ``factory()`` (a
     no-arg callable returning str)."""
