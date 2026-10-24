@@ -36,6 +36,7 @@ log = logging.getLogger("conductloop.vault")
 PAGES_DIRNAME = "pages"
 AREAS_DIRNAME = "areas"
 INDEX_NAME = "Index.md"
+WAITING_NAME = "Waiting.md"
 PAGE_MARKER = "<!-- conductloop:page -->"
 # How many open things a page shows. The rest are in the note, one click away.
 MAX_OPEN_ITEMS = 12
@@ -162,7 +163,9 @@ def _plain(text: str) -> str:
     The label of a wikilink is plain text: Obsidian does not render
     emphasis inside it, so the asterisks would be shown as they are.
     """
-    out = re.sub(r"[*_`~]", "", text or "")
+    out = re.sub(r"[*`~]", "", text or "")
+    # The underscores of an identifier (begin_checkout) are not emphasis.
+    out = out.strip().strip("_")
     return re.sub(r"\s+", " ", out).strip()
 
 
@@ -305,6 +308,62 @@ def _header(kind: str, key: str, title: str, intro: str, facts: list[str]) -> li
     return lines
 
 
+def _waiting_page(open_all: dict[str, list[dict[str, Any]]], *, vault: Path | None,
+                  page_path: Path, projects_out: list[dict[str, Any]],
+                  files: dict[str, str]) -> str:
+    """What is waiting for you: the open work of every project at once.
+
+    The page of a project tells you about that project. This one tells you
+    what is blocking everything, which is a question that does not belong
+    to any single project.
+    """
+    links = Links(vault, page_path)
+    blocking = [row for rows in open_all.values() for row in rows if row.get("blocking")]
+    total = sum(len(rows) for rows in open_all.values())
+
+    lines = _header(
+        "map", "waiting", "What is waiting for you",
+        "The open work of every project, the blocking ones first. Every line "
+        "is yours, in your notes, and it links to the exact place where you "
+        "wrote it.",
+        [_plural(len(blocking), "thing that blocks", "things that block"),
+         _plural(total, "open item")])
+    lines.append("")
+
+    if blocking:
+        lines.append("## It blocks")
+        lines.append("")
+        names = {p["key"]: p["name"] for p in projects_out}
+        for row in blocking:
+            plain = _plain(row["text"])
+            if len(plain) > 120:
+                plain = plain[:119].rstrip() + "…"
+            owner = row.get("owner") or ""
+            label = f"{owner} · {plain}" if owner else plain
+            project = names.get(row.get("project") or "")
+            if project:
+                label = f"**{project}** — {label}"
+            lines.append(f"- {links.note(row['path'], label, anchor=row['section'])}")
+        lines.append("")
+
+    if open_all:
+        lines.append("## Everything open, by project")
+        lines.append("")
+        ordered = sorted(open_all.items(),
+                         key=lambda pair: (-len(pair[1]), pair[0]))
+        for key, rows in ordered:
+            project = next((p for p in projects_out if p["key"] == key), None)
+            name = project["name"] if project else key
+            page = page_path.parent / f"{files.get(key, key)}.md"
+            blocking_here = sum(1 for row in rows if row.get("blocking"))
+            mark = f" · {blocking_here} blocking" if blocking_here else ""
+            lines.append(f"- {links.page(page, name)} — {_plural(len(rows), 'open item')}{mark}")
+        lines.append("")
+
+    lines.append("_[This page is written by ConductLoop. Do not edit it by hand.]_")
+    return "\n".join(lines) + "\n"
+
+
 def _project_page(proj: dict[str, Any], notes: list[dict[str, Any]], *,
                   vault: Path | None, page_path: Path, index_path: Path,
                   unlinked: dict[str, list[dict[str, Any]]],
@@ -422,7 +481,8 @@ def _area_page(area: str, notes: list[dict[str, Any]], *,
 def _index_page(data: dict[str, Any], projects_out: list[dict[str, Any]],
                 areas_out: list[dict[str, Any]], *, vault: Path | None,
                 index_path: Path,
-                handoffs: dict[str, list[dict[str, Any]]]) -> str:
+                handoffs: dict[str, list[dict[str, Any]]],
+                open_all: dict[str, list[dict[str, Any]]]) -> str:
     """The map of content: every page, linked."""
     links = Links(vault, index_path)
     totals = data.get("totals") or {}
@@ -435,6 +495,18 @@ def _index_page(data: dict[str, Any], projects_out: list[dict[str, Any]],
          _plural(len(projects_out), "project"),
          _plural(len(areas_out), "area")])
     lines.append("")
+
+    # What is waiting: the open work of every project, in one place.
+    blocking = [row for rows in open_all.values() for row in rows if row.get("blocking")]
+    if open_all:
+        waiting = index_path.parent / WAITING_NAME
+        lines.append("## What is waiting for you")
+        lines.append("")
+        total = sum(len(rows) for rows in open_all.values())
+        lines.append(f"- {links.page(waiting, 'What is waiting for you')} — "
+                     f"{_plural(total, 'open item')}"
+                     + (f" · {_plural(len(blocking), 'block')}" if blocking else ""))
+        lines.append("")
 
     # Where to start: the projects somebody wrote a handoff about, newest
     # first. This is the answer to "what was I doing" without reading a
@@ -479,7 +551,8 @@ def _index_page(data: dict[str, Any], projects_out: list[dict[str, Any]],
     drift = data.get("drift") or {}
     missing = drift.get("missing_from_index") or []
     broken = drift.get("links_to_nothing") or []
-    if missing or broken:
+    repeats = drift.get("repeats_itself") or []
+    if missing or broken or repeats:
         lines.append("## Where your index and the vault disagree")
         lines.append("")
         if missing:
@@ -487,6 +560,12 @@ def _index_page(data: dict[str, Any], projects_out: list[dict[str, Any]],
                          "the index is written by hand and it drifts")
         if broken:
             lines.append(f"- {_plural(len(broken), 'link')} pointing to nothing")
+        if repeats:
+            what = ("1 note contains a copy of itself: " if len(repeats) == 1
+                    else f"{len(repeats)} notes contain a copy of themselves: ")
+            lines.append("- " + what
+                         + ", ".join(row["stem"] for row in repeats[:6])
+                         + ("" if len(repeats) <= 6 else "…"))
         lines.append("")
 
     unlinked = data.get("unlinked") or []
@@ -650,11 +729,16 @@ def export_pages(*, destinations: list[Path],
 
         index_text = _index_page(data, projects_out, areas_out,
                                  vault=vault, index_path=index_path,
-                                 handoffs=handoffs)
+                                 handoffs=handoffs, open_all=open_all)
         if _write_if_changed(index_path, index_text):
             written += 1
 
-        keep: set[str] = {INDEX_NAME}
+        waiting_path = folder / WAITING_NAME
+        waiting_text = _waiting_page(open_all, vault=vault, page_path=waiting_path,
+                                     projects_out=projects_out, files=names)
+        if _write_if_changed(waiting_path, waiting_text):
+            written += 1
+        keep: set[str] = {INDEX_NAME, WAITING_NAME}
         for proj in projects_out:
             key = proj["key"]
             page = folder / f"{proj['file']}.md"
@@ -683,7 +767,7 @@ def export_pages(*, destinations: list[Path],
         removed = _clean(folder, keep) + _clean(areas_folder, keep_areas)
         out["written"] += written
         out["removed"] += len(removed)
-        out["pages"] += len(projects_out) + len(areas_out) + 1
+        out["pages"] += len(projects_out) + len(areas_out) + 2
         out["folders"].append({"path": str(folder), "written": written,
                                "removed": len(removed)})
     return out

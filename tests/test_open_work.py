@@ -158,3 +158,67 @@ def test_the_page_shows_it_and_links_to_the_exact_place(env, tmp_path):
     assert "#🤖 Deepwick — Lenguaje e IA (estado real: 23-oct, 13:50)" in text
     note = (env / "vault" / "TODO.md").read_text(encoding="utf-8")
     assert "## 🤖 Deepwick — Lenguaje e IA (estado real: 23-oct, 13:50)" in note
+
+
+def test_the_waiting_page_puts_the_blocking_work_of_every_project_together(env):
+    """The question that does not belong to any single project."""
+    from ops_dashboard import db, vault_pages
+
+    _note_with_work(env, body=(
+        "## 🤖 Deepwick — Decisiones pendientes (bloqueantes)\n"
+        "\n"
+        "- [ ] Decidir si se ocultan las funciones sin uso\n"
+    ))
+    with db.db() as conn:
+        conn.execute("UPDATE documents SET project_key='deepwick'")
+        conn.commit()
+
+    export = env / "vault" / "ConductLoop"
+    export.mkdir(exist_ok=True)
+    vault_pages.export_pages(destinations=[export], data={
+        "projects": [{"key": "deepwick", "name": "DeepWick", "parent": None, "notes": 1,
+                      "ids": [1], "recent": [], "repos": [], "known": True}],
+        "ideas": [], "drift": {"missing_from_index": [], "links_to_nothing": []},
+        "unlinked": [], "suggestions": [],
+        "totals": {"documents": 1, "attributed": 1, "loose": 0},
+    })
+    page = export / "pages" / "Waiting.md"
+    assert page.exists()
+    text = page.read_text(encoding="utf-8")
+    assert "## It blocks" in text
+    assert "Decidir si se ocultan las funciones sin uso" in text
+    assert "**DeepWick**" in text
+    # And the index points at it.
+    index = (export / "pages" / "Index.md").read_text(encoding="utf-8")
+    assert "What is waiting for you" in index
+
+
+def test_the_same_item_written_twice_is_one_item(env):
+    """TODO.md repeats its own first half: every pending shows up twice."""
+    from ops_dashboard import open_work
+
+    _note_with_work(env, body=(
+        "## 🤖 Deepwick — IA\n"
+        "\n"
+        "- [ ] Una cosa\n"
+        "\n"
+        "## 🤖 Deepwick — IA\n"
+        "\n"
+        "- [ ] Una cosa\n"
+    ))
+    rows = open_work.scan()["deepwick"]
+    assert len(rows) == 1
+
+
+def test_an_item_whose_text_names_the_project_finds_it(env):
+    """The section may say nothing: the line itself says which project."""
+    from ops_dashboard import open_work
+
+    _note_with_work(env, body=(
+        "## Pendiente\n"
+        "\n"
+        "- [ ] DeepWick: probar el webhook en producción\n"
+    ))
+    data = open_work.scan()
+    assert "deepwick" in data, "the line names the project"
+    assert len(data["deepwick"]) == 1

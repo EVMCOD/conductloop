@@ -366,3 +366,30 @@ def test_linking_them_adds_a_section_and_touches_nothing_else(roots):
     # And there is a copy before the change.
     assert (roots[0] / "projects" / "alpha.md.conductloop-backup").read_text(
         encoding="utf-8") == before
+
+
+def test_a_note_that_contains_a_copy_of_itself_is_reported(tmp_path):
+    """TODO.md repeats its own first half: every pending shows up twice."""
+    from ops_dashboard import notes_structure
+
+    vault = tmp_path / "vault"
+    (vault / "projects").mkdir(parents=True)
+    block = ["# TODO", "", "## AI", "", "- [ ] algo"] + [f"linea {i}" for i in range(120)]
+    (vault / "TODO.md").write_text("\n".join(block + block), encoding="utf-8")
+    drift = notes_structure.index_drift(roots=[vault])
+    repeats = drift["repeats_itself"]
+    assert len(repeats) == 1
+    assert repeats[0]["stem"] == "TODO"
+    assert repeats[0]["lines"] >= 100
+
+
+def test_a_note_with_two_sections_of_the_same_name_is_not_a_repeat(tmp_path):
+    """Two sections may share a name; that is not the note repeating itself."""
+    from ops_dashboard import notes_structure
+
+    vault = tmp_path / "vault"
+    (vault / "projects").mkdir(parents=True)
+    (vault / "nota.md").write_text(
+        "# Nota\n\n## Backend\n\nuno\n\n## Backend\n\ndos\n", encoding="utf-8")
+    drift = notes_structure.index_drift(roots=[vault])
+    assert drift["repeats_itself"] == []
