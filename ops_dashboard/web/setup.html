@@ -32,6 +32,7 @@
     button:disabled{opacity:.5;cursor:default}
     .note{font-size:13px;color:var(--muted);margin-top:10px;min-height:18px}
     .lib-label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+    .map-lines{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;margin:6px 0}
     #lib-folders,#lib-workspace{width:100%;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
     code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink)}
     a{color:var(--blue)}
@@ -268,6 +269,9 @@
           });
         }
 
+        // The lines that would put the missing projects back in the index.
+        loadProposal();
+
         const topics = d.topics || [];
         if (topics.length) {
           const body = mapGroup('Themes in the loose notes', topics.length);
@@ -284,6 +288,30 @@
       } catch (e) {
         box.appendChild(el('p', 'hint', 'Could not draw the map: ' + e.message));
       }
+    }
+    async function loadProposal() {
+      let d;
+      try {
+        d = await (await fetch('/api/library/proposal')).json();
+      } catch (e) { return; }
+      if (!d.ok || !d.count) return;
+      const body = mapGroup('Lines missing from your index (' + d.count + ')');
+      const pre = el('pre', 'map-lines');
+      const text = d.blocks.map(b =>
+        '### ' + b.status + ' (' + b.count + ')\n' + b.markdown).join('\n\n');
+      pre.textContent = text;
+      body.appendChild(pre);
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'cl-btn cl-btn--ghost small';
+      copy.textContent = 'Copy the lines';
+      copy.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          copy.textContent = '✓ Copied';
+        } catch (e) { copy.textContent = '✗ ' + e.message; }
+      };
+      body.appendChild(copy);
     }
     document.getElementById('btn-map').onclick = () => loadMap();
     document.getElementById('btn-map-export').onclick = async () => {

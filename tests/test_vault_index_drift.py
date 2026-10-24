@@ -175,3 +175,63 @@ def test_the_map_carries_the_drift(roots):
     assert "drift" in data
     assert "gamma" in data["drift"]["missing_from_index"]
     assert data["unlinked"]
+
+
+# ── the lines that would go back in the index ─────────────────────────────
+
+def test_the_missing_projects_become_lines_in_the_index_format(roots):
+    from ops_dashboard import notes_structure
+
+    proposal = notes_structure.propose_index_lines(roots=roots)
+    lines = [line for block in proposal["blocks"] for line in block["lines"]]
+    assert "- [[gamma]] — Gamma" in lines
+    # gamma and the idea: neither is in the index of this little vault.
+    assert proposal["count"] == 2
+    assert "- [[idea-thing]] — An idea" in lines
+
+
+def test_the_lines_are_grouped_by_status(roots):
+    from ops_dashboard import notes_structure
+
+    proposal = notes_structure.propose_index_lines(roots=roots)
+    assert proposal["blocks"][0]["status"] == "active"
+    assert "### active (1)" in proposal["blocks"][0]["markdown"] or \
+        proposal["blocks"][0]["markdown"].startswith("- [[gamma]]")
+
+
+def test_a_note_in_a_project_folder_is_not_a_missing_project(roots):
+    """The notes of a project are its documentation, not projects."""
+    from ops_dashboard import notes_structure
+
+    drift = notes_structure.index_drift(roots=roots)
+    assert "architecture" not in drift["missing_from_index"]
+
+
+def test_the_section_is_guessed_from_the_tags_of_the_notes_already_there(roots):
+    """If everything under "SaaS" is tagged saas, a saas note belongs there."""
+    from ops_dashboard import notes_structure
+
+    (roots[0] / "projects" / "_index.md").write_text(
+        "---\ntype: hub\n---\n\n"
+        "## 🟢 Activos\n\n### SaaS\n- [[alpha]] — the first one\n",
+        encoding="utf-8")
+    # The section learns from the notes it already lists: alpha is a saas
+    # note, so the section is the saas one, and gamma says it is too.
+    for name in ("alpha", "gamma"):
+        note = roots[0] / "projects" / f"{name}.md"
+        note.write_text(note.read_text(encoding="utf-8").replace(
+            "status: active", "status: active\ntags: [project, saas]"),
+            encoding="utf-8")
+    proposal = notes_structure.propose_index_lines(roots=roots)
+    gamma = next(p for p in proposal["proposals"] if p["stem"] == "gamma")
+    assert gamma["section"] == "SaaS"
+
+
+def test_nothing_is_written_to_the_index(roots):
+    """The index is the user's prose; the product only proposes."""
+    from ops_dashboard import notes_structure
+
+    index = roots[0] / "projects" / "_index.md"
+    before = index.read_text(encoding="utf-8")
+    notes_structure.propose_index_lines(roots=roots)
+    assert index.read_text(encoding="utf-8") == before
