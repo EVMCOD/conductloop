@@ -1235,7 +1235,13 @@ POINTER_BEGIN = "<!-- conductloop:map -->"
 POINTER_END = "<!-- /conductloop:map -->"
 
 
-def _pointer_block(summary: str) -> str:
+def _pointer_block(summary: str, pages: str = "") -> str:
+    extra = ""
+    if pages:
+        extra = (">\n"
+                 f"> The same map, one page per project, is in your vault at\n"
+                 f"> `{pages}`.\n"
+                 "> Read that page when you need one project: it is a page, not 39 KB.\n")
     return f"""{POINTER_BEGIN}
 > **The map of the work** — `{MAP_FILENAME}` in this folder. Which project each
 > note belongs to, which ideas belong to nobody yet, and the projects your
@@ -1244,8 +1250,24 @@ def _pointer_block(summary: str) -> str:
 > point of writing it down.
 >
 > {summary}
-{POINTER_END}
+{extra}{POINTER_END}
 """
+
+
+def _pages_index() -> str:
+    """Where the pages of the map are, when there is a vault to write them in.
+
+    Empty when they are not there: the pointer must never send an agent to
+    a file that does not exist.
+    """
+    from . import library
+    from .vault_pages import INDEX_NAME, PAGES_DIRNAME
+
+    destinations = library.map_export_destinations()
+    if not destinations:
+        return ""
+    path = destinations[0] / PAGES_DIRNAME / INDEX_NAME
+    return str(path) if path.exists() else ""
 
 
 def fingerprint(structure_map: dict[str, Any]) -> dict[str, Any]:
@@ -1400,9 +1422,6 @@ def write_agent_map(*, filename: str = MAP_FILENAME, pointer: bool = True,
         "changed": written,
         "change": change,
     }
-    if pointer:
-        out["pointer"] = write_agent_pointer(workspace, summary=summarize_change(change),
-                                             proposal=proposal_path(workspace))
     # The same map where the notes live, so it travels with them.
     copies: list[str] = []
     for destination in (also_to or []):
@@ -1415,6 +1434,23 @@ def write_agent_map(*, filename: str = MAP_FILENAME, pointer: bool = True,
             log.warning("could not write the map to %s: %s", destination, e)
     if copies:
         out["copies"] = copies
+    # And as pages, one per project, linked: the shape a vault understands.
+    pages_written = 0
+    if also_to:
+        try:
+            from . import vault_pages
+
+            out["pages"] = vault_pages.export_pages(destinations=list(also_to), data=data)
+            pages_written = int(out["pages"].get("pages") or 0)
+        except Exception as e:
+            # The pages are a view of the map; the map itself is already written.
+            log.warning("could not write the pages of the map: %s", e)
+    # The pointer goes last: it must never point at pages that are not there.
+    if pointer:
+        out["pointer"] = write_agent_pointer(
+            workspace, summary=summarize_change(change),
+            proposal=proposal_path(workspace),
+            pages=_pages_index() if pages_written else "")
     return out
 
 
@@ -1430,7 +1466,8 @@ def proposal_path(workspace: Path | None = None) -> str:
 
 def write_agent_pointer(workspace: Path | None = None, *,
                         summary: str | None = None,
-                        proposal: str = "") -> dict[str, Any]:
+                        proposal: str = "",
+                        pages: str | None = None) -> dict[str, Any]:
     """Make the agent's own instructions point at the map.
 
     The block is marked, so it can be refreshed without touching the rest
@@ -1443,7 +1480,8 @@ def write_agent_pointer(workspace: Path | None = None, *,
 
         workspace = library.memory_workspace()
     path = workspace / "AGENTS.md"
-    block = _pointer_block(summary or "> Last change: the map has just been drawn.")
+    block = _pointer_block(summary or "> Last change: the map has just been drawn.",
+                            pages=_pages_index() if pages is None else pages)
     if proposal:
         block = block.replace(
             f"{POINTER_END}",
@@ -1507,4 +1545,11 @@ def refresh_agent_map(*, filename: str = MAP_FILENAME,
            "change": change}
     if copies:
         out["copies"] = copies
+    if also_to:
+        try:
+            from . import vault_pages
+
+            out["pages"] = vault_pages.export_pages(destinations=list(also_to), data=data)
+        except Exception as e:
+            log.warning("could not write the pages of the map: %s", e)
     return out

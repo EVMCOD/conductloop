@@ -1,0 +1,209 @@
+"""The map as pages: one per project, linked the way a vault resolves them.
+
+A flat ``PROJECTS.md`` is invisible to Obsidian: no links, no graph, no
+backlinks, and an agent that has to read all 39 KB to learn about one
+project. These pages are the same map in the shape a vault can follow —
+so the test that matters is not "the file exists" but "every link in it
+points at a note that is really there".
+"""
+from __future__ import annotations
+
+import re
+
+import pytest
+
+WIKILINK = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
+
+
+@pytest.fixture()
+def vault(tmp_path, monkeypatch):
+    """A vault with two projects, a loose note, and a place for the map."""
+    from ops_dashboard import db, library, notes_structure
+
+    root = tmp_path / "vault"
+    (root / ".obsidian").mkdir(parents=True)
+    (root / "projects").mkdir()
+    (root / "research").mkdir()
+    export = root / "ConductLoop"
+    export.mkdir()
+
+    (root / "projects" / "rentcla.md").write_text(
+        "---\ntype: project\n---\n# Rentcla\n", encoding="utf-8")
+    (root / "projects" / "deepwick.md").write_text(
+        "---\ntype: project\n---\n# DeepWick\n", encoding="utf-8")
+    (root / "research" / "growth.md").write_text("# Growth\n", encoding="utf-8")
+
+    monkeypatch.setenv("CONDUCTLOOP_DB_PATH", str(tmp_path / "pages.db"))
+    db.DB_PATH = tmp_path / "pages.db"  # type: ignore[attr-defined]
+    db.init_db()
+
+    for path, title, key in [
+        (root / "projects" / "rentcla.md", "Rentcla", "rentcla"),
+        (root / "projects" / "deepwick.md", "DeepWick", "deepwick"),
+        (root / "research" / "growth.md", "Growth", ""),
+    ]:
+        db.upsert_document(source="obsidian", path=str(path), title=title,
+                           content="x", metadata={}, mtime=1780000000, size=1)
+        if key:
+            with db.db() as conn:
+                conn.execute("UPDATE documents SET project_key=? WHERE path=?", (key, str(path)))
+                conn.commit()
+
+    monkeypatch.setattr(notes_structure, "_vault_roots", lambda: [root])
+    monkeypatch.setattr(library, "map_export_destinations", lambda: [export])
+
+    data = {
+        "projects": [
+            {"key": "rentcla", "name": "Rentcla", "parent": None, "notes": 1,
+             "ids": [1], "recent": [], "repos": ["/tmp/rentcla"], "known": True},
+            {"key": "deepwick", "name": "DeepWick", "parent": None, "notes": 1,
+             "ids": [2], "recent": [], "repos": [], "known": True},
+        ],
+        "ideas": [],
+        "drift": {"missing_from_index": ["rentcla"], "links_to_nothing": []},
+        "unlinked": [],
+        "suggestions": [],
+        "totals": {"documents": 3, "attributed": 2, "loose": 1},
+    }
+    return {"root": root, "export": export, "data": data}
+
+
+def _export(vault):
+    from ops_dashboard import vault_pages
+
+    out = vault_pages.export_pages(destinations=[vault["export"]], data=vault["data"])
+    return vault_pages, out
+
+
+def test_the_map_becomes_one_page_per_project(vault):
+    """An index, a page per project, and a page per area of loose notes."""
+    _export(vault)
+    pages = vault["export"] / "pages"
+    assert (pages / "Index.md").exists()
+    assert (pages / "rentcla.md").exists()
+    assert (pages / "deepwick.md").exists()
+    assert (pages / "areas" / "research.md").exists()
+
+
+def test_every_link_points_at_a_note_that_is_really_there(vault):
+    """The whole point of the pages: the links resolve."""
+    _export(vault)
+    pages = vault["export"] / "pages"
+    checked = 0
+    for page in sorted(pages.rglob("*.md")):
+        for target in WIKILINK.findall(page.read_text(encoding="utf-8")):
+            checked += 1
+            assert (vault["root"] / f"{target}.md").exists(), f"{target} in {page.name}"
+    assert checked >= 4
+
+
+def test_the_notes_of_a_project_are_linked_from_its_page(vault):
+    _export(vault)
+    text = (vault["export"] / "pages" / "rentcla.md").read_text(encoding="utf-8")
+    assert "[[projects/rentcla|Rentcla]]" in text
+    assert "/tmp/rentcla" in text
+
+
+def test_a_note_outside_the_vault_is_a_path_and_not_a_link(vault):
+    """A link to nowhere is worse than a path that works everywhere."""
+    from ops_dashboard import db
+
+    outside = vault["root"].parent / "outside.md"
+    outside.write_text("# Outside\n", encoding="utf-8")
+    db.upsert_document(source="obsidian", path=str(outside), title="Outside",
+                       content="x", metadata={}, mtime=1780000000, size=1)
+    with db.db() as conn:
+        conn.execute("UPDATE documents SET project_key='rentcla' WHERE path=?", (str(outside),))
+        conn.commit()
+
+    _export(vault)
+    text = (vault["export"] / "pages" / "rentcla.md").read_text(encoding="utf-8")
+    assert "Outside" in text
+    assert f"[[{outside}|" not in text
+    assert str(outside) in text
+
+
+def test_the_pages_are_ours_and_say_so(vault):
+    _export(vault)
+    for page in (vault["export"] / "pages").rglob("*.md"):
+        assert vault_pages_marker(page.read_text(encoding="utf-8"))
+
+
+def vault_pages_marker(text: str) -> bool:
+    from ops_dashboard.vault_pages import PAGE_MARKER
+
+    return PAGE_MARKER in text
+
+
+def test_the_orphans_of_a_project_land_on_its_page(vault):
+    """The vault calls the project one thing and the registry another: the
+    notes that stopped being linked are the bridge between both names."""
+    from ops_dashboard import db
+
+    folder = vault["root"] / "projects" / "rentcla"
+    folder.mkdir()
+    orphan = folder / "contract.md"
+    orphan.write_text("# Contract\n", encoding="utf-8")
+    db.upsert_document(source="obsidian", path=str(orphan), title="Contract",
+                       content="x", metadata={}, mtime=1780000000, size=1)
+    with db.db() as conn:
+        conn.execute("UPDATE documents SET project_key='rentcla' WHERE path=?", (str(orphan),))
+        conn.commit()
+
+    vault["data"]["unlinked"] = [{
+        "project": "rentcla", "title": "Rentcla", "path": str(vault["root"] / "projects" / "rentcla.md"),
+        "folder": str(folder), "orphans": ["contract"], "count": 1,
+    }]
+    _export(vault)
+    text = (vault["export"] / "pages" / "rentcla.md").read_text(encoding="utf-8")
+    assert "## Notes this page does not link" in text
+    assert "contract" in text
+
+
+def test_only_our_own_pages_are_removed(vault):
+    """The folder is inside the vault of the user: the rest is theirs."""
+    from ops_dashboard.vault_pages import PAGE_MARKER
+
+    _export(vault)
+    pages = vault["export"] / "pages"
+    stale = pages / "gone.md"
+    stale.write_text(f"---\ntype: conductloop-map\n---\n{PAGE_MARKER}\n# Gone\n",
+                     encoding="utf-8")
+    theirs = pages / "my-notes.md"
+    theirs.write_text("# Mine\n", encoding="utf-8")
+
+    vault["data"]["projects"] = [
+        p for p in vault["data"]["projects"] if p["key"] != "deepwick"]
+    _export(vault)
+
+    assert not stale.exists()
+    assert not (pages / "deepwick.md").exists()
+    assert theirs.exists()
+    assert theirs.read_text(encoding="utf-8") == "# Mine\n"
+
+
+def test_writing_it_twice_does_not_touch_the_vault(vault):
+    """A vault that changes every hour is a vault nobody reads."""
+    _export(vault)
+    page = vault["export"] / "pages" / "rentcla.md"
+    before = page.read_text(encoding="utf-8"), page.stat().st_mtime_ns
+
+    _vault_pages, out = _export(vault)
+    assert out["written"] == 0
+    assert before == (page.read_text(encoding="utf-8"), page.stat().st_mtime_ns)
+
+
+def test_the_product_does_not_index_its_own_pages(vault):
+    """The map names every project: indexing it would make the map part of
+    the map, and every page of it another synthetic note."""
+    from ops_dashboard import db
+    from ops_dashboard.indexers import obsidian
+
+    _export(vault)
+    obsidian._run_one(vault["root"])
+
+    with db.db() as conn:
+        rows = conn.execute("SELECT path FROM documents").fetchall()
+    paths = [str(r["path"]) for r in rows]
+    assert paths, "the notes of the user must still be indexed"
+    assert not [p for p in paths if "/pages/" in p]

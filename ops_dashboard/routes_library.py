@@ -184,6 +184,40 @@ def library_undo(handler) -> None:
     _send_json(handler, 200, {"ok": True, **result})
 
 
+@router.get("/api/library/pages")
+@_local_only
+def library_pages(handler) -> None:
+    """The map as pages: one per project, linked the way a vault follows.
+
+    The flat map is a file; these are a graph. An agent that needs one
+    project reads one page instead of 39 KB, and Obsidian can follow the
+    links in both directions.
+    """
+    from . import notes_structure, vault_pages
+
+    try:
+        data = notes_structure.structure()
+    except Exception as e:
+        _err(handler, 500, "structure_failed", str(e))
+        return
+
+    destinations = library.map_export_destinations()
+    folders: list[dict] = []
+    for destination in destinations:
+        pages = destination / vault_pages.PAGES_DIRNAME
+        index = pages / vault_pages.INDEX_NAME
+        folders.append({
+            "path": str(pages),
+            "index": str(index) if index.exists() else "",
+            "written": len(sorted(pages.glob("*.md"))) if pages.is_dir() else 0,
+            "areas": len(sorted((pages / vault_pages.AREAS_DIRNAME).glob("*.md")))
+            if (pages / vault_pages.AREAS_DIRNAME).is_dir() else 0,
+        })
+    _send_json(handler, 200, {"ok": True, "folders": folders,
+                               "projects": len([p for p in data["projects"] if p.get("notes")]),
+                               "areas": len(data.get("ideas") or [])})
+
+
 @router.post("/api/library/export")
 @_local_only
 def library_export(handler) -> None:
