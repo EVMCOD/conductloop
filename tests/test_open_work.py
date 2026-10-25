@@ -264,3 +264,27 @@ def test_the_agent_gets_the_waiting_page_in_its_own_folder(env, tmp_path):
     pointer = (workspace / "AGENTS.md").read_text(encoding="utf-8")
     assert "WAITING.md" in pointer
     assert pointer.index("WAITING.md") < pointer.index("PROJECTS.md")
+
+
+def test_the_notes_you_never_wrote_are_listed(env, tmp_path):
+    """A link to a note that does not exist is an idea you had enough of."""
+    from ops_dashboard import db, notes_structure, vault_pages
+
+    vault = tmp_path / "vault"
+    (vault / "projects").mkdir(parents=True)
+    note = vault / "ideas.md"
+    note.write_text("# Ideas\n\n[[bing_indexnow_setup]]\n[[paper-2019]]\n[[data.csv]]\n",
+                    encoding="utf-8")
+    db.upsert_document(source="obsidian", path=str(note), title="Ideas", content="x",
+                       metadata={}, mtime=1780000000, size=1)
+
+    drift = notes_structure.index_drift(roots=[vault])
+    wanted = vault_pages.wanted_notes({"drift": drift})
+    stems = [row["stem"] for row in wanted]
+    assert "bing_indexnow_setup" in stems
+    # A citation and a file are not notes to write.
+    assert not any(s.endswith("2019") for s in stems)
+    assert not any(s.endswith(".csv") for s in stems)
+    # And it says where the link came from.
+    row = next(r for r in wanted if r["stem"] == "bing_indexnow_setup")
+    assert "ideas" in row["from"]
