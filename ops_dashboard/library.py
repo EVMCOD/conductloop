@@ -150,8 +150,19 @@ def refresh(*, embed: bool = True) -> dict:
     After the notes are in, the map is drawn: which project each note
     belongs to, which ideas belong to nobody yet.
     """
+    from . import bounded
     from .indexers import memory, obsidian, repos
-    out: dict = {"obsidian": obsidian.run(), "memory": memory.run(), "repos": repos.run()}
+
+    deadline = bounded.vault_timeout()
+    out: dict = {}
+    try:
+        out["obsidian"] = bounded.run(obsidian.run, seconds=deadline,
+                                       what="the index of the vault")
+    except bounded.Timeout as e:
+        # The vault stopped answering: the app carries on without it.
+        out["obsidian"] = {"skipped": str(e)}
+    out["memory"] = memory.run()
+    out["repos"] = repos.run()
     try:
         from . import notes_structure
 
@@ -159,8 +170,10 @@ def refresh(*, embed: bool = True) -> dict:
         # Keep the map fresh for whoever reads it next. It only rewrites a
         # map that is already there: the product does not start writing
         # into the agent's workspace just because it happened to run.
-        refreshed = notes_structure.refresh_agent_map(
-            also_to=map_export_destinations())
+        refreshed = bounded.run(
+            lambda: notes_structure.refresh_agent_map(
+                also_to=map_export_destinations()),
+            seconds=deadline, what="the map of the vault")
         if refreshed:
             out["map"] = refreshed
         # What the product would do, written where the user will find it in
@@ -168,6 +181,8 @@ def refresh(*, embed: bool = True) -> dict:
         proposal = notes_structure.write_proposal()
         if proposal:
             out["proposal"] = proposal
+    except bounded.Timeout as e:
+        out["structure"] = {"skipped": str(e)}
     except Exception as e:
         out["structure"] = {"skipped": type(e).__name__}
     if embed:

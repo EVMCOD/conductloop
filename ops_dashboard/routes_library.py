@@ -228,11 +228,18 @@ def library_export(handler) -> None:
     one agent happens to have. It is also written where the notes live, so
     it travels with them.
     """
-    from . import library, notes_structure
+    from . import bounded, library, notes_structure
 
     try:
-        written = notes_structure.write_agent_map(
-            also_to=library.map_export_destinations())
+        written = bounded.run(
+            lambda: notes_structure.write_agent_map(
+                also_to=library.map_export_destinations()),
+            seconds=bounded.vault_timeout(),
+            what="the map of the vault")
+    except bounded.Timeout as e:
+        # The vault is not answering. Say so instead of waiting for ever.
+        _err(handler, 503, "vault_unresponsive", str(e))
+        return
     except Exception as e:
         _err(handler, 500, "export_failed", str(e))
         return
