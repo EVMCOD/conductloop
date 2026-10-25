@@ -335,7 +335,8 @@ def _header(kind: str, key: str, title: str, intro: str, facts: list[str]) -> li
 
 def _waiting_page(open_all: dict[str, list[dict[str, Any]]], *, vault: Path | None,
                   page_path: Path, projects_out: list[dict[str, Any]],
-                  files: dict[str, str], for_agent: bool = False) -> str:
+                  files: dict[str, str], for_agent: bool = False,
+                  wanted: list[dict[str, Any]] | None = None) -> str:
     """What is waiting for you: the open work of every project at once.
 
     The page of a project tells you about that project. This one tells you
@@ -369,6 +370,23 @@ def _waiting_page(open_all: dict[str, list[dict[str, Any]]], *, vault: Path | No
             if project:
                 label = f"**{project}** — {label}"
             lines.append(f"- {links.note(row['path'], label, anchor=row['section'])}")
+        lines.append("")
+
+    if open_all:
+        wanted = wanted or []
+    if wanted:
+        lines.append("## Things you linked and never wrote")
+        lines.append("")
+        lines.append("A link is an idea you had enough of to write down. Some of "
+                     "these are notes you wanted, some are names of things to "
+                     "configure, and some are papers. The ones that matter are "
+                     "yours to write.")
+        lines.append("")
+        for row in wanted:
+            label = f"`{row['stem']}`"
+            if row.get("from"):
+                label += f" — linked from {', '.join(row['from'][:2])}"
+            lines.append(f"- {label}")
         lines.append("")
 
     if open_all:
@@ -701,6 +719,27 @@ def latest_handoffs() -> dict[str, dict[str, Any]]:
     return {key: rows[0] for key, rows in handoffs.items() if rows}
 
 
+# A note name: lower case, with dashes or underscores. A link to a CSV, to
+# a heading or to a file is not an idea, so it does not pass here.
+_NOTE_SHAPED = re.compile(r"^[a-z0-9]+([-_][a-z0-9]+)+$")
+# A name that ends in a year is a citation (assness-2012), not a note.
+_CITATION = re.compile(r"-(19|20)\d{2}$")
+
+
+def wanted_notes(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """The links that point at notes that were never written.
+
+    A link is an idea you had enough of: you thought about it, and you
+    wrote a link to it. The note that holds the link says where it came
+    from.
+    """
+    drift = data.get("drift") or {}
+    rows = drift.get("wanted_notes") or []
+    return [row for row in rows
+            if _NOTE_SHAPED.match(str(row.get("stem") or ""))
+            and not _CITATION.search(str(row.get("stem") or ""))]
+
+
 def open_work() -> dict[str, list[dict[str, Any]]]:
     """The open work of every project.
 
@@ -718,7 +757,8 @@ def open_work() -> dict[str, list[dict[str, Any]]]:
 
 def waiting_pages(*, data: dict[str, Any],
                   open_all: dict[str, list[dict[str, Any]]],
-                  vault: Path | None, pages_dir: Path) -> tuple[str, str]:
+                  vault: Path | None, pages_dir: Path,
+                  wanted: list[dict[str, Any]] | None = None) -> tuple[str, str]:
     """The waiting page, twice: the one for the vault and the one for an agent.
 
     The agent's copy carries the whole path of every note, because a
@@ -727,7 +767,8 @@ def waiting_pages(*, data: dict[str, Any],
     projects_out = [p for p in data.get("projects") or [] if p.get("notes")]
     files = _unique([p["key"] for p in projects_out])
     common = {"vault": vault, "page_path": pages_dir / WAITING_NAME,
-              "projects_out": projects_out, "files": files}
+              "projects_out": projects_out, "files": files,
+              "wanted": wanted if wanted is not None else wanted_notes(data)}
     return (_waiting_page(open_all, **common),
             _waiting_page(open_all, **common, for_agent=True))
 
@@ -785,7 +826,8 @@ def export_pages(*, destinations: list[Path],
 
         waiting_path = folder / WAITING_NAME
         waiting_text = _waiting_page(open_all, vault=vault, page_path=waiting_path,
-                                     projects_out=projects_out, files=names)
+                                     projects_out=projects_out, files=names,
+                                     wanted=wanted_notes(data))
         if _write_if_changed(waiting_path, waiting_text):
             written += 1
         keep: set[str] = {INDEX_NAME, WAITING_NAME}

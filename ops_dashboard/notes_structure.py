@@ -300,6 +300,20 @@ def index_drift(*, roots: list[Path] | None = None) -> dict[str, Any]:
     missing = sorted(n["stem"] for n in project_notes if n["stem"] not in listed)
     ghosts = sorted(t for t in listed if t not in by_stem)
 
+    # A link to a note that does not exist is an idea: you thought about it
+    # enough to link it. The note that holds the link says where it came
+    # from, which is what makes it actionable instead of broken.
+    #
+    # Some of them are the same note written with other separators
+    # (traincurve-static-site-seo-break / traincurve_static_site_seo_break):
+    # those are not ideas, they are a broken link with a twin.
+    wanted: dict[str, list[str]] = {}
+    for note in notes:
+        for link in sorted(note["links"]):
+            if link in by_stem:
+                continue
+            wanted.setdefault(link, []).append(note["stem"])
+
     # The ideas: the project notes that are waiting for a decision.
     ideas = sorted(by_status.get("idea", []) + by_status.get("open-decision", []))
 
@@ -312,6 +326,8 @@ def index_drift(*, roots: list[Path] | None = None) -> dict[str, Any]:
         "listed": len(listed),
         "missing_from_index": missing,
         "links_to_nothing": ghosts,
+        "wanted_notes": [{"stem": stem, "from": sorted(set(frm))[:3]}
+                         for stem, frm in sorted(wanted.items())],
         "ideas": ideas,
         "ideas_not_listed": sorted(i for i in ideas if i not in listed),
         "repeats_itself": _notes_that_repeat_themselves(notes),
@@ -1451,7 +1467,8 @@ def _write_agent_waiting(workspace: Path, data: dict[str, Any],
     pages_dir = destinations[0] / vault_pages.PAGES_DIRNAME
     _, agent_text = vault_pages.waiting_pages(
         data=data, open_all=vault_pages.open_work(),
-        vault=vault, pages_dir=pages_dir)
+        vault=vault, pages_dir=pages_dir,
+        wanted=vault_pages.wanted_notes(data))
     agent_path = workspace / vault_pages.WAITING_FILENAME
     changed = _write_if_changed(agent_path, agent_text)
     return {"path": str(agent_path), "bytes": len(agent_text.encode("utf-8")),

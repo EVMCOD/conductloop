@@ -261,6 +261,23 @@
               broken.slice(0, 8).join(', ');
             body.appendChild(row);
           }
+          const repeats = (d.drift && d.drift.repeats_itself) || [];
+          if (repeats.length) {
+            const row = el('div', 'detail');
+            row.textContent = repeats.length + ' note(s) contain a copy of themselves: ' +
+              repeats.slice(0, 8).map(r => r.stem).join(', ') +
+              (repeats.length > 8 ? '…' : '');
+            body.appendChild(row);
+          }
+          const wanted = ((d.drift && d.drift.wanted_notes) || [])
+            .filter(w => /^[a-z0-9]+([-_][a-z0-9]+)+$/.test(w.stem));
+          if (wanted.length) {
+            const row = el('div', 'detail');
+            row.textContent = wanted.length + ' links point at notes you never wrote: ' +
+              wanted.slice(0, 10).map(w => w.stem).join(', ') +
+              (wanted.length > 10 ? '…' : '');
+            body.appendChild(row);
+          }
         }
 
         const unlinked = d.unlinked || [];
