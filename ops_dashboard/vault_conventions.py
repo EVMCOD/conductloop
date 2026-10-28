@@ -36,7 +36,9 @@ import json
 import logging
 import os
 import re
+import string
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -102,10 +104,19 @@ class Conventions:
         alternatives = "|".join(re.escape(n) for n in self.all_owners())
         return re.compile(rf"\s*[—–-]\s*({alternatives})\s*$")
 
-    def blocking_re(self, base: str) -> re.Pattern[str]:
-        """The built-in blocking-heading pattern plus the configured ones."""
-        parts = [base] + [p for p in self.blocking_headings if _valid_regex(p)]
-        return re.compile("|".join(f"(?:{p})" for p in parts), re.IGNORECASE)
+    def blocking_re(self, base: str) -> BlockingMatcher:
+        """The built-in blocking-heading pattern plus the configured ones.
+
+        Every pattern is compiled on its own, so a configured regex keeps its
+        own leading inline flags (``(?i)blocked``) and its own groups; one that
+        does not compile is skipped (with a warning) and never breaks a scan.
+        """
+        compiled = [re.compile(base, re.IGNORECASE)]
+        for pattern in self.blocking_headings:
+            one = _compile_blocking(pattern)
+            if one is not None:
+                compiled.append(one)
+        return BlockingMatcher(tuple(compiled))
 
     def counts_re(self) -> re.Pattern[str]:
         return _template_to_re(self.counts_template) if self.counts_template else DEFAULT_COUNTS_RE
@@ -115,33 +126,98 @@ class Conventions:
         return template.format(total=total, active=active, ideas=ideas)
 
 
-def _valid_regex(pattern: str) -> bool:
+@lru_cache(maxsize=256)
+def _compile_blocking(pattern: str) -> re.Pattern[str] | None:
+    """One configured blocking pattern, case-insensitive; None when invalid."""
     try:
-        re.compile(pattern)
-        return True
-    except re.error:
-        log.warning("vault_conventions: ignoring the invalid pattern %r", pattern)
-        return False
+        return re.compile(pattern, re.IGNORECASE)
+    except (re.error, RecursionError, OverflowError) as exc:
+        log.warning("vault_conventions: ignoring the invalid blocking pattern %r (%s)", pattern, exc)
+        return None
+
+
+class BlockingMatcher:
+    """Several compiled patterns that behave like one for ``.search``."""
+
+    def __init__(self, patterns: tuple[re.Pattern[str], ...]) -> None:
+        self.patterns = patterns
+
+    def search(self, text: str) -> re.Match[str] | None:
+        for pattern in self.patterns:
+            found = pattern.search(text)
+            if found:
+                return found
+        return None
+
+
+# What ``str.format`` may do with a counts placeholder. The counts are plain
+# integers, so the placeholder grammar is the integer one:
+#   {total}  {active:03d}  {ideas:,}  {total:>4}  {active!s}
+# ``[[fill]align][sign][0][width][,|_][d]``, or ``[[fill]align][width]`` after a
+# ``!s``/``!r``/``!a`` conversion (which turns the number into text first).
+_INT_SPEC = re.compile(
+    r"(?:(?P<fill>.)?(?P<align>[<>=^]))?(?P<sign>[+\- ])?(?P<zero>0)?"
+    r"(?P<width>\d+)?(?P<group>[,_])?(?P<kind>d)?", re.DOTALL)
+
+
+def _field_re(spec: str, conversion: str | None) -> str | None:
+    """Regex for one rendered placeholder, None if the spec is not supported."""
+    m = _INT_SPEC.fullmatch(spec)
+    if not m:
+        return None
+    if conversion and (m["sign"] or m["zero"] or m["group"] or m["kind"]):
+        return None
+    fill = m["fill"] or " "
+    # Padding only exists when a width asks for it; without one the placeholder
+    # is exactly the number, so the spaces around it stay the literal's.
+    pad = ""
+    if m["width"]:
+        pad = r"\s*" if fill.isspace() else f"(?:{re.escape(fill)})*"
+    sign = {"+": r"[+\-]", " ": r"[ \-]?"}.get(m["sign"] or "", r"-?")
+    return rf"{pad}{sign}{pad}\d[\d,_]*{pad}"
+
+
+def _parse_counts_template(template: str) -> list[tuple[str, str | None, str | None, str | None]] | None:
+    """``string.Formatter().parse`` of the template; None when it is unusable."""
+    try:
+        parsed = list(string.Formatter().parse(template))
+    except ValueError:
+        return None
+    for _literal, name, spec, conversion in parsed:
+        if name is None:
+            continue
+        if name not in _COUNTS_FIELDS or "{" in (spec or "") or conversion not in (None, "s", "r", "a"):
+            return None
+    return parsed
 
 
 def _template_to_re(template: str) -> re.Pattern[str]:
-    """``"{total} projects ({active} active)"`` → a regex that finds that line."""
-    pieces = re.split(r"\{(total|active|ideas)\}", template)
+    """``"{total} projects ({active:03d} active)"`` → a regex that finds that line."""
+    parsed = _parse_counts_template(template) or []
     out: list[str] = []
-    for i, piece in enumerate(pieces):
-        if i % 2:
-            out.append(r"\d+")
-        else:
-            out.append(r"\s+".join(re.escape(w) for w in piece.split(" ")))
+    for literal, name, spec, conversion in parsed:
+        out.append(r"\s+".join(re.escape(w) for w in literal.split(" ")))
+        if name is not None:
+            out.append(_field_re(spec or "", conversion) or r"\d+")
     return re.compile("".join(out))
 
 
 def _valid_template(template: str) -> bool:
-    try:
-        template.format(total=1, active=1, ideas=1)
-        return any("{" + f + "}" in template for f in _COUNTS_FIELDS)
-    except (KeyError, IndexError, ValueError):
+    """True when the template renders and ``_template_to_re`` finds its own output."""
+    parsed = _parse_counts_template(template)
+    if not parsed or not any(name for _l, name, _s, _c in parsed):
         return False
+    if any(name is not None and _field_re(spec or "", conv) is None for _l, name, spec, conv in parsed):
+        return False
+    try:
+        pattern = _template_to_re(template)
+        for sample in ((1, 1, 1), (0, 7, 42), (1234567, 89, 3)):
+            line = template.format(total=sample[0], active=sample[1], ideas=sample[2])
+            if not pattern.fullmatch(line):
+                return False
+    except (KeyError, IndexError, ValueError, TypeError):
+        return False
+    return True
 
 
 def _strings(raw: Any, key: str, default: tuple[str, ...]) -> tuple[str, ...]:
@@ -176,7 +252,8 @@ def parse(raw: Any) -> Conventions:
         language = "en"
     template = _string(raw.get("counts_template"), "counts_template", "")
     if template and not _valid_template(template):
-        log.warning("vault_conventions.counts_template must use {total}, {active}, {ideas}; ignored")
+        log.warning("vault_conventions.counts_template must use {total}, {active}, {ideas} "
+                    "(optionally with an integer format such as {active:03d}); ignored")
         template = ""
     return Conventions(
         language=language,

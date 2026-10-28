@@ -298,3 +298,94 @@ def test_the_default_sections_do_not_change(mini_vault, config):
     proposal = notes_structure.propose_index_lines(roots=mini_vault)
     assert proposal["unplaced_section"] == "📥 Sin clasificar"
     assert proposal["ideas_section"] == "💡 Ideas"
+
+
+# ── blocking patterns with their own inline flags ─────────────────────────
+
+def test_a_blocking_pattern_may_start_with_inline_flags():
+    conv = vc.parse({"blocking_headings": ["(?i)esperando a legal", "(?x) on \\s+ hold  # comment"]})
+    matcher = conv.blocking_re("blocking")
+    assert matcher.search("## Esperando A Legal")
+    assert matcher.search("## on   hold")
+    assert matcher.search("## Blocking things")      # the built-in one still works
+    assert not matcher.search("## Something else")
+
+
+def test_a_pattern_cannot_break_the_others_or_the_scan(caplog):
+    # Unclosed group, flags in the middle (an error since Python 3.11), a bad
+    # backreference: each is skipped alone, the valid ones keep working.
+    conv = vc.parse({"blocking_headings": ["(unclosed", "a(?i)b", r"(x)\2", "(?i)stuck"]})
+    with caplog.at_level("WARNING", logger="conductloop.vault_conventions"):
+        matcher = conv.blocking_re("blocking")
+    assert matcher.search("## STUCK")
+    assert matcher.search("## blocking")
+    assert not matcher.search("## ab")
+    assert "ignoring the invalid blocking pattern" in caplog.text
+
+
+def test_the_groups_of_one_pattern_do_not_leak_into_another():
+    # Numbered back-references are per pattern: combining them in one regex
+    # would make the second \1 point at the first pattern's group.
+    conv = vc.parse({"blocking_headings": [r"(wait)\1", r"(?P<w>hold)(?P=w)"]})
+    matcher = conv.blocking_re("zzz-never")
+    assert matcher.search("waitwait")
+    assert matcher.search("holdhold")
+    assert not matcher.search("wait hold")
+
+
+# ── counts templates with format specs and conversions ────────────────────
+
+@pytest.mark.parametrize("template, expected", [
+    ("{total} projects ({active:03d} active + {ideas} ideas)", "1234 projects (003 active + 2 ideas)"),
+    ("{total:,} projects ({active:>4} active + {ideas:<3d}| ideas)", "1,234 projects (   3 active + 2  | ideas)"),
+    ("{total!s} projects ({active!r} active + {ideas!a} ideas)", "1234 projects (3 active + 2 ideas)"),
+    ("{total:*>7} projects ({active:+d} active + {ideas:02d} ideas)", "***1234 projects (+3 active + 02 ideas)"),
+    ("{{{total}}} projects ({active} active + {ideas} ideas)", "{1234} projects (3 active + 2 ideas)"),
+    ("{total:_} / {active:=+6d} / {ideas!s:>3}", "1_234 / +    3 /   2"),
+])
+def test_counts_re_matches_what_counts_line_renders(template, expected):
+    conv = vc.parse({"counts_template": template})
+    assert conv.counts_template == template                # accepted, not silently dropped
+    assert conv.counts_line(total=1234, active=3, ideas=2) == expected
+    for total, active, ideas in ((7, 3, 2), (1234, 3, 2), (42, 3, 2), (0, 0, 0), (123456, 12, 100)):
+        line = conv.counts_line(total=total, active=active, ideas=ideas)
+        found = conv.counts_re().search(f"intro. {line} outro")
+        assert found, (template, line)
+        assert found.group(0).strip() == line.strip()
+
+
+def test_a_template_with_only_a_formatted_field_is_accepted():
+    conv = vc.parse({"counts_template": "{active:03d} active"})
+    assert conv.counts_template == "{active:03d} active"
+    assert conv.counts_re().search("see 007 active here")
+
+
+@pytest.mark.parametrize("template", [
+    "{total:.2f} projects",            # a float spec on an integer
+    "{total:x} projects",              # hex does not match the digits grammar
+    "{total!r:03d} projects",          # numeric spec after a conversion to text
+    "{total!z} projects",              # unknown conversion
+    "{total.real} projects",           # attribute access
+    "{total:{active}} projects",       # nested placeholder
+    "{unknown} projects",
+    "{} projects",
+    "{0} projects",
+    "no fields {{here}}",
+    "{total projects",                 # unbalanced
+])
+def test_unsupported_counts_templates_are_rejected_with_the_default_kept(template):
+    conv = vc.parse({"counts_template": template})
+    assert conv.counts_template == ""
+    assert conv.counts_re() is vc.DEFAULT_COUNTS_RE
+
+
+def test_apply_index_lines_updates_a_zero_padded_counts_line(mini_vault, config):
+    from ops_dashboard import notes_structure
+
+    config({"counts_template": "{total} projects ({active:03d} active + {ideas} ideas)"})
+    index = mini_vault[0] / "projects" / "_index.md"
+    index.write_text(index.read_text(encoding="utf-8").replace(
+        "7 projects (1 active + 0 ideas)", "7 projects (001 active + 0 ideas)"), encoding="utf-8")
+    result = notes_structure.apply_index_lines(["gamma"], dry_run=True, roots=mini_vault)
+    assert "2 projects (002 active + 0 ideas)" in result["preview"]
+    assert "7 projects" not in result["preview"]

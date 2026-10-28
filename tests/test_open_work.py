@@ -288,3 +288,24 @@ def test_the_notes_you_never_wrote_are_listed(env, tmp_path):
     # And it says where the link came from.
     row = next(r for r in wanted if r["stem"] == "bing_indexnow_setup")
     assert "ideas" in row["from"]
+
+
+def test_a_blocking_heading_with_an_inline_flag_does_not_break_the_scan(env, monkeypatch):
+    import json
+
+    from ops_dashboard import open_work, vault_conventions, vault_pages
+
+    cfg = env / "config.json"
+    cfg.write_text(json.dumps({"vault_conventions": {
+        "blocking_headings": ["(?i)esperando a legal", "(unclosed"]}}), encoding="utf-8")
+    monkeypatch.setenv("OPS_CONFIG_PATH", str(cfg))
+    vault_conventions.reset_cache()
+    _note_with_work(env, body=(
+        "## Globex — Esperando A Legal\n"
+        "\n"
+        "- [ ] Firmar el contrato\n"
+    ))
+    rows = open_work.scan()["globex"]          # no exception
+    assert rows[0]["blocking"] is True
+    assert vault_pages.open_work()["globex"]    # and the wrapper does not hide everything
+    vault_conventions.reset_cache()
