@@ -19,7 +19,7 @@ def vault(tmp_path, monkeypatch):
     daily_dir.mkdir()
     note = daily_dir / "2026-10-24.md"
     note.write_text(
-        "## Claude Code — uso real de Deepwick\n\n- 131 activos, 108 un solo día\n",
+        "## Claude Code — uso real de Globex\n\n- 131 activos, 108 un solo día\n",
         encoding="utf-8")
     monkeypatch.setenv("CONDUCTLOOP_DB_PATH", str(tmp_path / "daily.db"))
     db.DB_PATH = tmp_path / "daily.db"  # type: ignore[attr-defined]
@@ -79,47 +79,47 @@ def test_the_vault_half_says_what_moved(vault, monkeypatch):
     from ops_dashboard import daily, db
 
     daily_dir, note = vault
-    db.upsert_document(source="obsidian", path="/v/deepwick.md", title="Deepwick",
+    db.upsert_document(source="obsidian", path="/v/globex.md", title="Globex",
                        content="x", metadata={}, mtime=1780000000, size=1)
     with db.db() as conn:
-        conn.execute("UPDATE documents SET project_key='deepwick'")
+        conn.execute("UPDATE documents SET project_key='globex'")
         conn.commit()
     monkeypatch.setattr(daily, "vault_summary",
-                        lambda day: {"notes": [{"title": "Deepwick", "path": "/v/deepwick.md",
-                                                "project": "deepwick", "source": "obsidian"}],
-                                     "projects": [("deepwick", 1)],
+                        lambda day: {"notes": [{"title": "Globex", "path": "/v/globex.md",
+                                                "project": "globex", "source": "obsidian"}],
+                                     "projects": [("globex", 1)],
                                      "ideas": [{"title": "Research", "notes": 12}]})
     out = daily.write_daily("2026-10-24", out_dir=daily_dir)
     text = out.read_text(encoding="utf-8")
-    assert "## 🗺️ El vault" in text
-    assert "DeepWick" in text or "deepwick" in text
+    assert "## 🗺️ The vault" in text
+    assert "Globex" in text or "globex" in text
     assert "Research" in text
 
 
 def test_the_daily_note_says_what_was_asked(vault, monkeypatch):
-    """The project that moved, and the encargo of its newest handoff.
+    """The project that moved, and the ask of its newest handoff.
 
-    "6 notes touched" says that something happened. The encargo says what
+    "6 notes touched" says that something happened. The ask says what
     the work is — and that is the line a new agent (or a Monday morning)
     needs.
     """
     from ops_dashboard import daily, db
 
     daily_dir, _note = vault
-    db.upsert_document(source="obsidian", path="/v/deepwick.md", title="Deepwick",
+    db.upsert_document(source="obsidian", path="/v/globex.md", title="Globex",
                        content="x", metadata={}, mtime=1780000000, size=1)
     with db.db() as conn:
-        conn.execute("UPDATE documents SET project_key='deepwick'")
+        conn.execute("UPDATE documents SET project_key='globex'")
         conn.commit()
     monkeypatch.setattr(daily, "vault_summary",
-                        lambda day: {"notes": [{"title": "Deepwick", "path": "/v/deepwick.md",
-                                                "project": "deepwick", "source": "obsidian"}],
-                                     "projects": [("deepwick", 6)],
+                        lambda day: {"notes": [{"title": "Globex", "path": "/v/globex.md",
+                                                "project": "globex", "source": "obsidian"}],
+                                     "projects": [("globex", 6)],
                                      "ideas": [],
-                                     "handoffs": {"deepwick": {
-                                         "title": "EVQL → Deepwick",
+                                     "handoffs": {"globex": {
+                                         "title": "Initech → Globex",
                                          "date": "2026-10-23",
-                                         "encargo": "que todo pase a deepwick"}}})
+                                         "ask": "que todo pase a globex"}}})
     out = daily.write_daily("2026-10-24", out_dir=daily_dir)
     text = out.read_text(encoding="utf-8")
-    assert "que todo pase a deepwick" in text
+    assert "que todo pase a globex" in text

@@ -1,6 +1,7 @@
 """Generate a daily note in the Obsidian vault capturing the day's activity.
 
-Output: $OPS_VAULT_ROOT/daily/YYYY-MM-DD.md (or custom path)
+Output: <daily dir>/YYYY-MM-DD.md; the folder is $OPS_DAILY_DIR, ``daily_dir``
+in the config, or <vault root>/daily (see vault_conventions.daily_dir)
 Contains: brain conversations, closed todos, new ideas, URL changes,
 diff vs yesterday, git activity from watched repos.
 
@@ -14,9 +15,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from . import db
-
-VAULT_DAILY = Path.home() / "Documents" / "Obsidian" / "OC" / "daily"
+from . import db, vault_conventions
 
 
 def collect_day(day: str) -> dict:
@@ -189,40 +188,41 @@ def vault_summary(day: str) -> dict:
 
 
 def render_vault(data: dict) -> list[str]:
-    """The vault half of the daily note."""
+    """The vault half of the daily note, in the configured language."""
+    text = vault_conventions.daily_text
     lines: list[str] = []
     if not data.get("notes") and not data.get("projects"):
         return lines
-    lines.append("## 🗺️ El vault")
+    lines.append(text("title"))
     lines.append("")
     projects = data.get("projects") or []
     if projects:
         names = {p.key: p.name for p in _projects()}
-        lines.append("**Proyectos que se movieron**")
+        lines.append(text("moved"))
         lines.append("")
         handoffs = data.get("handoffs") or {}
         for key, count in projects[:8]:
-            lines.append(f"- {names.get(key, key)} — {count} nota(s)")
+            lines.append(f"- {names.get(key, key)} — {text('notes_n', n=count)}")
             row = handoffs.get(key) or {}
-            if row.get("encargo"):
-                lines.append(f"  > {row['encargo']}")
+            if row.get("ask"):
+                lines.append(f"  > {row['ask']}")
         lines.append("")
     ideas = data.get("ideas") or []
     if ideas:
-        lines.append("**Temas que se repiten**")
+        lines.append(text("ideas"))
         lines.append("")
         for idea in ideas:
-            lines.append(f"- {idea['title']} — {idea['notes']} notas")
+            lines.append(f"- {idea['title']} — {text('ideas_n', n=idea['notes'])}")
         lines.append("")
     notes = data.get("notes") or []
     if notes:
-        lines.append("**Notas tocadas**")
+        lines.append(text("touched"))
         lines.append("")
         for note in notes[:25]:
             name = Path(note["path"]).stem
             lines.append(f"- [[{name}]] — {note['title']}")
         if len(notes) > 25:
-            lines.append(f"- … y {len(notes) - 25} más")
+            lines.append(f"- {text('more', n=len(notes) - 25)}")
         lines.append("")
     return lines
 
@@ -248,7 +248,7 @@ def write_daily(day: str | None = None, out_dir: Path | None = None) -> Path:
     block is ever replaced.
     """
     day = day or datetime.now().strftime("%Y-%m-%d")
-    out_dir = out_dir or VAULT_DAILY
+    out_dir = out_dir or vault_conventions.daily_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     data = collect_day(day)
     md = render_markdown(data)

@@ -27,10 +27,10 @@ def vault(tmp_path, monkeypatch):
     export = root / "ConductLoop"
     export.mkdir()
 
-    (root / "projects" / "rentcla.md").write_text(
-        "---\ntype: project\n---\n# Rentcla\n", encoding="utf-8")
-    (root / "projects" / "deepwick.md").write_text(
-        "---\ntype: project\n---\n# DeepWick\n", encoding="utf-8")
+    (root / "projects" / "acme.md").write_text(
+        "---\ntype: project\n---\n# Acme\n", encoding="utf-8")
+    (root / "projects" / "globex.md").write_text(
+        "---\ntype: project\n---\n# Globex\n", encoding="utf-8")
     (root / "research" / "growth.md").write_text("# Growth\n", encoding="utf-8")
 
     monkeypatch.setenv("CONDUCTLOOP_DB_PATH", str(tmp_path / "pages.db"))
@@ -38,8 +38,8 @@ def vault(tmp_path, monkeypatch):
     db.init_db()
 
     for path, title, key in [
-        (root / "projects" / "rentcla.md", "Rentcla", "rentcla"),
-        (root / "projects" / "deepwick.md", "DeepWick", "deepwick"),
+        (root / "projects" / "acme.md", "Acme", "acme"),
+        (root / "projects" / "globex.md", "Globex", "globex"),
         (root / "research" / "growth.md", "Growth", ""),
     ]:
         db.upsert_document(source="obsidian", path=str(path), title=title,
@@ -54,13 +54,13 @@ def vault(tmp_path, monkeypatch):
 
     data = {
         "projects": [
-            {"key": "rentcla", "name": "Rentcla", "parent": None, "notes": 1,
-             "ids": [1], "recent": [], "repos": ["/tmp/rentcla"], "known": True},
-            {"key": "deepwick", "name": "DeepWick", "parent": None, "notes": 1,
+            {"key": "acme", "name": "Acme", "parent": None, "notes": 1,
+             "ids": [1], "recent": [], "repos": ["/tmp/acme"], "known": True},
+            {"key": "globex", "name": "Globex", "parent": None, "notes": 1,
              "ids": [2], "recent": [], "repos": [], "known": True},
         ],
         "ideas": [],
-        "drift": {"missing_from_index": ["rentcla"], "links_to_nothing": []},
+        "drift": {"missing_from_index": ["acme"], "links_to_nothing": []},
         "unlinked": [],
         "suggestions": [],
         "totals": {"documents": 3, "attributed": 2, "loose": 1},
@@ -80,8 +80,8 @@ def test_the_map_becomes_one_page_per_project(vault):
     _export(vault)
     pages = vault["export"] / "pages"
     assert (pages / "Index.md").exists()
-    assert (pages / "rentcla.md").exists()
-    assert (pages / "deepwick.md").exists()
+    assert (pages / "acme.md").exists()
+    assert (pages / "globex.md").exists()
     assert (pages / "areas" / "research.md").exists()
 
 
@@ -113,9 +113,9 @@ def test_every_link_points_at_a_note_that_is_really_there(vault):
 
 def test_the_notes_of_a_project_are_linked_from_its_page(vault):
     _export(vault)
-    text = (vault["export"] / "pages" / "rentcla.md").read_text(encoding="utf-8")
-    assert "[[projects/rentcla|Rentcla]]" in text
-    assert "/tmp/rentcla" in text
+    text = (vault["export"] / "pages" / "acme.md").read_text(encoding="utf-8")
+    assert "[[projects/acme|Acme]]" in text
+    assert "/tmp/acme" in text
 
 
 def test_a_note_outside_the_vault_is_a_path_and_not_a_link(vault):
@@ -127,11 +127,11 @@ def test_a_note_outside_the_vault_is_a_path_and_not_a_link(vault):
     db.upsert_document(source="obsidian", path=str(outside), title="Outside",
                        content="x", metadata={}, mtime=1780000000, size=1)
     with db.db() as conn:
-        conn.execute("UPDATE documents SET project_key='rentcla' WHERE path=?", (str(outside),))
+        conn.execute("UPDATE documents SET project_key='acme' WHERE path=?", (str(outside),))
         conn.commit()
 
     _export(vault)
-    text = (vault["export"] / "pages" / "rentcla.md").read_text(encoding="utf-8")
+    text = (vault["export"] / "pages" / "acme.md").read_text(encoding="utf-8")
     assert "Outside" in text
     assert f"[[{outside}|" not in text
     assert str(outside) in text
@@ -154,22 +154,22 @@ def test_the_orphans_of_a_project_land_on_its_page(vault):
     notes that stopped being linked are the bridge between both names."""
     from ops_dashboard import db
 
-    folder = vault["root"] / "projects" / "rentcla"
+    folder = vault["root"] / "projects" / "acme"
     folder.mkdir()
     orphan = folder / "contract.md"
     orphan.write_text("# Contract\n", encoding="utf-8")
     db.upsert_document(source="obsidian", path=str(orphan), title="Contract",
                        content="x", metadata={}, mtime=1780000000, size=1)
     with db.db() as conn:
-        conn.execute("UPDATE documents SET project_key='rentcla' WHERE path=?", (str(orphan),))
+        conn.execute("UPDATE documents SET project_key='acme' WHERE path=?", (str(orphan),))
         conn.commit()
 
     vault["data"]["unlinked"] = [{
-        "project": "rentcla", "title": "Rentcla", "path": str(vault["root"] / "projects" / "rentcla.md"),
+        "project": "acme", "title": "Acme", "path": str(vault["root"] / "projects" / "acme.md"),
         "folder": str(folder), "orphans": ["contract"], "count": 1,
     }]
     _export(vault)
-    text = (vault["export"] / "pages" / "rentcla.md").read_text(encoding="utf-8")
+    text = (vault["export"] / "pages" / "acme.md").read_text(encoding="utf-8")
     assert "## Notes this page does not link" in text
     assert "contract" in text
 
@@ -187,11 +187,11 @@ def test_only_our_own_pages_are_removed(vault):
     theirs.write_text("# Mine\n", encoding="utf-8")
 
     vault["data"]["projects"] = [
-        p for p in vault["data"]["projects"] if p["key"] != "deepwick"]
+        p for p in vault["data"]["projects"] if p["key"] != "globex"]
     _export(vault)
 
     assert not stale.exists()
-    assert not (pages / "deepwick.md").exists()
+    assert not (pages / "globex.md").exists()
     assert theirs.exists()
     assert theirs.read_text(encoding="utf-8") == "# Mine\n"
 
@@ -199,7 +199,7 @@ def test_only_our_own_pages_are_removed(vault):
 def test_writing_it_twice_does_not_touch_the_vault(vault):
     """A vault that changes every hour is a vault nobody reads."""
     _export(vault)
-    page = vault["export"] / "pages" / "rentcla.md"
+    page = vault["export"] / "pages" / "acme.md"
     before = page.read_text(encoding="utf-8"), page.stat().st_mtime_ns
 
     _vault_pages, out = _export(vault)
@@ -225,7 +225,7 @@ def test_the_product_does_not_index_its_own_pages(vault):
 
 # ── where each project stands ──────────────────────────────────────────────
 
-def _handoff(root, name, project, date, encargo):
+def _handoff(root, name, project, date, ask):
     """A note that says 'here is where I left off'.
 
     Returns the path and the body the index would keep (no frontmatter).
@@ -235,11 +235,11 @@ def _handoff(root, name, project, date, encargo):
     body = ("\n"
             f"# {name}\n"
             "\n"
-            "> [!success] El encargo\n"
-            f"> {encargo}\n"
+            "> [!success] The ask\n"
+            f"> {ask}\n"
             "\n"
-            "## Lo que encontré\n"
-            "Detalle que no cabe en el encargo.\n")
+            "## What I found\n"
+            "Detail that does not fit in the ask.\n")
     (folder / name).write_text(
         "---\n"
         f"title: {name}\n"
@@ -256,57 +256,57 @@ def test_the_project_page_says_where_the_work_stands(vault):
     """The point of departure: what the last person wrote down."""
     from ops_dashboard import db
 
-    path, body = _handoff(vault["root"], "2026-10-23-evql-to-deepwick", "rentcla", "2026-10-23",
+    path, body = _handoff(vault["root"], "2026-10-23-initech-to-globex", "acme", "2026-10-23",
                           "que todo pase al plan maximo")
-    db.upsert_document(source="obsidian", path=str(path), title="EVQL to Deepwick",
+    db.upsert_document(source="obsidian", path=str(path), title="Initech to Globex",
                        content=body, metadata={"frontmatter": {"type": "handoff",
                                                               "date": "2026-10-23",
-                                                              "title": "EVQL → Deepwick"}},
+                                                              "title": "Initech → Globex"}},
                        mtime=1780000000, size=1)
     with db.db() as conn:
-        conn.execute("UPDATE documents SET project_key='rentcla' WHERE path=?", (str(path),))
+        conn.execute("UPDATE documents SET project_key='acme' WHERE path=?", (str(path),))
         conn.commit()
 
     _export(vault)
-    text = (vault["export"] / "pages" / "rentcla.md").read_text(encoding="utf-8")
+    text = (vault["export"] / "pages" / "acme.md").read_text(encoding="utf-8")
     assert "## Where this stands" in text
     assert "2026-10-23" in text
     assert "que todo pase al plan maximo" in text
-    assert "[[handoff/2026-10-23-evql-to-deepwick|EVQL → Deepwick]]" in text
+    assert "[[handoff/2026-10-23-initech-to-globex|Initech → Globex]]" in text
 
 
 def test_the_index_says_where_to_start(vault):
     """One line per project that somebody left a handoff about."""
     from ops_dashboard import db
 
-    path, body = _handoff(vault["root"], "2026-10-23-h", "rentcla", "2026-10-23", "el encargo")
+    path, body = _handoff(vault["root"], "2026-10-23-h", "acme", "2026-10-23", "the ask")
     db.upsert_document(source="obsidian", path=str(path), title="H",
                        content=body, metadata={"frontmatter": {"type": "handoff",
                                                              "date": "2026-10-23"}},
                        mtime=1780000000, size=1)
     with db.db() as conn:
-        conn.execute("UPDATE documents SET project_key='rentcla' WHERE path=?", (str(path),))
+        conn.execute("UPDATE documents SET project_key='acme' WHERE path=?", (str(path),))
         conn.commit()
 
     _export(vault)
     text = (vault["export"] / "pages" / "Index.md").read_text(encoding="utf-8")
     assert "## Where to start" in text
-    assert "rentcla" in text
+    assert "acme" in text
 
 
 def test_a_project_with_no_handoff_says_nothing(vault):
     """A section that is always there and always empty is noise."""
     _export(vault)
-    text = (vault["export"] / "pages" / "rentcla.md").read_text(encoding="utf-8")
+    text = (vault["export"] / "pages" / "acme.md").read_text(encoding="utf-8")
     assert "## Where this stands" not in text
 
 
-def test_the_encargo_is_the_blockquote_and_not_the_label(vault):
+def test_the_ask_is_the_blockquote_and_not_the_label(vault):
     """The callout label is a label, not the ask."""
-    from ops_dashboard.vault_pages import _encargo
+    from ops_dashboard.vault_pages import _ask
 
-    content = ("\n# Title\n\n> [!success] El encargo\n"
-               "> lo que hay que hacer\n> y por qué\n\n## Detalle\n")
-    assert _encargo(content) == "lo que hay que hacer y por qué"
-    # And a note without a blockquote has no encargo.
-    assert _encargo("# Title\n\nTexto normal\n") == ""
+    content = ("\n# Title\n\n> [!success] The ask\n"
+               "> what has to be done\n> and why\n\n## Detail\n")
+    assert _ask(content) == "what has to be done and why"
+    # And a note without a blockquote has no ask.
+    assert _ask("# Title\n\nPlain text\n") == ""

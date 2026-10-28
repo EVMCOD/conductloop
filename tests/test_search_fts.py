@@ -30,7 +30,7 @@ def vault(monkeypatch):
     db.init_db()
     _add("Alpha Momentum Indicators Strategy", "RSI and MACD entries for swing trades", "zzalpha")
     _add("Beta Grid Trading Notes", "averaging down a losing position", "zzbeta")
-    _add("Beta Deepwick webhook trading", "order flow webhook zzbeta", "zzbeta")
+    _add("Beta Globex webhook trading", "order flow webhook zzbeta", "zzbeta")
     _add("Alpha Informe de decisiones", "la decisión tomada zzalpha", "zzalpha")
     yield
     _wipe()
@@ -158,5 +158,5 @@ def test_the_project_filter_applies_to_every_layer(vault):
 
 
 def test_a_doc_of_another_project_is_never_returned_for_its_own_words(vault):
-    rows = db.search("Deepwick webhook zzbeta", limit=20, project_key="zzalpha")
+    rows = db.search("Globex webhook zzbeta", limit=20, project_key="zzalpha")
     assert _paths_of(rows) & {p for p in _paths_of(rows) if "/zzbeta/" in p} == set()
