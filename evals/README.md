@@ -32,6 +32,13 @@ python -m ops_dashboard.evals run --update-baseline  # solo en local, nunca en C
   respuesta y no escribe nada si la petición contiene una. Revisa el fichero
   antes de copiarlo a `evals/<suite>/cassettes/`.
 
+## Evals live con tu clave (L2)
+
+`run --live` ejecuta las suites `brain-rag` y `web-injection` contra un proveedor
+real con **tu** clave BYOK (`--key-ref`), con presupuesto en EUR y límite de
+llamadas obligatorios, y deja un informe comparable con `baseline.json`. Nunca
+corre en CI. Detalles en [`docs/evals.md`](../docs/evals.md).
+
 ## Qué se evalúa (y qué no)
 
 El proveedor está grabado, así que en CI se mide **nuestro código**: qué
