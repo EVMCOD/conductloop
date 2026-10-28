@@ -89,6 +89,26 @@ def test_only_the_newest_are_kept(live, monkeypatch):
     assert len(backups.list_backups()) == 3
 
 
+def test_an_unfinished_backup_is_cleaned_up_later(live):
+    import os
+    import time
+    folder = backups.backup_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    old = folder / "ops-20260101-000000-manual.db.partial"
+    old_journal = folder / "ops-20260101-000000-manual.db.partial-journal"
+    fresh = folder / "ops-20260102-000000-manual.db.partial"
+    for f in (old, old_journal, fresh):
+        f.write_bytes(b"x")
+    two_hours_ago = time.time() - 7200
+    for f in (old, old_journal):
+        os.utime(f, (two_hours_ago, two_hours_ago))
+
+    backups.backup_now("manual")
+
+    assert not old.exists() and not old_journal.exists()
+    assert fresh.exists()  # could still be in progress in another process
+
+
 def test_restore_brings_the_data_back_and_keeps_the_state_it_replaced(live):
     _add_doc(live, "kept")
     snap = backups.backup_now("manual")

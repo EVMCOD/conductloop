@@ -34,6 +34,7 @@ log = logging.getLogger("conductloop.backups")
 MAX_KEEP = 30
 # A day of the scheduler's hourly check, minus some slack for a Mac that slept.
 SCHEDULED_EVERY_S = 20 * 3600
+STALE_PARTIAL_S = 3600
 _NAME_RE = re.compile(r"^ops-\d{8}-\d{6}(?:-\d+)?-[a-z0-9-]{1,40}\.db$")
 _lock = threading.RLock()
 
@@ -122,6 +123,14 @@ def _prune(out_dir: Path | None = None, *, keep: Path | None = None) -> None:
     out_dir = out_dir or backup_dir()
     if not out_dir.exists():
         return
+    # A backup cut short (the app quit or crashed mid-copy) leaves its .partial
+    # and journal behind. An hour old means nobody is still writing it.
+    for stale in out_dir.glob("ops-*.db.partial*"):
+        try:
+            if time.time() - stale.stat().st_mtime > STALE_PARTIAL_S:
+                stale.unlink()
+        except OSError:
+            log.warning("could not delete unfinished backup %s", stale, exc_info=True)
     files = sorted(out_dir.glob("ops-*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
     if keep is not None:
         files = [f for f in files if f.resolve() != keep.resolve()]
