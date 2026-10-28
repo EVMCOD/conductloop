@@ -22,6 +22,17 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
   in `tauri.conf.json` (it was `null`). Images from other sites inside notes no
   longer load. See `docs/CSP.md`.
 
+- **A first-run welcome page, and a notes folder you can choose.** On a fresh
+  install the app now opens a welcome page that asks for two things, both
+  optional: the folder with your notes (it reads it, never writes into it) and
+  the folder where ConductLoop keeps its own notes, and an AI key. The key goes
+  to the Keychain (or the encrypted file when there is none) and is never shown
+  again, logged or sent back. The choice of folder is saved in the app, so it no
+  longer needs the `OPS_VAULT_ROOT` environment variable, which the installed
+  app had no way to set; it can also be changed later in Setup → Library. The
+  page is shown once, and never to anyone who already has notes indexed, a key
+  or any setting. The old "quick tour" is still at `/tour`.
+
 ## 2026-10-28 — Leftover billing tables and Stripe integrations removed
 
 > **⚠️ This deletes data from your local database.** Migration 26 drops the

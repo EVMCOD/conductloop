@@ -19,15 +19,20 @@ Used by:
 from __future__ import annotations
 
 import datetime as dt
-import os
 from pathlib import Path
 
-from .. import brain
+from .. import brain, db
 from . import anomalies as anomalies_mod
 from . import digest as digest_mod
 
-SUMMARY_DIR = Path(os.environ.get("OPS_VAULT_ROOT", str(Path.home() / "Documents" / "vault"))).expanduser() / "_agents" / "daily-summaries"
-SUMMARY_DIR.mkdir(parents=True, exist_ok=True)
+
+def summary_dir() -> Path:
+    """Where the daily summaries go: inside the vault chosen right now.
+
+    Resolved when a summary is written, not at import: importing this module
+    used to create ``~/Documents/vault/_agents`` on a machine that never chose it.
+    """
+    return db.vault_root() / "_agents" / "daily-summaries"
 
 
 def _gather_day_context(target: dt.date) -> dict:
@@ -154,7 +159,9 @@ def generate_ai_summary(target: dt.date | None = None, *, provider_name: str | N
         model_name = "error"
 
     # Save to file with frontmatter
-    out_path = SUMMARY_DIR / f"{target.isoformat()}.md"
+    out_dir = summary_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{target.isoformat()}.md"
     frontmatter = (
         f"---\n"
         f"date: {target.isoformat()}\n"

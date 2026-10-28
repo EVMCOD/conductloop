@@ -37,7 +37,7 @@
     .pick__label{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);flex:1}
     .pick__section{font-size:12px;max-width:220px}
     .map-lines{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;margin:6px 0}
-    #lib-folders,#lib-workspace{width:100%;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
+    #lib-folders,#lib-workspace,#lib-writevault{width:100%;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
     code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink)}
     a{color:var(--blue)}
   </style>
@@ -56,7 +56,10 @@
 
     <div class="section">
       <h2>📚 Library</h2>
-      <p class="sub">Folders ConductLoop reads and indexes every hour. It never writes to them: its own notes (daily briefing, agent notes, memory export) go to <code id="lib-write"></code>.</p>
+      <p class="sub">Folders ConductLoop reads and indexes every hour. It never writes to them: its own notes (daily briefing, agent notes, memory export) go to the folder below.</p>
+      <label class="lib-label" for="lib-writevault">Folder for ConductLoop's own notes</label>
+      <input id="lib-writevault" spellcheck="false" placeholder="~/Documents/vault" />
+      <div class="hint" id="lib-writevault-note"></div>
       <label class="lib-label" for="lib-folders">Note folders to index (one per line), e.g. your Obsidian vault</label>
       <textarea id="lib-folders" rows="3" spellcheck="false" placeholder="~/Documents/Obsidian/MyVault"></textarea>
       <label class="lib-label" for="lib-workspace">Memory folder (MEMORY.md, memory/*.md)</label>
@@ -147,7 +150,13 @@
     async function loadLibrary() {
       try {
         const d = await (await fetch('/api/library')).json();
-        document.getElementById('lib-write').textContent = d.write_vault;
+        const wv = document.getElementById('lib-writevault');
+        wv.value = d.write_vault || '';
+        wv.dataset.loaded = wv.value;
+        wv.disabled = d.write_vault_source === 'env';
+        document.getElementById('lib-writevault-note').textContent = wv.disabled
+          ? 'Set by an environment variable on this computer: it cannot be changed here.'
+          : (d.write_vault_exists ? '' : 'This folder does not exist yet: create it, or choose another.');
         document.getElementById('lib-folders').value = (d.index_folders || []).join('\n');
         document.getElementById('lib-workspace').value = d.memory_workspace || '';
         document.getElementById('lib-mapfolder').value = d.map_export_folder || '';
@@ -167,6 +176,8 @@
         memory_workspace: document.getElementById('lib-workspace').value.trim(),
         map_export_folder: document.getElementById('lib-mapfolder').value.trim(),
       };
+      const wv = document.getElementById('lib-writevault');
+      if (!wv.disabled && wv.value.trim() !== wv.dataset.loaded) body.write_vault = wv.value.trim();
       try {
         const r = await fetch('/api/library', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
         const d = await r.json();

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Welcome — ConductLoop</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/welcome.css" />
+  <script src="/welcome.js" defer></script>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1 data-i18n="title">Welcome to ConductLoop</h1>
+      <p class="sub" data-i18n="subtitle">Two quick things and you are set. Both are optional, and everything stays on this computer.</p>
+    </header>
+    <div id="global-error" class="error" role="alert" hidden></div>
+
+    <section class="card" id="step-notes">
+      <h2 data-i18n="notes_title">1 · Your notes</h2>
+      <p class="hint" data-i18n="notes_hint">ConductLoop reads your notes to answer from them. It never writes into your notes folder: its own notes (daily briefing, agent notes) go to a folder of their own.</p>
+      <label for="notes-folder" data-i18n="notes_label">Folder with your notes, e.g. an Obsidian vault (optional)</label>
+      <input id="notes-folder" type="text" spellcheck="false" autocomplete="off" placeholder="~/Documents/Obsidian/MyVault" data-i18n-ph="notes_ph" />
+      <label for="write-folder" data-i18n="write_label">Folder for ConductLoop's own notes</label>
+      <input id="write-folder" type="text" spellcheck="false" autocomplete="off" />
+      <label class="check"><input id="create-folder" type="checkbox" checked /> <span data-i18n="create_label">Create it if it does not exist</span></label>
+      <p class="hint" id="write-note" hidden></p>
+      <div class="row">
+        <button id="save-folders" data-i18n="save_folders">Save and index my notes</button>
+        <span id="folders-status" class="status" role="status"></span>
+      </div>
+    </section>
+
+    <section class="card" id="step-key">
+      <h2 data-i18n="key_title">2 · AI key (optional)</h2>
+      <p class="hint" data-i18n="key_hint">Search and notes work without it. To chat and summarise, paste a key from your AI provider. It is stored in the Keychain of this Mac, or in an encrypted file if there is none, and it is never shown again.</p>
+      <label for="provider" data-i18n="provider_label">Provider</label>
+      <select id="provider">
+        <option value="anthropic">Anthropic</option>
+        <option value="openai">OpenAI</option>
+        <option value="minimax">MiniMax</option>
+        <option value="gateway">Gateway</option>
+      </select>
+      <label for="api-key" data-i18n="key_label">API key</label>
+      <input id="api-key" type="password" spellcheck="false" autocomplete="off" autocapitalize="off" />
+      <div class="row">
+        <button id="save-key" data-i18n="save_key">Save key</button>
+        <span id="key-status" class="status" role="status"></span>
+      </div>
+      <p class="hint" id="key-link" hidden><a href="/credentials" data-i18n="open_credentials">Open Credentials</a></p>
+    </section>
+
+    <footer class="actions">
+      <button id="finish" data-i18n="finish">Open ConductLoop</button>
+      <button id="skip" class="ghost" data-i18n="skip">Skip for now</button>
+      <a class="link" href="/setup" data-i18n="open_setup">See the full setup checklist</a>
+    </footer>
+  </main>
+</body>
+</html>
