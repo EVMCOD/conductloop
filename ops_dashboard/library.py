@@ -55,10 +55,32 @@ def memory_workspace() -> Path:
 
 
 def save_settings(*, index_folders: list[str] | None = None, memory_workspace: str | None = None,
-                  map_export_folder: str | None = None) -> dict:
-    """Store the folders in config.json. Paths that don't exist are rejected."""
+                  map_export_folder: str | None = None, write_vault: str | None = None,
+                  create_write_vault: bool = False) -> dict:
+    """Store the folders in config.json. Paths that don't exist are rejected.
+
+    ``write_vault`` is the folder ConductLoop writes its own notes to. It is
+    created when ``create_write_vault`` is set (the welcome page offers that),
+    and the empty string goes back to the default.
+    """
     from . import brain
     cfg = brain._load_config()
+    if write_vault is not None:
+        folder = write_vault.strip()
+        if folder:
+            path = Path(folder).expanduser()
+            if not path.is_absolute():
+                raise ValueError(f"give the full path of the folder: {folder}")
+            if not path.is_dir():
+                if not create_write_vault:
+                    raise ValueError(f"not a folder: {folder}")
+                try:
+                    path.mkdir(parents=True, exist_ok=True)
+                except OSError as e:
+                    raise ValueError(f"could not create {folder}: {e.strerror or e}") from None
+            cfg["vault_root"] = str(path)
+        else:
+            cfg.pop("vault_root", None)
     if index_folders is not None:
         clean = [f.strip() for f in index_folders if isinstance(f, str) and f.strip()][:MAX_FOLDERS]
         missing = [f for f in clean if not Path(f).expanduser().is_dir()]
@@ -90,6 +112,8 @@ def settings() -> dict:
     cfg = _config()
     return {
         "write_vault": str(db.vault_root()),
+        "write_vault_source": db.vault_root_source(),
+        "write_vault_exists": db.vault_root().is_dir(),
         "index_folders": list(cfg.get("index_folders") or []),
         "memory_workspace": cfg.get("memory_workspace") or "",
         "map_export_folder": cfg.get("map_export_folder") or "",
