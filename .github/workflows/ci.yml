@@ -142,6 +142,7 @@ jobs:
           ops_dashboard/evals/netguard.py
           ops_dashboard/evals/record.py
           ops_dashboard/evals/runner.py
+          ops_dashboard/evals/live.py
           ops_dashboard/redact.py
           ops_dashboard/app_token_guard.py
 
