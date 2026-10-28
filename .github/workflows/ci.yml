@@ -1,7 +1,6 @@
 name: CI
 
-# Saving Actions minutes (private repo, 2,000 min/month on GitHub Free):
-# docs-only changes don't run CI, a newer push cancels the older run of the
+# Docs-only changes don't run CI, a newer push cancels the older run of the
 # same branch/PR, and the Rust/Tauri jobs live in desktop.yml, which only runs
 # when desktop/ changes.
 on:
@@ -10,6 +9,9 @@ on:
     paths-ignore: ["**.md", "docs/**", "LICENSE", ".gitignore", ".github/dependabot.yml"]
   pull_request:
     paths-ignore: ["**.md", "docs/**", "LICENSE", ".gitignore", ".github/dependabot.yml"]
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
@@ -20,9 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.14"
           cache: pip
@@ -153,9 +155,13 @@ jobs:
         # maintainer-only and refuses to run here (D9).
         run: python -m ops_dashboard.evals run --report evals-report.json
 
-      - name: Dependency vulnerability scan (pip-audit) — advisory
-        continue-on-error: true
-        run: pip-audit --strict || pip-audit
+      - name: Dependency vulnerability scan (pip-audit) — blocking
+        # Audits the environment installed above (runtime + dev deps) against
+        # the PyPI advisory database. --strict also fails if a package cannot be
+        # audited. A vulnerability with no fix yet is the only reason to add an
+        # exception: `--ignore-vuln <ID>` here, with the ID, the package and a
+        # reason in a comment, and a date to look at it again.
+        run: pip-audit --strict
 
       - name: Browser test (headless Chrome) — "Conectores" page
         # Runs before the main pytest step and uninstalls Playwright afterwards,
@@ -188,9 +194,10 @@ jobs:
         env:
           CONDUCTLOOP_REQUIRE_SANDBOX: "1"
           CONDUCTLOOP_REQUIRE_FFMPEG: "1"
-        # Floor prevents regressions; ratchet it up as server.py routes migrate
-        # to the (testable) registry. Currently ~26%.
-        run: pytest -m "not live" --cov=ops_dashboard --cov-report=term-missing:skip-covered --cov-fail-under=25
+        # Floor prevents regressions. Measured 66% locally (2026-10-28, without
+        # the Chrome tests and the real sandbox/ffmpeg ones, which CI adds), so 60
+        # leaves a margin; raise it as coverage grows, never lower it to pass.
+        run: pytest -m "not live" --cov=ops_dashboard --cov-report=term-missing:skip-covered --cov-fail-under=60
 
       - name: Browser tests (headless Chrome) — every tests/test_*ui_browser.py
         # Separate step so the main pytest run keeps skipping browser tests.

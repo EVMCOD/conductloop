@@ -1,14 +1,19 @@
 name: Desktop (Rust)
 
 # The Rust jobs (the in-app browser's URL policy and the Tauri wrapper, which
-# needs WebKitGTK) are the slowest part of CI, so they only run when the
-# desktop code or this workflow changes. Builds are cached (rust-cache).
+# needs WebKitGTK, and the same wrapper compiled on macOS) are the slowest part of
+# CI, so they only run when the desktop code or this workflow changes. Builds
+# are cached (rust-cache). All jobs run on GitHub-hosted runners (this repo is
+# public, so they are free); never a self-hosted one (tests/test_workflows_guard.py).
 on:
   push:
     branches: [main]
     paths: ["desktop/**", ".github/workflows/desktop.yml"]
   pull_request:
     paths: ["desktop/**", ".github/workflows/desktop.yml"]
+
+permissions:
+  contents: read
 
 concurrency:
   group: desktop-${{ github.event.pull_request.number || github.ref }}
@@ -21,11 +26,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
+          toolchain: stable
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: desktop/url-policy
       - name: cargo test (url-policy)
@@ -43,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: System dependencies (WebKitGTK)
         run: |
@@ -51,9 +57,45 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
             libayatana-appindicator3-dev librsvg2-dev
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Placeholder sidecar (tauri-build checks externalBin exists)
+        run: |
+          mkdir -p desktop/src-tauri/binaries
+          f="desktop/src-tauri/binaries/conductloop-server-$(rustc -vV | sed -n 's/host: //p')"
+          printf '#!/bin/sh\n' > "$f" && chmod +x "$f"
+
+      - name: cargo check (locked)
+        working-directory: desktop/src-tauri
+        run: cargo check --locked --all-targets
+
+      - name: cargo test (locked)
+        working-directory: desktop/src-tauri
+        run: cargo test --locked
+
+  desktop-macos:
+    # Compiles and tests the Tauri wrapper on macOS (GitHub-hosted, Apple
+    # silicon). The Linux job cannot see the `#[cfg(target_os = "macos")]` code
+    # (WKWebView, Network.framework weak-linking in build.rs, the in-app
+    # browser), so a mistake there only showed up on the Mac. It compiles and
+    # runs the unit tests; it does not launch the app, so behavior in WKWebView
+    # still needs a manual test.
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: desktop/src-tauri
 
