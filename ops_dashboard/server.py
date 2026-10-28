@@ -31,6 +31,34 @@ console = Console()
 
 STATIC_DIR = Path(__file__).resolve().parent / "web"
 
+# Content-Security-Policy of the dashboard pages that are not on the strict policy
+# yet. The desktop window loads the UI from this server (http://localhost:7777),
+# so `app.security.csp` in tauri.conf.json does NOT apply to it (Tauri only adds
+# that policy to the assets it serves itself, i.e. the loading page): this
+# header is the policy that governs the real UI. See docs/CSP.md.
+#
+# 'unsafe-inline' stays in script-src and style-src ONLY because these pages
+# still have inline <script> blocks, onclick= handlers and style= attributes
+# (tests/test_csp_static.py counts them and fails if a page gets more). Nothing
+# else is open: no external origins, no eval, no frames, no plugins. `ipc:` and
+# `http://ipc.localhost` are the Tauri IPC transports used by the in-app
+# browser tab bar (window.__TAURI_INTERNALS__.invoke).
+LEGACY_PAGE_CSP = "; ".join((
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "media-src 'self' blob:",
+    "font-src 'self'",
+    "connect-src 'self' ipc: http://ipc.localhost",
+    "manifest-src 'self'",
+    "frame-src 'none'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+))
+
 # In-memory rate limiter for login attempts (audit 2026-06-23).
 # Maps client IP → list of recent failure timestamps (sliding 5-min window).
 _LOGIN_FAILS: dict[str, list[float]] = {}
@@ -86,12 +114,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         if content_type.startswith("text/html") and not any(
                 k.lower() == "content-security-policy" for k in (headers or {})):
-            # Minimal CSP (browser design PR 2). The UI still uses inline
-            # <script> and onclick=, so script-src can't be tightened yet.
-            # Pages that ship their own strict CSP (sessions, connectors,
-            # learning) keep only theirs: one header, not two.
-            self.send_header("Content-Security-Policy",
-                             "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+            # Baseline CSP for the pages that still use inline <script>,
+            # onclick= and style= (see LEGACY_PAGE_CSP). Pages that ship their
+            # own strict CSP (sessions, connectors, learning, chat) keep only
+            # theirs: one header, not two.
+            self.send_header("Content-Security-Policy", LEGACY_PAGE_CSP)
         self.send_header("Content-Length", str(len(body)))
         # Security headers (applied to every response, audit 2026-07-16).
         # - X-Content-Type-Options: nosniff prevents MIME-type sniffing attacks.
