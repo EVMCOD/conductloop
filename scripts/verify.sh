@@ -16,7 +16,9 @@
 #              mypy, pip-audit or package build. Good for a quick loop and for
 #              the pre-push hook (scripts/install-hooks.sh). Run without it
 #              before opening a PR.
-#   --offline  skip the steps that need the network (pip-audit).
+#   --offline  skip the steps that need the network (pip-audit), and build the
+#              package with the setuptools already installed instead of
+#              letting pip download it (skipped when there is none).
 #   --strict   a skipped optional tool (gitleaks, pip-audit) is a failure
 #              instead of a warning.
 #   --list     print the steps and exit.
@@ -156,6 +158,16 @@ for entry in "${STEPS[@]}"; do
   if [ "$OFFLINE" = 1 ] && in_list "$name" "${NETWORK_STEPS[@]}"; then
     record SKIP "$name — --offline" 0
     continue
+  fi
+  if [ "$OFFLINE" = 1 ] && [ "$name" = 'Package builds (pip install .)' ]; then
+    # pip's isolated build environment downloads setuptools: offline, build
+    # with the one in this environment, or skip when there is none.
+    if python -c 'import setuptools' >/dev/null 2>&1; then
+      cmd="$cmd --no-build-isolation"
+    else
+      record SKIP "$name — --offline, no setuptools installed to build with" 0
+      continue
+    fi
   fi
   tool="$(tool_for_step "$name")"
   if [ -n "$tool" ] && ! command -v "$tool" >/dev/null 2>&1; then

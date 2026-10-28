@@ -159,6 +159,16 @@ def test_list_option_prints_every_step_without_running_anything():
     assert "gitleaks" in out
 
 
+def test_offline_package_build_does_not_download_setuptools():
+    # pip's isolated build env fetches setuptools from the index, so offline the
+    # build must use the installed one (or be skipped when there is none).
+    src = VERIFY.read_text()
+    block = src[src.index("if [ \"$OFFLINE\" = 1 ] && [ \"$name\" = 'Package builds (pip install .)' ]"):]
+    block = block[:block.index("\n  fi\n") + 6]
+    assert 'cmd="$cmd --no-build-isolation"' in block
+    assert "import setuptools" in block and "record SKIP" in block
+
+
 def test_unknown_option_is_rejected():
     r = subprocess.run([str(VERIFY), "--nope"], capture_output=True, text=True)
     assert r.returncode == 2 and "unknown option" in r.stderr
