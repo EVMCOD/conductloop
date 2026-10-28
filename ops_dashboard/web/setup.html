@@ -5,6 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Setup — ConductLoop</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="/theme.css" />
   <style>
     /* Legacy tokens are aliases of the shared design system in /theme.css. */
@@ -294,25 +295,6 @@
         // The lines that would put the missing projects back in the index.
         loadProposal();
 
-        // The ideas that keep coming back: themes with notes in them.
-        const ideas = d.ideas || [];
-        if (ideas.length) {
-          const body = mapGroup('Ideas that keep coming back (' + ideas.length + ')');
-          ideas.slice(0, 10).forEach(function (idea) {
-            const row = el('div', 'detail');
-            row.textContent = idea.title + ' — ' + idea.notes + ' notes';
-            body.appendChild(row);
-          });
-          if (ideas.length > 10) {
-            const row = el('div', 'detail');
-            row.textContent = '… and ' + (ideas.length - 10) + ' more';
-            body.appendChild(row);
-          }
-          const where = el('p', 'hint');
-          where.textContent = 'The nightly pass writes these, and everything else that fell out, into PROPOSAL.md in the agent\'s workspace.';
-          body.appendChild(where);
-        }
-
         const topics = d.topics || [];
         if (topics.length) {
           const body = mapGroup('Themes in the loose notes', topics.length);
@@ -336,7 +318,28 @@
       try {
         d = await (await fetch('/api/library/proposal')).json();
       } catch (e) { return; }
-      if (!d.ok || !d.count) return;
+      if (!d.ok) return;
+
+      // The ideas that keep coming back: themes with notes in them. They come
+      // from the proposal (title + notes), not from the map (area + count).
+      const themes = d.ideas || [];
+      if (themes.length) {
+        const tbody = mapGroup('Ideas that keep coming back (' + themes.length + ')');
+        themes.slice(0, 10).forEach(function (idea) {
+          const row = el('div', 'detail');
+          row.textContent = idea.title + ' — ' + idea.notes + ' notes';
+          tbody.appendChild(row);
+        });
+        if (themes.length > 10) {
+          const row = el('div', 'detail');
+          row.textContent = '… and ' + (themes.length - 10) + ' more';
+          tbody.appendChild(row);
+        }
+        const where = el('p', 'hint');
+        where.textContent = 'The nightly pass writes these, and everything else that fell out, into PROPOSAL.md in the agent\'s workspace.';
+        tbody.appendChild(where);
+      }
+      if (!d.count) return;
       const body = mapGroup('Lines missing from your index (' + d.count + ')');
 
       // One checkbox per line: which ones go in is the user's call.
