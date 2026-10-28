@@ -2,8 +2,8 @@
 # Set a secret in ~/ops-dashboard/.env WITHOUT it showing on screen or landing
 # in shell history. The value is read from a hidden prompt.
 #
-#   bash bin/set-secret.sh STRIPE_SECRET_KEY
-#   bash bin/set-secret.sh STRIPE_PRICE_PRO
+#   bash bin/set-secret.sh SENTRY_DSN
+#   bash bin/set-secret.sh SOME_API_KEY
 #
 # Paste the value (e.g. copied from Notes) at the hidden prompt, press Enter.
 set -euo pipefail

@@ -24,7 +24,6 @@ To stop: close the .app, then `Ctrl+C` in the terminal.
 - **31 notes** (PARA, Zettelkasten, evergreen notes, daily journal entries, book notes, project plans, health, code)
 - **8 repos** (fictional Mosaic platform)
 - **12 URLs** (status pages for the fictional Mosaic stack)
-- **6 founders** (Alex Chen, Sam Rivera, Jordan Mills, Taylor Park, Mira Kovacevic, Devon Okafor)
 - **8 activity events** (recent feed)
 - **12 months of revenue** (mock MRR with seasonal dip)
 - **6 code TODOs** (extracted from the mock repos)

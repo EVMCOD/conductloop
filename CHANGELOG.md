@@ -2,6 +2,33 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 2026-10-28 — Leftover billing tables and Stripe integrations removed
+
+> **⚠️ This deletes data from your local database.** Migration 26 drops the
+> tables `entitlements`, `founders` and `payment_events` and every row in them
+> (old plan grants, founder badges, payment audit rows). Nothing in the app reads
+> them any more. If you want to keep a copy, back up `ops.db` before updating
+> (the data folder is `~/Library/Application Support/com.conductloop.desktop/data`
+> on the desktop app). It does not touch any other table, and it is safe to run
+> more than once.
+
+**What changed**
+  - New migration 26: `DROP TABLE IF EXISTS` for those three tables (their
+    indexes go with them). New databases never create them.
+  - Removed the entitlement helpers (`get_entitlement`, `grant_entitlement`,
+    `list_entitlements`, `revoke_entitlement`) from `db_auth`/`db`. Signup no
+    longer grants a "free" plan, and `/api/auth/me` no longer returns an
+    `entitlement` field.
+  - Removed the generic Stripe connector (`connectors.py`: tester, tools and
+    catalog entry) and the Stripe source of the revenue indexer. The Apple App
+    Store and Google Play sources and the mock source are unchanged.
+    Connections or revenue sources of type `stripe` that you saved earlier stay
+    in your database but can no longer be tested or polled.
+  - Removed the `cloudflare-worker/` directory (an unused status-page Worker);
+    the local `/status` page is unaffected.
+  - Removed the founders mock data from the demo build and the leftover
+    references in docs, i18n and tests.
+
 ## 2026-10-28 — Billing and license code removed from the repo
 
 ConductLoop is free, so the dead billing/license code is gone.

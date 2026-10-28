@@ -79,7 +79,7 @@
     "decisions": "Decisions",
     "costs": "Cost tracker",
     "revenue": "Revenue & billing",
-    "revenue_subtitle": "Stripe + Apple App Store + Google Play · {sources} sources · {events} events",
+    "revenue_subtitle": "Apple App Store + Google Play · {sources} sources · {events} events",
     "ga": "Google Analytics",
     "ga_subtitle": "Daily traffic metrics · {sites} sites",
     "sentry": "Sentry issues",
