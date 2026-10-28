@@ -28,7 +28,7 @@ Policy
   421 (RFC 9110 §15.5.20) says exactly "this server is not authoritative for
   that authority", which is the situation; 403 would suggest a permissions
   problem that logging in could fix.
-* Tunnels (cloudflared, ngrok, Tailscale Serve/Funnel) that deliver Stripe or
+* Tunnels (cloudflared, ngrok, Tailscale Serve/Funnel) that deliver
   Telegram webhooks to localhost all add ``X-Forwarded-For``, so those requests
   are already "remote" for ``_is_local()`` and this check does not touch them.
   A tunnel configured to strip X-Forwarded-For *and* keep the public Host would

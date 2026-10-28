@@ -1103,11 +1103,6 @@ def init_db() -> None:
         init_default_templates()
     except Exception:
         log.debug("init_default_templates failed", exc_info=True)
-    # Migrate pre-pivot lifetime holders into founders (idempotent)
-    try:
-        migrate_existing_founders()
-    except Exception:
-        log.debug("migrate_existing_founders failed", exc_info=True)
     # Purge expired sessions (audit 2026-06-23: was never called —
         # sessions table grew without bound. Now runs at every DB init.
     try:
@@ -2205,21 +2200,6 @@ from .db_auth import (  # noqa: E402,F401
     update_user,
     usage_summary,
     verify_password,
-)
-
-# Founders pricing, founder registry, and payment-event log moved to
-# db_billing.py (2026-07-20). Re-exported here so `db.<name>` keeps working.
-from .db_billing import (  # noqa: E402,F401
-    FINAL_PRICE_CENTS,
-    PRICING_TIERS,
-    current_tier,
-    get_founder,
-    is_founder,
-    is_payment_event_seen,
-    list_founders,
-    log_payment_event,
-    migrate_existing_founders,
-    register_founder,
 )
 
 # External connections moved to db_connections.py (2026-07-20). Re-exported

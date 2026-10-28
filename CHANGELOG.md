@@ -2,6 +2,20 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 2026-10-28 — Billing and license code removed from the repo
+
+ConductLoop is free, so the dead billing/license code is gone.
+
+**What changed**
+  - Removed `ops_dashboard/licensing.py`, `ops_dashboard/db_billing.py`,
+    `ops_dashboard/web/billing.html`, `docs/BILLING.md` and their tests.
+  - Removed the `/license`, `/billing`, `/billing/success`, `/api/license/status`
+    and `/api/billing/*` routes (they now 404 like any unknown path). The
+    login/signup flow no longer writes a `payment_events` row, and
+    `/api/auth/me` no longer returns the founder badge fields.
+  - The README no longer lists Stripe as a connector.
+  - Database tables are untouched (no destructive migration).
+
 ## 2026-10-21 — License, billing and Stripe removed from the app
 
 ConductLoop is free; the leftovers of the old license/billing flow are gone.
