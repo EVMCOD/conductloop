@@ -23,9 +23,20 @@ Hard rules (each one has a test in ``tests/test_evals_live.py``):
 * **Mandatory EUR budget and call limit.** Cost uses the user's own
   ``model_prices`` (#18); no price → refuse (like ``price_missing`` in #22).
   Every provider call (cases and judge) is projected before it is made
-  (conservative input estimate + ``max_tokens``) and refused if it could cross
+  (conservative input bound + ``max_tokens``) and refused if it could cross
   the budget; actual usage is charged after it; at 100 % the run stops. The
   remaining cases are reported as ``not_run`` and the run as incomplete.
+  The input bound is ``REQUEST_OVERHEAD + Σ (MESSAGE_OVERHEAD + T(role) +
+  T(content))`` over the system prompt and every message, with
+  ``T(text) = ceil(ascii/2) + 2·bmp_non_ascii + 3·astral`` in codepoints
+  (``estimate_input_tokens``): it covers CJK, emoji and many short messages.
+* **Retries are requests.** ``brain._retry_transient`` retries a timed-out or 5xx
+  request once. While a live call runs, that retry is first offered to the meter:
+  it needs its own call slot and budget room (``max_calls`` reached mid-retry
+  stops the run and nothing is resent), the failed attempt is charged at its
+  reservation (conservative input bound + the full output cap, since a timeout
+  may have been billed and no usage is reported), a nested decorated call does
+  not retry on its own, and the SDK clients are built with ``max_retries=0``.
 * **Local results only.** ``eval_runs``/``eval_results`` (migration 25) and a
   JSON + Markdown report under the data dir. Same shape as the offline report
   plus a per-case comparison with ``evals/baseline.json``.
@@ -66,8 +77,13 @@ MAX_BUDGET_EUR = 20.0          # sanity cap against typos (``--budget-eur 50`` i
 MAX_CALLS_LIMIT = 500
 DEFAULT_MAX_OUTPUT_TOKENS = 1024
 MAX_OUTPUT_TOKENS_LIMIT = 8192
-CHARS_PER_TOKEN_PROJECT = 3    # pre-call projection: over-estimates input tokens on purpose
-CHARS_PER_TOKEN_ESTIMATE = 4   # post-call estimate when the provider reports no usage
+# Conservative input-token bound (see ``estimate_text_tokens``): used both for the pre-call
+# reservation and for the post-call figure when the provider reports no usage.
+ASCII_CHARS_PER_TOKEN = 2      # real prose ≈ 4; code, digits, base64 or hex can drop to ~1.5-2
+BMP_TOKENS_PER_CHAR = 2        # CJK, accents, symbols, ZWJ/variation selectors: 1-3 tokens each
+ASTRAL_TOKENS_PER_CHAR = 3     # emoji and other non-BMP codepoints: 2-4 tokens each
+MESSAGE_OVERHEAD_TOKENS = 8    # per message: role framing, delimiters, optional name field
+REQUEST_OVERHEAD_TOKENS = 16   # per request: format priming, system wrapper, tool/format slack
 STOP_PROVIDER_CODES = ("invalid_key", "insufficient_credit")
 REPORT_VERSION = 1
 
@@ -229,8 +245,44 @@ def build_provider(cfg: LiveConfig) -> Any:
 
 # ---------- budget meter ----------
 
-def _chars(system: str, messages: list[dict]) -> int:
-    return len(system or "") + sum(len(str(m.get("content") or "")) for m in messages)
+def estimate_text_tokens(text: str) -> int:
+    """Upper bound on the tokens of ``text`` for any mainstream tokenizer.
+
+    ``ceil(A / 2) + 2 * B + 3 * S`` where, counted in Unicode codepoints, A are the ASCII
+    ones, B the non-ASCII Basic-Multilingual-Plane ones (CJK, accented letters, symbols,
+    ZWJ and variation selectors) and S the astral ones (emoji, rare scripts). It is at least
+    ``utf8_bytes / 2`` for every codepoint class, so it also covers byte-fallback
+    tokenizers, and never drops below one token for a non-empty string.
+    """
+    a = b = astral = 0
+    for ch in text or "":
+        o = ord(ch)
+        if o < 0x80:
+            a += 1
+        elif o <= 0xFFFF:
+            b += 1
+        else:
+            astral += 1
+    n = math.ceil(a / ASCII_CHARS_PER_TOKEN) + BMP_TOKENS_PER_CHAR * b + ASTRAL_TOKENS_PER_CHAR * astral
+    return max(n, 1) if (a or b or astral) else 0
+
+
+def estimate_input_tokens(system: str, messages: list[dict]) -> int:
+    """Conservative input-token bound of one request (provider-agnostic message format).
+
+    ``REQUEST_OVERHEAD_TOKENS + sum over [system] + messages of
+    (MESSAGE_OVERHEAD_TOKENS + T(role) + T(content))`` with ``T = estimate_text_tokens``.
+    The system prompt is counted as one more message (OpenAI-style providers send it as one;
+    Anthropic's separate field costs no more). Many short messages are therefore dominated
+    by the per-message overhead rather than by their characters.
+    """
+    total = REQUEST_OVERHEAD_TOKENS
+    if system:
+        total += MESSAGE_OVERHEAD_TOKENS + estimate_text_tokens("system") + estimate_text_tokens(system)
+    for m in messages:
+        total += (MESSAGE_OVERHEAD_TOKENS + estimate_text_tokens(str(m.get("role") or ""))
+                  + estimate_text_tokens(str(m.get("content") or "")))
+    return total
 
 
 class Meter:
@@ -252,7 +304,7 @@ class Meter:
             if self.calls >= self.max_calls:
                 self.stopped = "call_limit"
                 raise LiveStop("call_limit", f"call limit reached ({self.max_calls})")
-            est_in = math.ceil(_chars(system, messages) / CHARS_PER_TOKEN_PROJECT)
+            est_in = estimate_input_tokens(system, messages)
             projected = self.price.cost(est_in, max_output_tokens)
             if self.spent_cents + projected > self.budget_cents + 1e-9:
                 self.stopped = "budget_exhausted"
@@ -260,6 +312,17 @@ class Meter:
                                f"next call could cost up to {projected:.4f} cents; "
                                f"{self.budget_cents - self.spent_cents:.4f} cents left")
             self.calls += 1
+
+    def charge_failed_attempt(self, system: str, messages: list[dict],
+                              max_output_tokens: int) -> tuple[int, int, float]:
+        """Charge an attempt that failed with no usage report (timeout, 5xx, connection reset).
+
+        A timed-out request may still have been processed and billed, and the provider tells
+        us nothing, so it is charged what it was reserved at: the conservative input bound
+        plus the full output cap. Returns ``(tokens_in, tokens_out, cost_cents)``.
+        """
+        tin = estimate_input_tokens(system, messages)
+        return tin, max_output_tokens, self.charge(tin, max_output_tokens)
 
     def charge(self, tokens_in: int, tokens_out: int) -> float:
         with self._lock:
@@ -286,6 +349,7 @@ class MeteredProvider:
     calls: list[dict] = field(default_factory=list)
     texts: list[str] = field(default_factory=list)
     usages: list[dict] = field(default_factory=list)
+    failed_attempts: list[dict] = field(default_factory=list)  # charged, no usable response
     last_usage: dict | None = None
     error: Exception | None = None
     error_code: str | None = None
@@ -305,7 +369,13 @@ class MeteredProvider:
     def supports_tools(self) -> bool:
         return False
 
+    def _charge_failed(self, system: str, msgs: list[dict]) -> None:
+        tin, tout, cost = self.meter.charge_failed_attempt(system, msgs, self.max_output_tokens)
+        self.failed_attempts.append({"input_tokens": tin, "output_tokens": tout, "estimated": True,
+                                     "cost_cents_est": cost})
+
     def ask(self, system: str, messages: list[dict], **kwargs: Any) -> str:
+        from .. import brain
         msgs = [{"role": str(m.get("role")), "content": str(m.get("content"))} for m in messages]
         try:
             self.meter.reserve(system, msgs, self.max_output_tokens)
@@ -314,23 +384,38 @@ class MeteredProvider:
             raise
         self.calls.append({"system": system, "messages": msgs})
         kwargs["max_tokens"] = min(int(kwargs.get("max_tokens") or self.max_output_tokens), self.max_output_tokens)
+
+        def before_retry(_exc: BaseException) -> None:
+            # brain._retry_transient is about to send the same request again: the attempt that
+            # just failed is charged, and the new one needs its own reservation (call limit,
+            # budget) — raising LiveStop here cancels the retry and stops the run.
+            self._charge_failed(system, msgs)
+            self.meter.reserve(system, msgs, self.max_output_tokens)
+
+        gate = brain._attempt_gate.set(before_retry)
         try:
             text = str(self.inner.ask(system, messages, **kwargs))
+        except LiveStop as e:
+            self.error = e
+            raise
         except Exception as e:
-            from .. import brain
             code = brain._classify_provider_error(e, self.name).code
+            if brain.is_transient_error(e):
+                self._charge_failed(system, msgs)  # timed out / 5xx: possibly billed, usage unknown
             if code in STOP_PROVIDER_CODES:
                 self.meter.stop(f"provider_error:{code}")
             self.error, self.error_code = e, code
             raise
+        finally:
+            brain._attempt_gate.reset(gate)
         raw = getattr(self.inner, "last_usage", None)
         usage = dict(raw) if isinstance(raw, dict) else {}
         tin, tout = usage.get("input_tokens"), usage.get("output_tokens")
         estimated = not isinstance(tin, int) or not isinstance(tout, int) or bool(usage.get("split_estimated"))
         if not isinstance(tin, int):
-            tin = math.ceil(_chars(system, msgs) / CHARS_PER_TOKEN_ESTIMATE)
+            tin = estimate_input_tokens(system, msgs)
         if not isinstance(tout, int):
-            tout = math.ceil(len(text) / CHARS_PER_TOKEN_ESTIMATE)
+            tout = min(estimate_text_tokens(text), self.max_output_tokens)
         cost = self.meter.charge(tin, tout)
         self.last_usage = {"input_tokens": tin, "output_tokens": tout, "estimated": estimated,
                            "cost_cents_est": cost}
@@ -553,7 +638,7 @@ def run_live(suites: list[_runner.Suite], cfg: LiveConfig, *, baseline: dict | N
                     if cfg.judge and c.assertions and prov.texts:
                         res["judge"] = _judge(c, prov.texts[-1], inner, meter, cfg.max_output_tokens)
             ps = made[0] if made else None
-            us = ps.usages if ps else []
+            us = (ps.usages + ps.failed_attempts) if ps else []
             res["usage"] = {"input_tokens": sum(int(u["input_tokens"]) for u in us),
                             "output_tokens": sum(int(u["output_tokens"]) for u in us),
                             "estimated": any(bool(u["estimated"]) for u in us),

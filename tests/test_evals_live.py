@@ -490,3 +490,227 @@ def test_migration_25_is_idempotent_and_view_hides_key_ref(env):
     live.run_live(runner.discover(root), _cfg(), provider_builder=lambda c: FakeLLM())
     [r] = evals_view.local_runs()
     assert r["mode"] == "live" and r["passed"] == 1 and "key_ref" not in r
+
+
+# ---------- retries are metered (review: brain._retry_transient must not bypass the meter) ----------
+
+class FlakyProvider:
+    """A real-shaped provider: its ``ask`` is wrapped by brain._retry_transient like the shipped ones."""
+
+    name = "anthropic"
+
+    def __init__(self, failures: list[Exception], usage: dict | None = None):
+        self.model = MODEL
+        self.api_key = _fake_key()
+        self.failures = list(failures)
+        self.usage = {"input_tokens": 1000, "output_tokens": 100} if usage is None else usage
+        self.attempts = 0
+        self.last_usage: dict | None = None
+
+    @brain._retry_transient
+    def ask(self, system, messages, **kw):
+        self.attempts += 1
+        if self.failures:
+            raise self.failures.pop(0)
+        self.last_usage = dict(self.usage)
+        return "ok"
+
+
+def _meter(max_calls: int = 10, budget_cents: float = 1000.0, inp: float = 300.0, out: float = 1500.0):
+    return live.Meter(budget_cents, max_calls, live.Price(inp, out))
+
+
+@pytest.fixture()
+def no_sleep(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+
+
+MSGS = [{"role": "user", "content": "hola"}]
+
+
+def test_retried_attempt_counts_as_a_call_and_is_charged(no_sleep):
+    meter = _meter()
+    inner = FlakyProvider([TimeoutError("request timeout")])
+    mp = live.MeteredProvider(inner, meter, 256)
+    assert mp.ask("sys", MSGS) == "ok"
+    assert inner.attempts == 2 and meter.calls == 2           # first attempt + the retry
+    tin, tout, failed_cost = meter.charge_failed_attempt("sys", MSGS, 256)  # what the failed one was charged
+    ok_cost = meter.price.cost(1000, 100)
+    assert len(mp.failed_attempts) == 1
+    assert mp.failed_attempts[0]["cost_cents_est"] == pytest.approx(failed_cost)
+    assert tout == 256 and tin == live.estimate_input_tokens("sys", MSGS)
+    # spent = failed attempt (conservative reserve) + actual usage of the retry (the extra call above is mine)
+    assert meter.spent_cents - failed_cost == pytest.approx(failed_cost + ok_cost)
+
+
+def test_max_calls_reached_mid_retry_stops_and_never_resends(no_sleep):
+    meter = _meter(max_calls=1)
+    inner = FlakyProvider([TimeoutError("request timeout")])
+    mp = live.MeteredProvider(inner, meter, 256)
+    with pytest.raises(live.LiveStop) as ei:
+        mp.ask("sys", MSGS)
+    assert ei.value.code == "call_limit" and meter.stopped == "call_limit"
+    assert inner.attempts == 1 and meter.calls == 1           # the retry was never sent
+    assert meter.spent_cents > 0 and len(mp.failed_attempts) == 1  # the timed-out attempt was still charged
+    assert mp.error is ei.value and mp.texts == []
+
+
+def test_retry_that_would_cross_the_budget_is_not_sent(no_sleep):
+    price = live.Price(300.0, 1500.0)
+    one = price.cost(live.estimate_input_tokens("sys", MSGS), 256)
+    meter = live.Meter(one * 1.5, 10, price)                  # room for one attempt, not for a second
+    inner = FlakyProvider([ConnectionError("connection reset")])
+    mp = live.MeteredProvider(inner, meter, 256)
+    with pytest.raises(live.LiveStop) as ei:
+        mp.ask("sys", MSGS)
+    assert ei.value.code == "budget_exhausted" and inner.attempts == 1
+    assert meter.spent_cents == pytest.approx(one) and meter.spent_cents <= meter.budget_cents
+
+
+def test_two_failed_attempts_are_both_charged_and_counted(no_sleep):
+    meter = _meter()
+    inner = FlakyProvider([TimeoutError("timeout"), TimeoutError("timeout again")])
+    mp = live.MeteredProvider(inner, meter, 256)
+    with pytest.raises(TimeoutError):
+        mp.ask("sys", MSGS)
+    assert inner.attempts == 2 and meter.calls == 2 and len(mp.failed_attempts) == 2
+    assert meter.spent_cents == pytest.approx(sum(f["cost_cents_est"] for f in mp.failed_attempts))
+
+
+def test_client_errors_are_not_retried_nor_charged(no_sleep):
+    meter = _meter()
+    inner = FlakyProvider([RuntimeError("Error code: 429 - rate_limit")])
+    mp = live.MeteredProvider(inner, meter, 256)
+    with pytest.raises(RuntimeError):
+        mp.ask("sys", MSGS)
+    assert inner.attempts == 1 and meter.calls == 1 and meter.spent_cents == 0 and mp.failed_attempts == []
+
+
+def test_nested_retry_wrappers_make_one_metered_retry_not_two(no_sleep):
+    """MiniMax's ask() delegates to AnthropicProvider.ask(): both are decorated."""
+    hits: list[int] = []
+
+    @brain._retry_transient
+    def inner_call():
+        hits.append(1)
+        raise TimeoutError("timeout")
+
+    @brain._retry_transient
+    def outer_call():
+        return inner_call()
+
+    with pytest.raises(TimeoutError):
+        outer_call()
+    assert len(hits) == 4                                     # unchanged outside live evals
+    hits.clear()
+    seen: list[BaseException] = []
+    token = brain._attempt_gate.set(seen.append)
+    try:
+        with pytest.raises(TimeoutError):
+            outer_call()
+    finally:
+        brain._attempt_gate.reset(token)
+    assert len(hits) == 2 and len(seen) == 1                  # one retry, shown to the gate once
+
+
+def test_gate_is_cleared_after_the_call_and_sdk_retries_are_off_only_while_set(no_sleep):
+    assert brain._sdk_retry_kwargs() == {}
+    mp = live.MeteredProvider(FlakyProvider([]), _meter(), 256)
+    mp.ask("sys", MSGS)
+    assert brain._attempt_gate.get() is None
+    token = brain._attempt_gate.set(lambda e: None)
+    try:
+        assert brain._sdk_retry_kwargs() == {"max_retries": 0}
+    finally:
+        brain._attempt_gate.reset(token)
+
+
+def test_sdk_clients_are_built_without_hidden_retries_while_metered(monkeypatch):
+    anthropic = pytest.importorskip("anthropic")
+    openai = pytest.importorskip("openai")
+    made: list[dict] = []
+    monkeypatch.setattr(anthropic, "Anthropic", lambda **kw: made.append(kw))
+    monkeypatch.setattr(openai, "OpenAI", lambda **kw: made.append(kw))
+    token = brain._attempt_gate.set(lambda e: None)
+    try:
+        brain.AnthropicProvider(api_key="k", model="m")._client()
+        brain.OpenAIProvider(api_key="k", model="m")._client()
+        brain.MiniMaxProvider(api_key="k", model="m")._client()
+    finally:
+        brain._attempt_gate.reset(token)
+    brain.AnthropicProvider(api_key="k", model="m")._client()
+    assert [kw.get("max_retries") for kw in made] == [0, 0, 0, None]
+
+
+def test_run_live_charges_a_retried_case_and_reports_the_extra_call(env, no_sleep):
+    root = _suite(env, n=1)
+    _price()
+    inner = FlakyProvider([TimeoutError("timeout")])
+    rep = live.run_live(runner.discover(root), _cfg(), provider_builder=lambda c: inner)
+    assert inner.attempts == 2 and rep["cost"]["calls"] == 2
+    c = rep["cases"][0]
+    assert c["status"] == "run" and rep["cost"]["spent_cents"] == pytest.approx(c["usage"]["cost_cents_est"])
+    assert c["usage"]["estimated"] is False or c["usage"]["input_tokens"] > 1000  # failed attempt is in the case total
+
+
+def test_run_live_call_limit_mid_retry_marks_the_case_not_run(env, no_sleep):
+    root = _suite(env, n=3)
+    _price()
+    inner = FlakyProvider([TimeoutError("timeout")])
+    rep = live.run_live(runner.discover(root), _cfg(max_calls=1), provider_builder=lambda c: inner)
+    assert inner.attempts == 1 and rep["cost"]["calls"] == 1
+    assert rep["stop_reason"] == "call_limit" and rep["complete"] is False and rep["not_run"] == 3
+    assert rep["cost"]["spent_cents"] > 0
+
+
+# ---------- conservative input-token bound (review: chars/3 under-counts CJK, emoji, framing) ----------
+
+@pytest.mark.parametrize("text,floor", [
+    ("你好，世界" * 40, 2 * 200),                  # CJK: ≥ 2 tokens per char (chars/3 gave 67)
+    ("😀🎉👩‍💻" * 30, 3 * 30 * 2),                  # emoji (+ ZWJ sequence)
+    ("hello world " * 50, 600 // 2),               # ASCII: at least chars/2
+    ("é" * 100, 200),                              # accented letters
+])
+def test_text_token_bound_covers_cjk_emoji_and_ascii(text, floor):
+    assert live.estimate_text_tokens(text) >= floor
+    assert live.estimate_text_tokens(text) >= len(text.encode("utf-8")) / 2 - 1  # also covers byte-fallback
+    assert live.estimate_text_tokens("") == 0 and live.estimate_text_tokens("a") == 1
+
+
+def test_formula_is_the_documented_one():
+    t = "ab" + "你" + "😀"
+    assert live.estimate_text_tokens(t) == 1 + 2 + 3
+    msgs = [{"role": "user", "content": "你"}, {"role": "assistant", "content": "ab"}]
+    exp = (live.REQUEST_OVERHEAD_TOKENS
+           + live.MESSAGE_OVERHEAD_TOKENS + live.estimate_text_tokens("system") + live.estimate_text_tokens("sys")
+           + sum(live.MESSAGE_OVERHEAD_TOKENS + live.estimate_text_tokens(m["role"]) + live.estimate_text_tokens(m["content"])
+                 for m in msgs))
+    assert live.estimate_input_tokens("sys", msgs) == exp
+
+
+def test_many_short_messages_are_dominated_by_per_message_overhead():
+    msgs = [{"role": "user" if i % 2 == 0 else "assistant", "content": "ok"} for i in range(300)]
+    est = live.estimate_input_tokens("", msgs)
+    assert est >= 300 * live.MESSAGE_OVERHEAD_TOKENS
+    assert est > 3 * (sum(len(m["content"]) for m in msgs) / 3)   # old chars/3 would have said 200
+
+
+@pytest.mark.parametrize("content", ["你好，世界" * 200, "😀🎉" * 400])
+def test_reservation_refuses_dense_text_the_old_chars_over_3_bound_would_have_allowed(content):
+    price = live.Price(1_000_000.0, 0.0)               # 1 cent per input token
+    msgs = [{"role": "user", "content": content}]
+    old_projection = math.ceil(len(content) / 3)        # the former bound, in cents here
+    meter = live.Meter(old_projection + 1, 5, price)
+    with pytest.raises(live.LiveStop) as ei:
+        meter.reserve("", msgs, 1)
+    assert ei.value.code == "budget_exhausted" and meter.calls == 0
+    # and a budget that covers the new bound does pass
+    live.Meter(live.estimate_input_tokens("", msgs) + 1, 5, price).reserve("", msgs, 1)
+
+
+def test_missing_usage_fallback_uses_the_conservative_bound(env):
+    root = _suite(env, n=1)
+    _price()
+    rep = live.run_live(runner.discover(root), _cfg(), provider_builder=lambda c: FakeLLM(usage={}))
+    c = rep["cases"][0]
+    assert c["usage"]["estimated"] and c["usage"]["input_tokens"] >= live.REQUEST_OVERHEAD_TOKENS
