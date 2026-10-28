@@ -4,6 +4,15 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- **Fixed: the Setup and Boardroom pages did nothing.** A script error stopped
+  every script on both pages. Setup (the checklist, the library folders and
+  "Index now") stayed on "Checking…". Boardroom never listed the C-suite: a
+  truncated function and a missing `escapeHtml` broke it, and it linked a
+  stylesheet that does not exist. Both work again. The "Ideas that keep coming
+  back" list in Setup, which was drawn from the wrong data, now shows the themes.
+  A new test runs every page script through `node --check`, so this cannot ship
+  unnoticed again.
+
 - **Content Security Policy for the desktop app.** The Tauri window loads the UI
   from the local server, so the server's header is the policy that applies to
   it; it now restricts everything to the app itself (`default-src 'self'`, no
@@ -12,6 +21,17 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
   code (a test now stops it from growing). The loading page gets a strict policy
   in `tauri.conf.json` (it was `null`). Images from other sites inside notes no
   longer load. See `docs/CSP.md`.
+
+- **A first-run welcome page, and a notes folder you can choose.** On a fresh
+  install the app now opens a welcome page that asks for two things, both
+  optional: the folder with your notes (it reads it, never writes into it) and
+  the folder where ConductLoop keeps its own notes, and an AI key. The key goes
+  to the Keychain (or the encrypted file when there is none) and is never shown
+  again, logged or sent back. The choice of folder is saved in the app, so it no
+  longer needs the `OPS_VAULT_ROOT` environment variable, which the installed
+  app had no way to set; it can also be changed later in Setup → Library. The
+  page is shown once, and never to anyone who already has notes indexed, a key
+  or any setting. The old "quick tour" is still at `/tour`.
 
 - Contributor tooling: `scripts/verify.sh` (also `make verify`) runs the same checks as CI locally, with `--fast`, `--offline` and `--strict` options and an optional pre-push hook (`scripts/install-hooks.sh`). The mypy typed-module list now lives in `scripts/mypy-ratchet.txt`, shared by CI and the script.
 

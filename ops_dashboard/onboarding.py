@@ -7,6 +7,8 @@ instead of breaking the list.
 """
 from __future__ import annotations
 
+from datetime import UTC
+
 from . import db
 
 
@@ -21,7 +23,7 @@ def _vault():
     from pathlib import Path
     root = db.vault_root()
     ok = Path(root).exists()
-    return ok, (f"vault at {root}" if ok else f"not found: {root}")
+    return ok, (f"vault at {root}" if ok else f"not found: {root} — choose your folder on the welcome page or in Setup → Library")
 
 
 def _database():
@@ -91,7 +93,7 @@ def _projects():
 def _documents():
     with db.get_connection() as conn:
         n = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
-    return n > 0, (f"{n} documents indexed" if n else "nothing indexed yet — run `make index`")
+    return n > 0, (f"{n} documents indexed" if n else "nothing indexed yet — press “Index now” in Setup → Library")
 
 
 def _obsidian():
@@ -125,3 +127,77 @@ def checklist() -> dict:
         items.append({"step": step, "id": cid, "label": label, "ok": bool(ok), "detail": detail})
     passed = sum(1 for i in items if i["ok"])
     return {"ready": passed == len(items), "passed": passed, "total": len(items), "checks": items}
+
+
+# --- first run -------------------------------------------------------------
+# The welcome page is for someone who has just installed the app. "Just
+# installed" is decided from what is on the machine, never from a version
+# number, so nobody who upgrades sees it: any notes indexed, any key, any folder
+# chosen, or a vault set from the environment means they are already set up.
+
+
+def _marker() -> dict:
+    from . import brain
+    m = brain._load_config().get("onboarding")
+    return m if isinstance(m, dict) else {}
+
+
+def _has_key() -> bool:
+    """Is any AI key set up? Looks at the references in config.json and at the
+    environment, never reads a secret and never probes the network."""
+    import os
+
+    from . import brain, byok_keys
+    cfg = brain._load_config()
+    return any(
+        os.environ.get(byok_keys.ENV_VAR[p]) or cfg.get(byok_keys.REF_FIELD[p]) or cfg.get(byok_keys.PLAINTEXT_FIELD[p])
+        for p in byok_keys.PROVIDERS
+    )
+
+
+def state() -> dict:
+    """What the welcome page needs: {fresh, dismissed, completed, vault_source,
+    vault_exists, documents, has_key}. Never contains a key or any secret."""
+    from . import library
+
+    marker = _marker()
+    dismissed = bool(marker.get("dismissed_at"))
+    completed = bool(marker.get("completed_at"))
+    try:
+        with db.get_connection() as conn:
+            documents = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+    except Exception:
+        documents = 0
+    has_key = _has_key()
+    source = db.vault_root_source()
+    from . import brain
+    # Any setting already in config.json (a provider, a folder, a vault...) means
+    # this is not a first run; the marker of this very page does not count.
+    settings = [k for k in brain._load_config() if k != "onboarding"]
+    configured = source != "default" or bool(library.index_folders()) or bool(settings)
+    fresh = not (dismissed or completed or documents or has_key or configured)
+    return {
+        "fresh": fresh,
+        "dismissed": dismissed,
+        "completed": completed,
+        "vault_source": source,
+        "vault_exists": db.vault_root().is_dir(),
+        "documents": int(documents),
+        "has_key": bool(has_key),
+    }
+
+
+def mark(kind: str) -> None:
+    """Remember that the welcome page was finished ("completed") or left
+    ("dismissed"), so it is not shown again."""
+    from datetime import datetime
+
+    from . import brain
+    if kind not in ("completed", "dismissed"):
+        raise ValueError(kind)
+    cfg = brain._load_config()
+    current = cfg.get("onboarding")
+    marker: dict = current if isinstance(current, dict) else {}
+    marker[f"{kind}_at"] = datetime.now(UTC).isoformat(timespec="seconds")
+    cfg["onboarding"] = marker
+    brain._save_config(cfg)
