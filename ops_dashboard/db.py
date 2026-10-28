@@ -14,16 +14,38 @@ from pathlib import Path
 log = logging.getLogger("conductloop.db")
 
 
-def vault_root() -> Path:
-    """Root of the knowledge vault to index. Identity-neutral default.
+DEFAULT_VAULT = Path.home() / "Documents" / "vault"
 
-    Override per-deployment with OPS_VAULT_ROOT. The default is a generic
-    location so a fresh install indexes nothing personal until the user
-    points it at their own vault.
+
+def vault_root_source() -> str:
+    """Where ``vault_root()`` comes from: "env", "config" or "default"."""
+    if os.environ.get("OPS_VAULT_ROOT", "").strip():
+        return "env"
+    return "config" if _configured_vault() else "default"
+
+
+def _configured_vault() -> str:
+    """The folder chosen in the app (``vault_root`` in config.json), or ""."""
+    import json
+
+    from . import app_paths
+    try:
+        raw = json.loads(app_paths.config_path().read_text(encoding="utf-8")).get("vault_root")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return raw.strip() if isinstance(raw, str) else ""
+
+
+def vault_root() -> Path:
+    """Folder ConductLoop writes its own notes to. Identity-neutral default.
+
+    ``$OPS_VAULT_ROOT`` wins (deployments, tests), then the folder chosen in the
+    app (``vault_root`` in config.json, which is how a packaged install picks
+    it: it has no shell to export a variable from), then a generic location so
+    a fresh install indexes nothing personal until the user picks a folder.
     """
-    return Path(
-        os.environ.get("OPS_VAULT_ROOT", str(Path.home() / "Documents" / "vault"))
-    ).expanduser()
+    raw = os.environ.get("OPS_VAULT_ROOT", "").strip() or _configured_vault()
+    return Path(raw).expanduser() if raw else DEFAULT_VAULT
 
 # Audit 2026-06-23: moved imports to top-level so missing deps fail loud
 # at module load instead of silently returning False on auth calls.

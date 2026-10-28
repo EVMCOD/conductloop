@@ -16,6 +16,7 @@ from . import (  # noqa: F401  (importing a routes_* module registers its routes
     routes_learning,  # the Aprendizaje page (L3)
     routes_library,  # /setup: indexed folders and "index now"
     routes_media,  # image / video / speech generation (2026-10-23)
+    routes_onboarding,  # /welcome: the first run
     routes_servers,  # what the product can talk to, and to whom (2026-10-24)
 )
 from .routing import router

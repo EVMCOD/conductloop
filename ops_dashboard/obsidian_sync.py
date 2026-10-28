@@ -63,7 +63,7 @@ def export_memory() -> dict:
     """Write every brain_memory entry to a markdown note in the vault.
     Returns {written, dir}. Creates the folder if the vault exists."""
     if not _vault().exists():
-        raise FileNotFoundError(f"vault not found: {_vault()} (set OPS_VAULT_ROOT)")
+        raise FileNotFoundError(f"vault not found: {_vault()} (choose your notes folder in Setup)")
     d = _memory_dir()
     d.mkdir(parents=True, exist_ok=True)
     written = 0
@@ -85,7 +85,7 @@ def export_decisions() -> dict:
     """Write the decision log to markdown notes in the vault (read-only mirror —
     decisions are edited in ConductLoop, not the vault)."""
     if not _vault().exists():
-        raise FileNotFoundError(f"vault not found: {_vault()} (set OPS_VAULT_ROOT)")
+        raise FileNotFoundError(f"vault not found: {_vault()} (choose your notes folder in Setup)")
     d = _vault() / "ConductLoop Decisions"
     d.mkdir(parents=True, exist_ok=True)
     written = 0
