@@ -101,10 +101,12 @@ def health(handler) -> None:
     # to check that the process listening on the port is really the one it
     # spawned — otherwise a local process that grabbed the port first would
     # receive the boot nonce and become the app's privileged origin
-    # (2026-10-23).
+    # (2026-10-23). The app looks for the whole id in the body, so it is echoed
+    # in full: a shortened one never matched and the window waited ~2.5 min,
+    # then loaded without the boot nonce and got 403 app_token_required.
     instance = (os.environ.get("CONDUCTLOOP_INSTANCE_ID") or "").strip()
     if instance and os.environ.get("CONDUCTLOOP_APP_TOKEN"):
-        payload["instance"] = instance[:16]
+        payload["instance"] = instance
     handler._send(
         200 if db_ok else 503,
         json.dumps(payload).encode(),

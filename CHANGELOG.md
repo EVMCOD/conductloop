@@ -4,6 +4,13 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- **Fixed: the desktop app never got past "Connecting to local server…".** The
+  window waits for its own server by looking for a per-launch id in
+  `/api/health`, but the server only echoed the first 16 characters of it. The
+  window never recognised its server, gave up after about two and a half
+  minutes and loaded the dashboard without the start-up nonce, so every page
+  answered 403 `app_token_required`. The id is now echoed in full.
+
 - **Fixed: the Setup and Boardroom pages did nothing.** A script error stopped
   every script on both pages. Setup (the checklist, the library folders and
   "Index now") stayed on "Checking…". Boardroom never listed the C-suite: a
