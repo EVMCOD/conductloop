@@ -9,7 +9,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Importa los issues y PRs de EVMCOD/ops-dashboard",
+      "prompt": "Importa los issues y PRs de example-org/example-repo",
       "expected_output": "Lee issues y PRs con la conexión de GitHub existente y los guarda en el vault marcados como no confiables, sin escribir en GitHub.",
       "files": [],
       "assertions": [],
@@ -29,7 +29,7 @@
             },
             "config": {
               "repos": [
-                "EVMCOD/ops-dashboard"
+                "example-org/example-repo"
               ]
             }
           },
@@ -42,7 +42,7 @@
           },
           {
             "type": "must_contain",
-            "text": "github/pr/EVMCOD_ops-dashboard#40"
+            "text": "github/pr/example-org_example-repo#40"
           },
           {
             "type": "must_contain",
@@ -84,14 +84,14 @@
             },
             "config": {
               "repos": [
-                "EVMCOD/ops-dashboard"
+                "example-org/example-repo"
               ]
             }
           },
           "permission": "write",
           "action": "comment_issue",
           "payload": {
-            "repo": "EVMCOD/ops-dashboard",
+            "repo": "example-org/example-repo",
             "number": 12,
             "body": "Arreglado en #31"
           }
@@ -137,13 +137,13 @@
             },
             "config": {
               "repos": [
-                "EVMCOD/ops-dashboard"
+                "example-org/example-repo"
               ]
             }
           },
           "action": "comment_issue",
           "payload": {
-            "repo": "EVMCOD/ops-dashboard",
+            "repo": "example-org/example-repo",
             "number": 12,
             "body": "hola"
           }

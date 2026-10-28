@@ -3,7 +3,7 @@
 The license-worker E2E suite (formerly tests/test_license_worker.py) and the
 scripts/test-fleet harness were retired on 2026-10-21 after they created trials
 in the production D1. The worker's live tests now live in
-EVMCOD/conductloop-license (tests/live), opt-in and preview/local only.
+a separate private repository (tests/live there), opt-in and preview/local only.
 """
 from __future__ import annotations
 

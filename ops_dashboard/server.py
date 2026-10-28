@@ -1189,7 +1189,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             limit = int((qs.get("n") or ["15"])[0])
             mode = (qs.get("mode") or ["text"])[0]   # 'text' | 'semantic' | 'hybrid'
             fuzzy = (qs.get("fuzzy") or ["1"])[0] not in ("0", "false", "")
-            # Project prefix filter (e.g. ":rentcla verifactu")
+            # Project prefix filter (e.g. ":acme verifactu")
             project_prefix, q = db.parse_project_prefix(q)
             # Date range filter (e.g. "qué hice ayer")
             date_range = db.parse_date_range(q)
@@ -2542,7 +2542,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         for t in all_teams:
             members_by_team[t["id"]] = db.list_members(team_id=t["id"])
 
-        # Map each team to a project via team.key (teams seeded as ev-trading-labs, rentcla, etc.)
+        # Map each team to a project via team.key (teams seeded as example-team, acme, etc.)
         # If a team key matches a project, attach; otherwise it goes to "orphans".
         proj_by_key = {p.key: p for p in proj_registry.PROJECTS}
         teams_per_project: dict[str, list[dict]] = {}

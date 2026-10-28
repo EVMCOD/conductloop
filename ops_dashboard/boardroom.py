@@ -435,20 +435,39 @@ def _detect_chairman_intent(content: str) -> dict | None:
 # --- Wizard: create a new CEO --------------------------------------------
 
 # Tool suggestions keyed by project slug — the wizard uses these as defaults.
+# Built in: only the generic ``holdco``. Your own projects go in config.json:
+#   {"boardroom": {"tool_defaults_by_project": {"my-app": ["publish_blog_post"]}}}
+# (a config entry replaces the built-in one for that slug; unknown tool names
+# and values of the wrong type are ignored).
 _TOOL_DEFAULTS_BY_PROJECT: dict[str, list[str]] = {
-    "ev-trading-labs": ["publish_mql5_script", "publish_tradingview_script", "post_to_discord", "schedule_tweet", "read_analytics_source"],
-    "rentcla":         ["draft_outreach_email", "publish_blog_post", "monitor_signups", "read_analytics_source"],
-    "opencross":       ["draft_release_notes", "publish_blog_post", "monitor_support_threads"],
-    "traincurve":      ["draft_outreach_email", "publish_blog_post", "read_analytics_source"],
-    "claw-studio":     ["draft_outreach_email", "publish_blog_post", "monitor_signups"],
-    "holdco":          ["read_analytics_source", "read_finance_report", "schedule_chairman_brief"],
+    "holdco": ["read_analytics_source", "read_finance_report", "schedule_chairman_brief"],
 }
 _DEFAULT_TOOLS = ["read_file", "write_file", "search_vault", "write_to_vault", "send_message", "request_chairman_decision"]
 
 
+def _configured_tool_defaults() -> dict[str, list[str]]:
+    """``boardroom.tool_defaults_by_project`` from config.json, validated."""
+    from . import app_paths
+
+    try:
+        raw = json.loads(app_paths.config_path().read_text(encoding="utf-8"))
+        cfg = raw["boardroom"]["tool_defaults_by_project"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+    if not isinstance(cfg, dict):
+        return {}
+    known = {t["name"] for t in all_tool_catalog()}
+    out: dict[str, list[str]] = {}
+    for slug, tools in cfg.items():
+        if isinstance(slug, str) and isinstance(tools, list):
+            out[slug] = [t for t in tools if isinstance(t, str) and t in known]
+    return out
+
+
 def suggest_tools_for_project(slug: str | None) -> list[str]:
-    if slug and slug in _TOOL_DEFAULTS_BY_PROJECT:
-        return list(_DEFAULT_TOOLS) + list(_TOOL_DEFAULTS_BY_PROJECT[slug])
+    defaults = {**_TOOL_DEFAULTS_BY_PROJECT, **_configured_tool_defaults()}
+    if slug and slug in defaults:
+        return list(_DEFAULT_TOOLS) + list(defaults[slug])
     return list(_DEFAULT_TOOLS)
 
 
@@ -461,10 +480,10 @@ def all_tool_catalog() -> list[dict]:
         {"name": "write_to_vault",               "category": "base", "description": "Append a markdown entry to the vault."},
         {"name": "send_message",                 "category": "base", "description": "Send an outbound message (Slack/Discord/SMS)."},
         {"name": "request_chairman_decision",    "category": "base", "description": "Escalate a choice to the chairman in the Inbox."},
-        {"name": "publish_mql5_script",          "category": "ev-trading-labs", "description": "Publish an MQL5 script to community."},
-        {"name": "publish_tradingview_script",   "category": "ev-trading-labs", "description": "Publish a TradingView indicator/pine."},
-        {"name": "post_to_discord",              "category": "ev-trading-labs", "description": "Post a message in the Discord channel."},
-        {"name": "schedule_tweet",               "category": "ev-trading-labs", "description": "Schedule a tweet for later posting."},
+        {"name": "publish_mql5_script",          "category": "community", "description": "Publish an MQL5 script to community."},
+        {"name": "publish_tradingview_script",   "category": "community", "description": "Publish a TradingView indicator/pine."},
+        {"name": "post_to_discord",              "category": "community", "description": "Post a message in the Discord channel."},
+        {"name": "schedule_tweet",               "category": "community", "description": "Schedule a tweet for later posting."},
         {"name": "read_analytics_source",        "category": "analytics",        "description": "Pull GA4 / Stripe / Sentry summary."},
         {"name": "draft_outreach_email",         "category": "marketing",       "description": "Draft an outreach email for chairman approval."},
         {"name": "publish_blog_post",            "category": "marketing",       "description": "Publish a post on the marketing site."},

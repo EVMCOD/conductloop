@@ -68,12 +68,12 @@
 
     <div id="step1" class="card">
       <label>Name<span class="req">*</span></label>
-      <input id="name" type="text" placeholder="e.g. TrainCurve CEO" autocomplete="off" />
+      <input id="name" type="text" placeholder="e.g. Example App CEO" autocomplete="off" />
       <div class="hint">What you'll see in the Inbox.</div>
 
       <label>Project slug<span class="req">*</span></label>
-      <input id="slug" type="text" placeholder="e.g. traincurve" autocomplete="off" />
-      <div class="hint">Used for IDs and to auto-suggest tools. Kebab-case (traincurve, ev-trading-labs).</div>
+      <input id="slug" type="text" placeholder="e.g. example-app" autocomplete="off" />
+      <div class="hint">Used for IDs and to auto-suggest tools. Kebab-case (example-app, example-team).</div>
 
       <label>Persona summary<span class="req">*</span></label>
       <textarea id="persona" placeholder="1-2 lines. Who is this CEO? What do they own?"></textarea>
@@ -170,7 +170,7 @@
       const byCat = {};
       state.toolsCatalog.forEach(t => { (byCat[t.category] ||= []).push(t); });
       // ensure order
-      const cats = ['base','ev-trading-labs','analytics','marketing','support','engineering','finance','holdco','rentcla','opencross','traincurve','claw-studio'];
+      const cats = ['base','community','analytics','marketing','support','engineering','finance','holdco'];
       const seen = new Set();
       cats.forEach(c => {
         const list = byCat[c]; if (!list || !list.length) return;

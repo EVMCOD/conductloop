@@ -276,7 +276,7 @@ CREATE TABLE IF NOT EXISTS doc_tags (
 CREATE INDEX IF NOT EXISTS idx_doc_tags_tag ON doc_tags(tag);
 
 -- Tasks: units of work delegated to AI agents (or humans)
--- project_key is a soft reference (e.g. 'traincurve', 'rentcla', or NULL for general)
+-- project_key is a soft reference (e.g. 'example-app', 'acme', or NULL for general)
 CREATE TABLE IF NOT EXISTS tasks (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     project_key       TEXT,
@@ -383,7 +383,7 @@ CREATE TABLE IF NOT EXISTS task_templates (
 -- GitHub sync: PRs, issues, commits per repo
 CREATE TABLE IF NOT EXISTS github_items (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    repo_full     TEXT    NOT NULL,                      -- 'EVMCOD/traincurve'
+    repo_full     TEXT    NOT NULL,                      -- 'example-org/example-app'
     item_type     TEXT    NOT NULL,                      -- 'pr' | 'issue' | 'commit'
     item_number   INTEGER,                               -- for PRs / issues
     title         TEXT,
@@ -523,12 +523,12 @@ CREATE INDEX IF NOT EXISTS idx_agent_mcp_tools_agent ON agent_mcp_tools(agent_id
 -- Revenue / Billing (unified Stripe + Apple + Google + ...)
 -- ============================================================
 
--- One row per connected revenue source (e.g. "stripe-rentcla", "apple-evtl")
+-- One row per connected revenue source (e.g. "stripe-acme", "apple-globex")
 CREATE TABLE IF NOT EXISTS revenue_sources (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    name            TEXT    UNIQUE NOT NULL,            -- e.g. 'stripe-rentcla', 'apple-evtl'
+    name            TEXT    UNIQUE NOT NULL,            -- e.g. 'stripe-acme', 'apple-globex'
     source_type     TEXT    NOT NULL,                   -- 'stripe' | 'apple' | 'google' | 'mock'
-    project_key     TEXT    NOT NULL,                   -- 'rentcla', 'evtl-tools', 'beibo', etc.
+    project_key     TEXT    NOT NULL,                   -- 'acme', 'globex-tools', 'initech', etc.
     connection_id   INTEGER,                            -- FK to connections (encrypted creds)
     currency        TEXT    NOT NULL DEFAULT 'USD',
     enabled         INTEGER NOT NULL DEFAULT 1,
@@ -576,7 +576,7 @@ CREATE INDEX IF NOT EXISTS idx_revenue_events_occurred ON revenue_events(occurre
 CREATE TABLE IF NOT EXISTS ga_sites (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     property_id     TEXT    UNIQUE NOT NULL,            -- GA4 property ID ('123456789' or 'properties/123456789')
-    display_name    TEXT    NOT NULL,                   -- human label, e.g. 'rentcla.com'
+    display_name    TEXT    NOT NULL,                   -- human label, e.g. 'acme.example'
     url             TEXT,                               -- site URL for display / linking
     project_key     TEXT    NOT NULL,                   -- links to ops-dashboard project
     service_account_json TEXT,                          -- JSON content of the service account key (or OAuth authorized_user blob)
@@ -629,9 +629,9 @@ CREATE INDEX IF NOT EXISTS idx_ga_metrics_date ON ga_metrics_daily(date DESC);
 -- One row per registered Sentry project
 CREATE TABLE IF NOT EXISTS sentry_projects (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    name                TEXT    UNIQUE NOT NULL,           -- e.g. 'sentry-rentcla'
+    name                TEXT    UNIQUE NOT NULL,           -- e.g. 'sentry-acme'
     source_type         TEXT    NOT NULL DEFAULT 'sentry', -- 'sentry' | 'mock'
-    project_key         TEXT    NOT NULL,                  -- 'rentcla', 'evtl-tools', etc.
+    project_key         TEXT    NOT NULL,                  -- 'acme', 'globex-tools', etc.
     sentry_project      TEXT,                             -- Sentry project slug (URL component)
     org_slug            TEXT,                             -- Sentry org slug
     auth_token          TEXT,                             -- Bearer token (user-provided, no encryption in v1)

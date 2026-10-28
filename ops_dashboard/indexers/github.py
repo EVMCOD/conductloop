@@ -4,7 +4,7 @@ Fetches open PRs, open issues, and recent commits for each known repo via
 the public GitHub REST API. No auth needed for public repos (60 req/h).
 
 For each repo in projects.PROJECTS that has a github_full attribute
-(e.g. 'EVMCOD/traincurve'), we hit:
+(e.g. 'example-org/example-app'), we hit:
   - /repos/{owner}/{repo}/pulls?state=open
   - /repos/{owner}/{repo}/issues?state=open (filtered to actual issues, not PRs)
   - /repos/{owner}/{repo}/commits?per_page=20

@@ -162,7 +162,7 @@ def _build_system_prompt(project_key: str | None, system_suffix: str) -> str:
         f"text alone — always end with a write_artifact call so the result "
         f"is persisted to the vault and indexed. The write_artifact tool "
         f"takes (project, title, markdown). Pass the project key as-is "
-        f"(e.g. 'traincurve'). The title should be a concise label "
+        f"(e.g. 'example-app'). The title should be a concise label "
         f"(e.g. 'Weekly brief 2026-06-20'). The markdown should be the full "
         f"deliverable, well-formatted, and cited.\n"
         f"===========================\n"

@@ -305,7 +305,7 @@ def index_drift(*, roots: list[Path] | None = None) -> dict[str, Any]:
     # from, which is what makes it actionable instead of broken.
     #
     # Some of them are the same note written with other separators
-    # (traincurve-static-site-seo-break / traincurve_static_site_seo_break):
+    # (example-app-static-site-seo-break / example_app_static_site_seo_break):
     # those are not ideas, they are a broken link with a twin.
     wanted: dict[str, list[str]] = {}
     for note in notes:

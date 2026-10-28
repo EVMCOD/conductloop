@@ -10,7 +10,7 @@ Test/live without real keys:
 
 CLI:
   python -m ops_dashboard.cli index revenue              # all enabled sources
-  python -m ops_dashboard.cli index revenue --source stripe-rentcla
+  python -m ops_dashboard.cli index revenue --source stripe-acme
 """
 from __future__ import annotations
 
