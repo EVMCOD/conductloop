@@ -11,7 +11,7 @@ Configure via env vars (or config.json):
 
 Use:
   from ops_dashboard import webhooks
-  webhooks.notify("Rentcla: URL rentcla.com failed (500)", severity="warn")
+  webhooks.notify("Acme: URL acme.example failed (500)", severity="warn")
 """
 from __future__ import annotations
 

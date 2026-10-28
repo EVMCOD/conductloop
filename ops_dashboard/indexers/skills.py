@@ -112,7 +112,7 @@ CATEGORY_RULES: list[tuple[str, list[str]]] = [
     ("devtools", [
         "skill-", "configure-ecc", "ecc-", "orch-", "dmux-", "ralphinho",
         "blueprint", "council", "team-", "messages-ops", "unified-",
-        "workspace-", "openclaw", "nanoclaw", "claude-devfleet",
+        "workspace-", "claude-devfleet",
     ]),
 ]
 
@@ -146,7 +146,7 @@ SUBCATEGORY_RULES: list[tuple[str, list[str]]] = [
     ("Security", ["security", "auth", "encrypt", "compliance", "guard", "safe"]),
     ("Memory / Persistence", ["swift-actor", "persistence", "memory"]),
     ("ECC", ["ecc-", "configure-ecc"]),
-    ("OpenClaw", ["openclaw", "nanoclaw", "claude-devfleet"]),
+    ("Agent frameworks", ["claude-devfleet"]),
     ("Workflow", ["workflow", "orch-", "dmux-", "ralphinho"]),
     ("Search", ["search", "exa", "discovery"]),
 ]

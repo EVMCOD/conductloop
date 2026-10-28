@@ -28,7 +28,7 @@ class Project:
     obsidian_globs: list[str] = field(default_factory=list)  # path globs under vault
     url_names: list[str] = field(default_factory=list)        # names in live_urls table
     color: str = "cyan"
-    parent: str | None = None  # key of the parent project (e.g. 'ev-trading-labs')
+    parent: str | None = None  # key of the parent project (e.g. 'example-team')
     github_full: str | None = None  # 'owner/repo' for GitHub sync (optional)
     github_repo: str | None = None  # 'org/name' for GitHub sync (optional)
 
@@ -243,7 +243,7 @@ def _url_health(project: Project) -> list[dict]:
     """Return live URL rows that belong to this project.
 
     Match by `name` (configured url_names) OR by the `project` field in the
-    live_urls table (e.g. 'evtl-tools' → its own live URLs).
+    live_urls table (e.g. 'globex-tools' → its own live URLs).
     """
     rows = live_urls.latest()
     if not project.url_names and not project.key:

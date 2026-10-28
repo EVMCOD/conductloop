@@ -1,8 +1,8 @@
 name: CI
 
-# Docs-only changes don't run CI, a newer push cancels the older run of the
-# same branch/PR, and the Rust/Tauri jobs live in desktop.yml, which only runs
-# when desktop/ changes.
+# CI runs on every change (there is no paths-ignore, docs-only changes
+# included), a newer push cancels the older run of the same branch/PR, and the
+# Rust/Tauri jobs live in desktop.yml, which only runs when desktop/ changes.
 on:
   push:
     branches: [main]

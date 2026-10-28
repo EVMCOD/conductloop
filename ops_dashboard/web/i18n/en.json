@@ -211,7 +211,7 @@
     "create_name_label": "Name",
     "create_slug_label": "Project slug",
     "create_persona_label": "Persona summary",
-    "create_slug_hint": "Used for IDs and to auto-suggest tools. Kebab-case (traincurve, ev-trading-labs).",
+    "create_slug_hint": "Used for IDs and to auto-suggest tools. Kebab-case (example-app, example-team).",
     "create_persona_hint": "\"Experienced growth operator. Speaks trader-speak. Knows MQL5 + TradingView.\"",
     "create_validation_required": "All three fields are required.",
     "create_tools_label": "Tools (auto-suggested for this project)",

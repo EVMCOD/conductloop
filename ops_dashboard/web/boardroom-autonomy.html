@@ -135,7 +135,7 @@
         const cat = (toolsByName[n] || {}).category || 'custom';
         (byCat[cat] ||= []).push(n);
       });
-      const cats = ['base','ev-trading-labs','analytics','marketing','support','engineering','finance','holdco','rentcla','opencross','traincurve','claw-studio','custom'];
+      const cats = ['base','community','analytics','marketing','support','engineering','finance','holdco','custom'];
       const seen = new Set();
       const el = $('tools'); el.innerHTML = '';
       cats.forEach(cat => {

@@ -29,7 +29,7 @@ class SentryIssue:
     project_id: int
     sentry_project_slug: str
     sentry_project_id: str
-    project_key: str          # 'beibo', 'rentcla', etc. (mapped)
+    project_key: str          # 'initech', 'acme', etc. (mapped)
     issue_id: str
     title: str
     culprit: str

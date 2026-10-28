@@ -105,7 +105,7 @@ def index_path(path: Path) -> dict:
             "tags": tags,
             "wikilinks": wikilinks[:50],
             "frontmatter_keys": list(frontmatter.keys()) if frontmatter else [],
-            # The values too: a note that says "project: deepwick" in its
+            # The values too: a note that says "project: globex" in its
             # frontmatter is telling us which project it belongs to, and
             # that is the strongest signal there is (2026-10-23).
             "frontmatter": {k: v for k, v in (frontmatter or {}).items()},

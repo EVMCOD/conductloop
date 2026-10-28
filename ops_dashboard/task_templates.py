@@ -67,7 +67,7 @@ DEFAULT_TEMPLATES: dict[str, dict] = {
         "icon": "✨",
         "description": "Bootstrap a new personal project from scratch.",
         "items": [
-            {"title": "Create repo + git init", "description": "On GitHub under EVMCOD org"},
+            {"title": "Create repo + git init", "description": "On GitHub under your organization or account"},
             {"title": "Pick stack", "description": "Python/FastAPI or Next.js? Default to existing patterns."},
             {"title": "Add to projects registry", "description": "ops_dashboard/projects.py + playbook/"},
             {"title": "Set up auth", "description": "Better-Auth or NextAuth, email + Google OAuth"},
