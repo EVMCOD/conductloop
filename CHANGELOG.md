@@ -4,6 +4,15 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- **Content Security Policy for the desktop app.** The Tauri window loads the UI
+  from the local server, so the server's header is the policy that applies to
+  it; it now restricts everything to the app itself (`default-src 'self'`, no
+  remote origins, no `eval`, no frames) plus Tauri's IPC. `'unsafe-inline'`
+  stays only for scripts and styles because the older pages still contain inline
+  code (a test now stops it from growing). The loading page gets a strict policy
+  in `tauri.conf.json` (it was `null`). Images from other sites inside notes no
+  longer load. See `docs/CSP.md`.
+
 - Contributor tooling: `scripts/verify.sh` (also `make verify`) runs the same checks as CI locally, with `--fast`, `--offline` and `--strict` options and an optional pre-push hook (`scripts/install-hooks.sh`). The mypy typed-module list now lives in `scripts/mypy-ratchet.txt`, shared by CI and the script.
 
 ## 2026-10-28 — Leftover billing tables and Stripe integrations removed
