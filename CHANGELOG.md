@@ -22,6 +22,11 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
   in `tauri.conf.json` (it was `null`). Images from other sites inside notes no
   longer load. See `docs/CSP.md`.
 
+- **Pick your folders instead of typing them.** In the desktop app, the
+  folder fields of the welcome page have a "Choose…" button that opens the
+  macOS folder picker. It only fills the field; nothing is saved until you
+  click Save. In a browser there is no button and the path is typed as before.
+
 - **A first-run welcome page, and a notes folder you can choose.** On a fresh
   install the app now opens a welcome page that asks for two things, both
   optional: the folder with your notes (it reads it, never writes into it) and

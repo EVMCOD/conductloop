@@ -23,3 +23,6 @@ button.ghost { background:transparent; border:1px solid var(--cl-border); color:
 .error { font-size:13px; margin:8px 0; white-space:pre-wrap; }
 .actions { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:8px; }
 a, .link { color:var(--cl-accent-ink); font-size:13px; text-decoration:none; }
+.picker { display:flex; gap:8px; align-items:center; }
+.picker input { flex:1; }
+.picker button { flex:none; }

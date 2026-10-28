@@ -132,6 +132,21 @@ def test_browser_ui_capability_is_remote_only_and_minimal():
     assert perms and all(p.startswith("allow-browser-") for p in perms), perms
 
 
+def test_folder_picker_capability_is_remote_only_and_minimal():
+    cap = _cap("folder-picker")
+    assert cap["webviews"] == ["main"]
+    assert cap.get("local") is False
+    assert cap["remote"]["urls"] == ["http://localhost:7777/*"]
+    assert _perm_ids(cap) == {"allow-pick-folder"}
+
+
+def test_the_dialog_plugin_commands_are_granted_to_nobody():
+    # pick_folder uses the plugin from Rust; its own commands (open/save/message
+    # with arbitrary paths and text) must stay out of every webview's reach.
+    for p in CAPS:
+        assert not any(x.startswith("dialog:") for x in _perm_ids(_load(p))), p.name
+
+
 def test_browser_commands_not_granted_to_local_pages():
     for p in CAPS:
         c = _load(p)
