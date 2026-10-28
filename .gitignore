@@ -124,3 +124,6 @@ releases/
 # Virtualenvs, also when .venv is a symlink (".venv/" only matches directories).
 .venv
 venv
+
+# Output of `python -m ops_dashboard.evals run --report evals-report.json` (CI and scripts/verify.sh)
+evals-report.json

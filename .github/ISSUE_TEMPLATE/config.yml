@@ -1,0 +1,10 @@
+# Blank issues are off so every report has the information needed to act on it.
+# Pick the template that fits, or use the links below.
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/EVMCOD/conductloop/security/advisories/new
+    about: Never open a public issue for a vulnerability. Use private vulnerability reporting (see SECURITY.md).
+  - name: Download the macOS app / website
+    url: https://conductloop.com
+    about: Installation instructions, downloads and general information about ConductLoop.
