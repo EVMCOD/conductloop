@@ -349,7 +349,7 @@ dependencies = [
 
 [[package]]
 name = "conductloop-desktop"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "conductloop-url-policy",
  "objc2-app-kit",

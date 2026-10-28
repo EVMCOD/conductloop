@@ -4,6 +4,14 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+## 1.2.1 — 2026-10-29 — Backups, a folder picker, and an app that starts
+
+The first release since 1.2.0 (2026-07-23), so it also carries every dated
+section below down to the updater key fix. **If you are on 1.2.0 or earlier,
+install this one from the DMG**: those builds embed an updater key that does
+not match the releases and can never update themselves (see "Updater signing
+key fixed" below). From 1.2.1 on, updates install from the app.
+
 - **Fixed: the desktop app never got past "Connecting to local server…".** The
   window waits for its own server by looking for a per-launch id in
   `/api/health`, but the server only echoed the first 16 characters of it. The
