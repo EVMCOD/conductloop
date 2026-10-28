@@ -1,7 +1,7 @@
 fn main() {
     // `macos-proxy` makes wry call nw_proxy_config_create_* (Network.framework,
-    // macOS 14+). The app's minimum stays 10.15 (design B4): weak-link the
-    // framework so the binary still loads on older systems, where the browser
+    // macOS 14+). The app's minimum is macOS 13.0 (design B4): weak-link the
+    // framework so the binary still loads on macOS 13, where the browser
     // is disabled at runtime (browser.rs `os_supported`) and those symbols are
     // never called.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {

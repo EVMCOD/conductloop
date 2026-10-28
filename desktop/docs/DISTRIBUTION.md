@@ -2,6 +2,17 @@
 
 How users get the ConductLoop macOS app and how it auto-updates.
 
+## Requirements
+
+- **macOS 13 (Ventura) or later** (`minimumSystemVersion` `13.0` in
+  `desktop/src-tauri/tauri.conf.json`), Apple Silicon.
+- The in-app browser (agent browser tabs) needs **macOS 14 (Sonoma) or later**;
+  on macOS 13 the app launches and works, and the browser is disabled at
+  runtime. The Network.framework symbols it needs are weak-linked, and
+  `release-desktop.sh` aborts the release if they are strong.
+- `tests/test_macos_minimum.py` keeps these numbers identical in
+  `tauri.conf.json`, the READMEs, this file and the release-notes template.
+
 ## Channels
 
 ### 1. Direct download (primary)
@@ -11,13 +22,14 @@ The website `https://conductloop.com/download` links to the `latest/download`
 asset URL.
 
 ```
-https://github.com/EVMCOD/conductloop-releases/releases/download/v1.0.0/ConductLoop-1.0.0.dmg
+https://github.com/EVMCOD/conductloop-releases/releases/download/v<VERSION>/ConductLoop-<VERSION>.dmg
+https://github.com/EVMCOD/conductloop-releases/releases/latest/download/ConductLoop-macos-aarch64.dmg
 ```
 
 **Why GitHub Releases (not R2 / not S3)?**
 - Free, zero ops
 - CDN-backed, fast everywhere
-- Already in use for `~/conductloop` and other projects
+- Releases live in their own repo (`conductloop-releases`), so this source repo stays free of binaries
 
 ### 2. Auto-update (built-in)
 
@@ -32,7 +44,8 @@ If a newer version is published, the user sees a banner in the settings page
 explicit user action (`install_update` Tauri command). We never yank a
 running session without consent.
 
-**Signing key**: `~/.conductloop-keys/conductloop.key` (ed25519, no password).
+**Signing key**: kept by the maintainer outside this repository
+(`~/.conductloop-keys/conductloop.key`, ed25519, no password).
 The **public** key is baked into `tauri.conf.json`. Loss of the private key
 = all installed apps stop receiving updates permanently.
 
@@ -63,8 +76,13 @@ without a manual reinstall.
 A single script does the full release:
 
 ```bash
-./scripts/release-desktop.sh 1.0.1
+./scripts/release-desktop.sh <VERSION>      # e.g. 1.2.1
 ```
+
+It needs your own Apple Developer ID, App Store Connect API key and updater
+key (copy `scripts/release.local.env.example` to `scripts/release.local.env`);
+none of them is in this repository, and it is run by hand on a Mac — CI never
+signs or publishes.
 
 Steps (see script for details):
 
@@ -92,18 +110,18 @@ Steps (see script for details):
 - Tauri + Python sidecar pattern (HTTP server on localhost:7777) doesn't
   survive the App Sandbox without major refactor (XPC service or app group)
 - 15-30% commission without distribution benefit for a local-first tool
-- iOS app handles the App Store channel; Mac uses direct download
 - Industry standard for local-first / dev-tool apps (Cursor, Raycast, Linear)
 
 ## Files & artifacts
 
 | File | Purpose |
 |------|---------|
-| `desktop/src-tauri/Cargo.toml` | Tauri app + plugins (shell, updater) |
+| `desktop/src-tauri/Cargo.toml` | Tauri app + plugins (shell, updater); `build.rs` weak-links Network.framework and restricts app commands |
 | `desktop/src-tauri/tauri.conf.json` | Bundle config, updater endpoints, pubkey |
 | `desktop/src-tauri/capabilities/default.json` | Sidecar + updater permissions |
-| `desktop/src-tauri/src/lib.rs` | Sidecar spawn + update Tauri commands |
-| `desktop/binaries/conductloop-server-aarch64-apple-darwin` | PyInstaller sidecar |
+| `desktop/src-tauri/src/lib.rs` | Sidecar spawn, menus + update Tauri commands (`browser.rs`: in-app browser) |
+| `desktop/UPDATER_KEY_ID` | Pinned id of the updater key (checked in CI and by the release script) |
+| `desktop/src-tauri/binaries/conductloop-server-<triple>` | PyInstaller sidecar (built by `desktop/build-app.sh` / `release-desktop.sh`; not committed) |
 | `~/.conductloop-keys/conductloop.key` | Updater signing key (PRIVATE) |
 | `~/.conductloop-keys/conductloop.key.pub` | Updater signing key (PUBLIC) |
 | your `AuthKey_XXXX.p8` (path in `scripts/release.local.env`) | Notarization API key |

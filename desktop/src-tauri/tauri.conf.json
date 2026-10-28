@@ -44,7 +44,7 @@
     "longDescription": "ConductLoop — index, search, and connect everything across your Obsidian vault, code repos, memory files, and live URLs. Local-first, no cloud, no telemetry.",
     "macOS": {
       "entitlements": "entitlements.plist",
-      "minimumSystemVersion": "10.15"
+      "minimumSystemVersion": "13.0"
     }
   },
   "plugins": {

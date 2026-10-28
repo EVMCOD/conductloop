@@ -71,7 +71,7 @@ Standard 5-field cron. Supports `*`, `N`, `N-M`, `N,M`, `*/N`, day-of-week
 
 ## Trigger flow
 
-1. Scheduler tick (every 30s, configurable via `--scheduler-interval`).
+1. Scheduler tick (every 30 s; `--scheduler-interval` on `ops serve serve`).
 2. For each enabled trigger with `kind='cron'`, check if `spec` matches current time.
 3. If match and not fired this minute, call `scheduler._wake_agent()`.
 4. Wake logs to `agent_logs` (action='wake'), resolves provider from 
@@ -81,16 +81,48 @@ Standard 5-field cron. Supports `*`, `N`, `N-M`, `N,M`, `*/N`, day-of-week
 
 ## Running
 
+The scheduler is a thread of the server process, and **where it runs depends on
+how you start the server**:
+
+| How you start it | Scheduler |
+|---|---|
+| The desktop app (the bundled sidecar, `desktop/server_entry.py`) | yes, every 30 s (not in demo mode) |
+| `python -m ops_dashboard serve serve` (the `serve` subcommand of `serve`) | yes, by default |
+| `ops serve` / `python -m ops_dashboard serve` / `make serve` | **no**: only `--host` and `--port` exist, so agents only run when woken manually |
+
+`ops` is the console script installed by `pip install -e .`; it is the same as
+`python -m ops_dashboard`. The double `serve` is not a typo: `serve` is a
+command group whose default action has no scheduler options, and its `serve`
+subcommand adds them.
+
 ```bash
-# Start server with scheduler (default interval 30s)
+# Server with the scheduler (default tick: 30 s)
 ops serve serve --port 7777
 
-# Custom interval
+# Custom tick
 ops serve serve --port 7777 --scheduler-interval 10
 
-# No scheduler (manual wake only)
+# Explicitly without scheduler (manual wake only; same as plain `ops serve`)
 ops serve serve --port 7777 --no-scheduler
 ```
+
+In demo mode (`CONDUCTLOOP_DEMO=1`, see [docs/FIRST-5-MINUTES.md](docs/FIRST-5-MINUTES.md))
+the scheduler is never started.
+
+## System jobs
+
+Besides agent triggers, every scheduler tick also runs the app's own jobs. Each
+has a cron expression that can be overridden with an environment variable
+(`scheduler._system_jobs`):
+
+| Job | Default (local time) | Variable |
+|---|---|---|
+| `learning_maintenance` | `15 4 * * *` | `LEARNING_MAINTENANCE_CRON` |
+| `briefing` | `0 8 * * *` | `BRIEFING_CRON` |
+| `obsidian_export` | `0 3 * * *` | `OBSIDIAN_EXPORT_CRON` |
+| `analytics_poll` | `30 7 * * *` | `ANALYTICS_POLL_CRON` |
+| `library_index` | `17 * * * *` | `LIBRARY_INDEX_CRON` |
+| `daily_note` | `40 8 * * *` | `DAILY_NOTE_CRON` |
 
 ## Adding a trigger from CLI
 
@@ -101,6 +133,18 @@ curl -X POST http://localhost:7777/api/agents/100/triggers \
   -H 'Content-Type: application/json' \
   -d '{"kind":"cron","spec":"*/15 * * * *","prompt":"check example.com status"}'
 ```
+
+## Agent API
+
+| Endpoint | What |
+|---|---|
+| `POST /api/agents/create` | Create an agent |
+| `POST /api/agents/run` | Run an agent once: `{"id", "prompt"?}` (local only) |
+| `GET /api/agents/activity` (+ `/stream`, SSE) | Recent activity of all agents |
+| `GET`/`POST /api/agents/<id>/memory` | List / add memories (per-item actions under `/memory/<mem_id>`) |
+| `GET`/`POST /api/agents/<id>/triggers` | List / add triggers (per-item actions under `/triggers/<trigger_id>`) |
+| `GET /api/agents/<id>/logs`, `/stream`, `/tools` | The agent's log, its live stream and its tools |
+| `POST /api/agents/<id>/wake` | Wake it now |
 
 ## Memory injection
 
