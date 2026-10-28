@@ -3,7 +3,7 @@
 * Nothing may run on a self-hosted runner. Anyone can open a pull request
   against a public repo, and a self-hosted runner would execute their code on
   a private machine. Runner labels must be literal GitHub-hosted ones: no
-  ``self-hosted``, no ``ev-server``, no ``vars.RUNS_ON`` (a repository variable
+  ``self-hosted``, no custom label, no ``vars.RUNS_ON`` (a repository variable
   can be changed to point a job at any machine without a code review).
 * Every third-party action is pinned by commit SHA, with the version it
   corresponds to in a comment, so a moved tag cannot change what CI runs.
@@ -18,7 +18,7 @@ import yaml
 
 WORKFLOWS = sorted((Path(__file__).resolve().parent.parent / ".github" / "workflows").glob("*.y*ml"))
 HOSTED = re.compile(r"^(ubuntu|macos|windows)-[a-z0-9.\-]+$")
-FORBIDDEN = ("self-hosted", "ev-server", "vars.runs_on", "runs_on")
+FORBIDDEN = ("self-hosted", "vars.runs_on", "runs_on")
 USES = re.compile(r"^\s*-?\s*uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
 PINNED = re.compile(r"^[\w.\-]+/[\w.\-]+(/[\w.\-/]+)?@[0-9a-f]{40}$")
 

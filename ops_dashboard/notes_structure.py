@@ -98,8 +98,8 @@ def signals_for(row: Any) -> list[tuple[str, float, str]]:
                               or value == proj.key.lower()):
                     best = max(best or (0.0, ""), (1.0, f"frontmatter says {original}"))
             # 1b. The registry itself resolves the name it was given: the
-            # frontmatter says "polymarket-bot" and the project is called
-            # "polymarketea", and the registry knows they are the same.
+            # frontmatter says "acme-bot" and the project is called
+            # "acme", and the registry knows they are the same.
             for field in EXPLICIT_FIELDS:
                 value = str(front.get(field) or "").strip()
                 if not value:
