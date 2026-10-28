@@ -5,8 +5,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Boardroom — ConductLoop</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="/theme.css" />
-  <link rel="stylesheet" href="/i18n/boardroom.css" />
   <style>
     /* Legacy tokens are aliases of the shared design system in /theme.css. */
     :root { --bg: var(--cl-bg); --card: var(--cl-bg-soft); --ink: var(--cl-ink); --muted: var(--cl-ink-muted); --brand: var(--cl-accent); --border: var(--cl-border); --ok: var(--cl-ok); --warn: var(--cl-warn); --bad: var(--cl-danger); }
@@ -161,7 +161,12 @@
         }
       }
     });
-    function formatAgo      const h = Math.floor(m / 60);
+    function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function formatAgo(ms) {
+      const m = Math.floor(Math.max(0, Date.now() - ms) / 60000);
+      if (m < 1) return 'just now';
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
       if (h < 24) return `${h}h ago`;
       const d = Math.floor(h / 24);
       return `${d}d ago`;
