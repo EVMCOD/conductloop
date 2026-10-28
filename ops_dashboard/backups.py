@@ -88,8 +88,9 @@ def _check(path: Path) -> int:
         conn.close()
 
 
-def backup_now(reason: str = "manual") -> Path:
-    """Take a backup of the DB. Returns the path of the new backup."""
+def backup_now(reason: str = "manual", *, keep: Path | None = None) -> Path:
+    """Take a backup of the DB. Returns the path of the new backup.
+    ``keep`` is never pruned (the backup a restore is about to read)."""
     src = db_path()
     if not src.exists():
         raise FileNotFoundError(f"DB not found: {src}")
@@ -112,16 +113,19 @@ def backup_now(reason: str = "manual") -> Path:
             os.replace(partial, out)
         finally:
             partial.unlink(missing_ok=True)
-        _prune(out_dir)
+        _prune(out_dir, keep=keep)
     log.info("backup saved: %s", out.name)
     return out
 
 
-def _prune(out_dir: Path | None = None) -> None:
+def _prune(out_dir: Path | None = None, *, keep: Path | None = None) -> None:
     out_dir = out_dir or backup_dir()
     if not out_dir.exists():
         return
     files = sorted(out_dir.glob("ops-*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if keep is not None:
+        files = [f for f in files if f.resolve() != keep.resolve()]
+        files.insert(0, keep)
     for old in files[MAX_KEEP:]:
         try:
             old.unlink()
@@ -173,7 +177,7 @@ def restore(name: str) -> dict:
         if version > latest:
             raise BackupError(f"{name} was made by a newer version of ConductLoop "
                               f"(schema {version}, this one knows {latest}): update the app first")
-        safety = backup_now("pre-restore")
+        safety = backup_now("pre-restore", keep=path)
         source = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
         target = sqlite3.connect(str(db_path()), timeout=30)
         try:

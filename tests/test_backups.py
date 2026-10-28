@@ -106,6 +106,25 @@ def test_restore_brings_the_data_back_and_keeps_the_state_it_replaced(live):
     conn.close()
 
 
+def test_restoring_the_oldest_backup_of_a_full_folder_works(live, monkeypatch):
+    # The pre-restore copy prunes the folder: it must not prune the backup
+    # that is about to be restored.
+    monkeypatch.setattr(backups, "MAX_KEEP", 3)
+    _add_doc(live, "oldest")
+    oldest = backups.backup_now("manual")
+    _add_doc(live, "newer")
+    for _ in range(2):
+        backups.backup_now("manual")
+    assert len(backups.list_backups()) == 3
+
+    backups.restore(oldest.name)
+
+    assert _titles(live) == {"oldest"}
+    names = [b["name"] for b in backups.list_backups()]
+    assert oldest.name in names and len(names) == 3
+    assert any("pre-restore" in n for n in names)
+
+
 def test_restore_upgrades_an_older_backup(live):
     old = backups.backup_dir() / "ops-20260101-000000-manual.db"
     _copy(live, old)
