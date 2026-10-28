@@ -809,3 +809,19 @@ def _mig_25_eval_runs(conn: sqlite3.Connection) -> None:
 
 
 MIGRATIONS.append((25, "eval_runs + eval_results: local live-eval results (L2)", _mig_25_eval_runs))
+
+
+# ── 26: retire the leftover billing tables (the license/billing code left in
+# the previous change). ConductLoop is free; nothing reads or writes these three
+# tables any more. DESTRUCTIVE for local data: every row in them is deleted.
+# Idempotent (DROP TABLE IF EXISTS; GAP_FILL_FROM) and it touches no other table
+# (the indexes of the three tables are dropped together with them). The number
+# is 26 because 25 is taken by the live-eval tables; the runner applies versions
+# that land out of order, so either may ship first.
+def _mig_26_drop_billing_tables(conn: sqlite3.Connection) -> None:
+    for table in ("entitlements", "founders", "payment_events"):
+        conn.execute(f"DROP TABLE IF EXISTS {table}")
+
+
+MIGRATIONS.append((26, "drop entitlements, founders, payment_events (billing retired; deletes local rows)",
+                   _mig_26_drop_billing_tables))

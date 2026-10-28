@@ -1,4 +1,4 @@
-"""Users, auth, sessions, device tokens, LLM usage metering, and entitlements.
+"""Users, auth, sessions, device tokens, and LLM usage metering.
 
 Split out of db.py (2026-07-20). Re-exported from ``ops_dashboard.db`` so
 ``db.<name>`` callers keep working. Uses the shared transaction context manager
@@ -207,72 +207,3 @@ def usage_summary(days: int = 30) -> dict:
         "prompt_tokens": row["pt"], "completion_tokens": row["ct"], "total_tokens": row["tt"],
         "by_provider": [dict(b) for b in by],
     }
-
-
-# ----- Entitlements (lifetime + Stripe-ready) -----
-
-def get_entitlement(user_id: int) -> dict | None:
-    with _dbmod.db() as conn:
-        row = conn.execute("SELECT * FROM entitlements WHERE user_id = ?", (user_id,)).fetchone()
-        return dict(row) if row else None
-
-
-def grant_entitlement(*, user_id: int, plan: str = "lifetime",
-                      source: str = "admin_grant",
-                      stripe_customer_id: str | None = None,
-                      stripe_subscription_id: str | None = None,
-                      stripe_payment_intent_id: str | None = None,
-                      amount_cents: int | None = None,
-                      currency: str = "USD",
-                      expires_at: int | None = None) -> int:
-    """Grant a plan to a user. Lifetime plan has expires_at=NULL (active forever).
-    Returns the entitlement id."""
-    now = int(time.time())
-    activated = now
-    with _dbmod.db() as conn:
-        # Upsert: one entitlement per user
-        existing = conn.execute("SELECT id FROM entitlements WHERE user_id = ?", (user_id,)).fetchone()
-        if existing:
-            conn.execute(
-                """UPDATE entitlements SET plan=?, source=?, stripe_customer_id=?,
-                   stripe_subscription_id=?, stripe_payment_intent_id=?,
-                   amount_cents=?, currency=?, activated_at=COALESCE(activated_at, ?),
-                   expires_at=?, refunded_at=NULL, updated_at=?
-                   WHERE user_id=?""",
-                (plan, source, stripe_customer_id, stripe_subscription_id,
-                 stripe_payment_intent_id, amount_cents, currency, activated,
-                 expires_at, now, user_id),
-            )
-            return int(existing["id"])
-        cur = conn.execute(
-            """INSERT INTO entitlements
-               (user_id, plan, source, stripe_customer_id, stripe_subscription_id,
-                stripe_payment_intent_id, amount_cents, currency, activated_at,
-                expires_at, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (user_id, plan, source, stripe_customer_id, stripe_subscription_id,
-             stripe_payment_intent_id, amount_cents, currency, activated,
-             expires_at, now, now),
-        )
-        return int(cur.lastrowid or 0)
-
-
-def revoke_entitlement(user_id: int, reason: str = "refund") -> bool:
-    now = int(time.time())
-    with _dbmod.db() as conn:
-        cur = conn.execute(
-            """UPDATE entitlements SET refunded_at=?, source=?, updated_at=?
-               WHERE user_id=? AND refunded_at IS NULL""",
-            (now, f"revoked:{reason}", now, user_id),
-        )
-        return cur.rowcount > 0
-
-
-def list_entitlements(*, plan: str | None = None, since: int | None = None) -> list[dict]:
-    sql = "SELECT e.*, u.email, u.name FROM entitlements e JOIN users u ON u.id = e.user_id WHERE 1=1"
-    params: list = []
-    if plan: sql += " AND e.plan = ?"; params.append(plan)
-    if since: sql += " AND e.created_at >= ?"; params.append(since)
-    sql += " ORDER BY e.created_at DESC"
-    with _dbmod.db() as conn:
-        return [dict(r) for r in conn.execute(sql, params).fetchall()]

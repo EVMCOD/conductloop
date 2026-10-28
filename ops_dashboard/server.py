@@ -3486,8 +3486,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
         user = db.create_user(email=email, password=password, name=name, locale=locale, email_verified=False)
         if not user:
             self._send(500, json.dumps({"error": "could not create user"}).encode(), "application/json"); return
-        # Grant free entitlement by default
-        db.grant_entitlement(user_id=user["id"], plan="free", source="signup")
         # Issue session
         token = db.create_session(user["id"], ip=self.client_address[0] if self.client_address else None,
                                   user_agent=(self.headers.get("User-Agent") or "")[:200])
@@ -3545,16 +3543,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self._send(200, b'{"ok":true}', "application/json")
 
     def _auth_me(self) -> None:
-        """GET /api/auth/me — current user + entitlement (or null if not logged in)."""
+        """GET /api/auth/me — current user (or null if not logged in)."""
         if self.command != "GET":
             self._send(405, b'{"error":"method not allowed"}', "application/json"); return
         user = self._current_user()
         if not user:
-            self._send(200, json.dumps({"user": None, "entitlement": None}).encode(), "application/json"); return
-        ent = db.get_entitlement(user["id"])
+            self._send(200, json.dumps({"user": None}).encode(), "application/json"); return
         body = json.dumps({
             "user": {"id": user["id"], "email": user["email"], "name": user["name"], "locale": user.get("locale") or "en"},
-            "entitlement": ent,
         }, default=str).encode()
         self._send(200, body, "application/json")
 

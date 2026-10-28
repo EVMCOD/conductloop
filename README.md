@@ -115,7 +115,6 @@ ops_dashboard/          Python package: server.py (HTTP API + UI), cli.py (typer
                         indexers/ (vault, memory, repos, skills, urls, …), web/ (vanilla HTML/JS UI)
 desktop/                Tauri v2 macOS app (Rust shell + PyInstaller sidecar build)
 desktop-demo/           Tauri demo build
-cloudflare-worker/      optional status-page Worker (not the license service)
 scripts/, bin/          launchd jobs, release and maintenance scripts
 tests/                  pytest suite
 ```
