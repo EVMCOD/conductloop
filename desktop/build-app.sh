@@ -4,14 +4,14 @@
 #   2. Copy it into src-tauri/binaries/ with the target-triple name Tauri wants.
 #   3. Build the Tauri app (.app + .dmg).
 #
-# Prereqs: the ops-dashboard .venv with pyinstaller, Rust toolchain, and
+# Prereqs: the repo's .venv with pyinstaller, Rust toolchain, and
 # `npm install` already run in desktop/.
 #
 # Code signing + notarization (needed for distribution outside your Mac) is a
-# separate step — see the NOTARIZE section at the bottom.
+# separate step — see scripts/release-desktop.sh.
 set -eo pipefail
 
-REPO="$HOME/ops-dashboard"
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
 DESKTOP="$REPO/desktop"
 # Detect target triple. Fallback to a hard-coded aarch64-apple-darwin if
 # rustc isn't in PATH (e.g. when this script runs from a non-interactive
@@ -36,18 +36,5 @@ echo "✓ Done. Artifacts in:"
 echo "   $DESKTOP/src-tauri/target/release/bundle/dmg/*.dmg"
 echo "   $DESKTOP/src-tauri/target/release/bundle/macos/*.app"
 
-cat <<'NOTARIZE'
-
-── NOTARIZE + PUBLISH (manual, needs your Apple + R2 creds) ──────────────────
-1. Sign (Developer ID Application cert must be in the keychain):
-     codesign --deep --force --options runtime \
-       --sign "Developer ID Application: <YOUR NAME> (<TEAMID>)" \
-       src-tauri/target/release/bundle/macos/ConductLoop.app
-2. Notarize (App Store Connect API key or app-specific password):
-     xcrun notarytool submit <ConductLoop.dmg> \
-       --apple-id <you@icloud.com> --team-id <TEAMID> --password <app-specific-pw> --wait
-     xcrun stapler staple <ConductLoop.dmg>
-3. Upload to R2 and point the site at it:
-     npx wrangler r2 object put conductloop-downloads/ConductLoop.dmg --file <ConductLoop.dmg>
-     # then set NEXT_PUBLIC_DOWNLOAD_URL to the public R2 / custom-domain URL and redeploy conductloop.com
-NOTARIZE
+echo ""
+echo "Signing, notarizing and publishing: scripts/release-desktop.sh (see desktop/docs/DISTRIBUTION.md)."

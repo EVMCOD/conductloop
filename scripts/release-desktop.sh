@@ -250,7 +250,7 @@ if ! gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
 4. That's it — ConductLoop is free
 
 **Requirements:**
-- macOS 13 (Ventura) or later
+- macOS 13 (Ventura) or later (the built-in browser needs macOS 14 Sonoma or later)
 - Apple Silicon (M1/M2/M3/M4)" \
     "ConductLoop-${VERSION}.dmg" \
     "ConductLoop-macos-aarch64.dmg" \

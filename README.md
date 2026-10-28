@@ -37,14 +37,14 @@ The Brain talks directly to the provider you configure; nothing is proxied throu
 | `ollama` | a local Ollama on `localhost:11434` (`OLLAMA_MODEL`, `OLLAMA_BASE_URL` optional) |
 | `mock` | nothing — offline/testing |
 
-`BRAIN_PROVIDER=auto` (default) picks the first available provider; `BRAIN_MODEL` overrides the model. Keys can also be set from the UI, which stores them in your local `config.json` (`~/ops-dashboard/config.json`, or `$OPS_CONFIG_PATH`). That file is gitignored — never commit it.
+`BRAIN_PROVIDER=auto` (default) picks the first available provider; `BRAIN_MODEL` overrides the model. Keys can also be set from the UI (`/credentials`), which stores them in the macOS keychain or, where there is none, in an encrypted file protected by a passphrase — never in plain text. Other settings live in your local `config.json` (`$OPS_CONFIG_PATH`, or in the data directory); it is gitignored — never commit it.
 
 ---
 
 ## Install
 
 ### macOS app
-Download the latest `.dmg` from [conductloop-releases](https://github.com/EVMCOD/conductloop-releases/releases/latest), drag ConductLoop to `/Applications` and open it. The app is a Tauri v2 shell that starts the bundled Python server as a sidecar and shows it in a native WebView.
+Download the latest `.dmg` from [conductloop-releases](https://github.com/EVMCOD/conductloop-releases/releases/latest), drag ConductLoop to `/Applications` and open it. Requires **macOS 13 (Ventura) or later** on Apple Silicon; the built-in browser needs **macOS 14 (Sonoma) or later** (on macOS 13 everything else works). The app is a Tauri v2 shell that starts the bundled Python server as a sidecar and shows it in a native WebView.
 
 ### From source (macOS / Linux)
 Requires Python **3.13+** (CI runs 3.14).
@@ -65,14 +65,14 @@ make index            # index all configured sources
 
 Dependency sets:
 - `requirements-core.txt` — lean runtime (server, CLI, auth, search). No ML.
-- `requirements.txt` — core + Anthropic/OpenAI SDKs + `sentence-transformers` for local semantic search (pulls PyTorch, ~2 GB).
+- `requirements.txt` — core + Anthropic/OpenAI SDKs + local semantic search: `fastembed` (ONNX, no PyTorch; what the app uses) and `sentence-transformers` (pulls PyTorch, ~2 GB).
 - `requirements-optional.txt` — Whisper voice notes, Google Analytics, PyJWT, Sentry, MCP server.
 - `requirements-dev.txt` — core + pytest, ruff, mypy, pip-audit, pre-commit.
 
 `pip install -e .` also installs the `ops` CLI entry point.
 
 ### Configuration
-A fresh install is empty: no projects, teams or URLs. Point it at your content with environment variables (see `.env.example`), e.g. `OPS_VAULT_ROOT`, `OPS_WORKSPACE`, `OPS_SKILLS_DIR`, `OPS_REPOS`, `OPS_PROJECTS_FILE`, `OPS_LIVE_URLS_FILE`. Set `CONDUCTLOOP_DEMO=1` to load fictional demo data instead.
+A fresh install is empty: no projects, teams or URLs. Point it at your content with environment variables (see `.env.example`), e.g. `OPS_VAULT_ROOT`, `OPS_WORKSPACE`, `OPS_SKILLS_DIR`, `OPS_REPOS`, `OPS_PROJECTS_FILE`, `OPS_LIVE_URLS_FILE`. Set `CONDUCTLOOP_DEMO=1` (with a throwaway `CONDUCTLOOP_DB_PATH` and `OPS_DATA_DIR`) to load fictional demo data instead; see [`docs/FIRST-5-MINUTES.md`](docs/FIRST-5-MINUTES.md).
 
 Optional notification webhooks (Slack / Discord / Telegram) are described in `config.example.json`. Remote access from a phone is documented in [`docs/REMOTE.md`](docs/REMOTE.md) (Tailscale; nothing is exposed publicly by default).
 

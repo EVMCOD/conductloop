@@ -17,7 +17,7 @@ tauri-build = { version = "~2.7", features = [] }
 [dependencies]
 # `unstable`: multiwebview (Window::add_child) for the in-app browser tabs.
 # `macos-proxy`: WebviewBuilder::proxy_url on macOS (14+; see build.rs for the
-# weak link that keeps the app launching on 10.15-13).
+# weak link that keeps the app launching on macOS 13).
 tauri = { version = "~2.12", features = ["unstable", "macos-proxy"] }
 conductloop-url-policy = { path = "../url-policy" }
 tauri-plugin-shell = "2"

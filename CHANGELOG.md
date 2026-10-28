@@ -2,6 +2,69 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 2026-10-25 — The vault no longer hangs the app
+
+**What changed** (PRs #30, #31)
+  - A note folder that stops answering (an unmounted drive, a stalled sync
+    folder) can no longer freeze the app: vault reads have a deadline, and the
+    API answers `503 vault_unresponsive` instead of hanging (deadline 240 s,
+    `CONDUCTLOOP_VAULT_TIMEOUT`).
+  - A new list of "things you linked and never wrote": `[[links]]` in your
+    notes that point to a note that does not exist.
+
+## 2026-10-24 — Offline search, credentials screen and the vault of pages
+
+**What changed** (PRs #15–#29)
+  - **Offline semantic search** (#21): the desktop app embeds notes with an
+    ONNX engine (fastembed), with no network, key or credit. The app grows from
+    41 MB to 88 MB; the model downloads once, on first use, into the data
+    folder. Changing the model re-embeds everything; the configured provider wins
+    over whatever happens to be installed.
+  - **Credentials** (#25): every key of the app lives in the macOS keychain, or
+    in a passphrase-encrypted file if there is none — never in plain text, and
+    values are never shown again. `/credentials` lists them all; keys already in
+    plain text are moved with one button. The setup checklist now points there.
+  - **Servers panel** (#24): `/servers` shows, per capability (chat, image,
+    video, speech, search), which server will answer and which others could.
+  - **The map of your work** (#15–#20, #22, #23): the library draws a map of
+    your projects from your notes and writes it into the vault as pages
+    (`pages/Index.md`, `pages/<project>.md`, `pages/areas/<area>.md`). It only
+    changes when something changes, detects lines missing from your hand-written
+    index and proposes them, inserts them without touching your text, and
+    keeps an "unclassified" section and a list of forgotten notes. A **daily
+    note** gets a marked block with what happened in the vault, without
+    overwriting what you wrote. The agent's own instructions point at the map.
+  - **Where each project stands** (#26–#29): each project page shows "Where this
+    stands" (from your handoff notes) and "What remains open", plus a
+    `pages/Waiting.md` page of what is waiting for you, and a `WAITING.md` the
+    agent reads at the start.
+
+## 2026-10-23 — Any model, any media vendor, read-only note folders
+
+**What changed** (PRs #6–#14)
+  - **Providers** (#6, #7, #8, #12, #13): MiniMax defaults to `MiniMax-M3` and the
+    MiniMax Coding Plan subscription is supported; the Brain can talk to any
+    OpenAI-compatible server (`OPENAI_BASE_URL`), and one endpoint can serve both
+    chat and images. Provider errors are readable (retired model, no credit,
+    bad key) and a failing plan call no longer wastes one call per agent. No
+    `temperature` is sent to the Anthropic SDK 2.x.
+  - **Media** (#11): the media pipeline is not tied to one vendor
+    (`media.pick_provider`).
+  - **Read-only note folders** (#10): extra folders of notes
+    (`index_folders` / `memory_workspace` in `config.json`) are indexed read-only
+    and re-indexed hourly.
+  - The notes of the detected project now reach the Brain's context (#9).
+
+## 2026-10-22 — Chat with your AI team
+
+**What changed** (PRs #2–#5)
+  - New `/chat` page (#3): talk to the Brain, the lead CEO or any executive. In
+    team mode the CEO picks one to three agents, they answer in parallel in live
+    cards, and the CEO writes the final answer (N+2 model calls per turn).
+  - The desktop app has Back / Home controls on every page and a **Go** menu (#5).
+  - Fix: every Teams load added the built-in AI squad again (#4).
+  - The test suite no longer touches your real data folder (#2).
+
 ## 2026-10-21 — License, billing and Stripe removed from the app
 
 ConductLoop is free; the leftovers of the old license/billing flow are gone.
