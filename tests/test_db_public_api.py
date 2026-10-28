@@ -42,9 +42,9 @@ def test_public_api_callables_stay_callable():
             continue
         obj = getattr(_fresh, n, None)
         # callables in the baseline live in the function namespace; a handful of
-        # documented constants (DB_PATH, SCHEMA, PRICING_TIERS, regex, dicts)
+        # documented constants (DB_PATH, SCHEMA, regex, dicts)
         # are values. We only assert the *function* set stays callable.
-        if n in {"DB_PATH", "SCHEMA", "PRICING_TIERS", "FINAL_PRICE_CENTS",
+        if n in {"DB_PATH", "SCHEMA",
                  "LEVEL_ORDER", "MONTH_NAMES", "WEEKDAY_NAMES",
                  "PROJECT_PREFIX_RE", "PLAYBOOK_HEADER_RE", "PLAYBOOK_KV_RE",
                  "LIST_ITEM_RE", "SECTION_RE"}:

@@ -77,7 +77,7 @@ def test_allowed_hosts(srv):
 @pytest.mark.parametrize("host", ["localhost:{p}", "127.0.0.1:{p}", "[::1]:{p}", "LOCALHOST:{p}",
                                   "localhost:7777", "127.0.0.1:7777"])
 def test_loopback_with_own_host_works(srv, host):
-    st, js, _ = srv["call"]("GET", "/api/license/status", host.format(p=srv["port"]))
+    st, js, _ = srv["call"]("GET", "/api/auth/me", host.format(p=srv["port"]))
     assert st == 200, js
 
 
@@ -85,7 +85,7 @@ def test_loopback_with_own_host_works(srv, host):
                                   "localhost", "127.0.0.1:1", "tauri.localhost", "",
                                   "127.0.0.1.nip.io:{p}", "localhost:{p}@evil.example"])
 def test_loopback_with_foreign_host_gets_421(srv, host):
-    _invalid(srv["call"]("GET", "/api/license/status", host.format(p=srv["port"])))
+    _invalid(srv["call"]("GET", "/api/auth/me", host.format(p=srv["port"])))
 
 
 def test_rebinding_write_never_reaches_the_handler(srv):
@@ -102,7 +102,7 @@ def test_rebinding_write_never_reaches_the_handler(srv):
 def test_missing_host_is_allowed(srv):
     # HTTP/1.0 clients may omit Host; browsers never do.
     with socket.create_connection(("127.0.0.1", srv["port"]), timeout=10) as s:
-        s.sendall(b"GET /api/license/status HTTP/1.0\r\n\r\n")
+        s.sendall(b"GET /api/auth/me HTTP/1.0\r\n\r\n")
         data = b""
         while chunk := s.recv(65536):
             data += chunk
@@ -116,16 +116,13 @@ def test_remote_requests_are_unchanged(srv):
     st, _, _ = call("GET", "/api/health", "abc.trycloudflare.com", headers=remote)
     assert st == 200
     # protected endpoint: still the normal auth answer, not 421
-    st, _, _ = call("GET", "/api/license/status", "abc.trycloudflare.com", headers=remote)
+    st, _, _ = call("GET", "/api/auth/me", "abc.trycloudflare.com", headers=remote)
     assert st == 401
 
 
 def test_webhooks_through_a_tunnel_still_arrive(srv):
     call = srv["call"]
     tunnel = {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "hooks.example.com"}
-    st, _, _ = call("POST", "/api/billing/stripe-webhook", "hooks.example.com", {"id": "evt"},
-                    {**tunnel, "Stripe-Signature": "t=1,v1=bad"})
-    assert st != 421
     st, _, _ = call("POST", "/api/telegram/webhook", "hooks.example.com", {"update_id": 1}, tunnel)
     assert st != 421
 
@@ -135,9 +132,9 @@ def test_env_hosts_are_allowed(srv, monkeypatch):
     monkeypatch.setenv("OPS_ALLOWED_ORIGINS", "https://my.host:8443, http://box.local:7777/")
     monkeypatch.setenv("OPS_DASHBOARD_BASE_URL", "https://dash.example.com")
     for h in ("my.host:8443", "box.local:7777", "dash.example.com", "dash.example.com:443"):
-        st, js, _ = srv["call"]("GET", "/api/license/status", h)
+        st, js, _ = srv["call"]("GET", "/api/auth/me", h)
         assert st == 200, (h, js)
-    _invalid(srv["call"]("GET", "/api/license/status", f"evil.example:{p}"))
+    _invalid(srv["call"]("GET", "/api/auth/me", f"evil.example:{p}"))
 
 
 def test_netloc_parsing():

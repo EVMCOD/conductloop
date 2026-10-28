@@ -26,7 +26,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import db, projects
+from . import db, projects, vault_conventions
 
 log = logging.getLogger("conductloop.notes")
 
@@ -60,8 +60,8 @@ def _norm(text: str) -> str:
 def _word(needle: str) -> re.Pattern:
     """A needle as a whole word, so "ops" does not match "opsdashboard".
 
-    A hyphen is a separator, not part of a word: "rentcla-launch" is about
-    Rentcla.
+    A hyphen is a separator, not part of a word: "acme-launch" is about
+    Acme.
     """
     return re.compile(r"(?<!\w)" + re.escape(needle) + r"(?!\w)", re.IGNORECASE)
 
@@ -377,7 +377,7 @@ def unlinked_notes(*, roots: list[Path] | None = None, limit: int = 12) -> list[
     them when they open the project.
 
     (A note that merely mentions the project is not one of its notes: a
-    daily note that says "rentcla" is a daily note. What counts is the
+    daily note that says "acme" is a daily note. What counts is the
     note that lives in the project's own folder.)
     """
     roots = roots if roots is not None else _vault_roots()
@@ -568,10 +568,10 @@ def propose_index_lines(*, roots: list[Path] | None = None) -> dict[str, Any]:
         "proposals": proposals,
         "blocks": blocks,
         "unplaced": unplaced,
-        "unplaced_section": NEW_SECTION_TITLE,
+        "unplaced_section": vault_conventions.get().unplaced_section,
         "orphans": orphans,
         "ideas": ideas,
-        "ideas_section": IDEAS_SECTION_TITLE,
+        "ideas_section": vault_conventions.get().ideas_section,
         "sections": [{"title": s["title"], "group": s["group"], "notes": s["count"]}
                      for s in sections],
     }
@@ -596,15 +596,10 @@ NOT_A_THEME = {
     "changelog", "index", "moc", "home",
 }
 
-# The section the product offers for the projects that fit nowhere else.
-NEW_SECTION_TITLE = "📥 Sin clasificar"
-# The section it adds to a project page for the notes it forgot to link.
-ORPHAN_SECTION_TITLE = "📚 Documentación"
-# The section it offers for the ideas that keep coming back.
-IDEAS_SECTION_TITLE = "💡 Ideas"
-
-COUNTS_RE = re.compile(
-    r"\d+\s+proyectos\s*\(\s*\d+\s+notas activas\s*\+\s*\d+\s+ideas\s*\)")
+# The titles of the sections the product writes into your index, and the line
+# with the counts, come from ``vault_conventions`` (``unplaced_section``,
+# ``orphan_section``, ``ideas_section``, ``counts_template``). They are found
+# again by title, so the defaults stay what existing indexes already contain.
 
 
 def index_path(*, roots: list[Path] | None = None) -> Path | None:
@@ -832,8 +827,10 @@ def apply_index_lines(stems: list[str] | list[dict[str, Any]], *,
     ideas = drift["by_status"].get("idea", 0)
     total = drift["projects"]
     new_text = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
-    new_text = COUNTS_RE.sub(f"{total} proyectos ({active} notas activas + {ideas} ideas)",
-                              new_text, count=1)
+    conv = vault_conventions.get()
+    new_text = conv.counts_re().sub(
+        lambda _m: conv.counts_line(total=total, active=active, ideas=ideas),
+        new_text, count=1)
 
     out: dict[str, Any] = {
         "ok": True,
@@ -915,7 +912,7 @@ def apply_orphan_links(project: str, stems: list[str], *,
         entries.append(f"- [[{stem}]] — {note['title']}")
     if not entries:
         return {"ok": False, "error": "nothing to link"}
-    block = ["", f"## {ORPHAN_SECTION_TITLE}", ""] + entries + [""]
+    block = ["", f"## {vault_conventions.get().orphan_section}", ""] + entries + [""]
     new_text = "\n".join(lines + block) + ("\n" if text.endswith("\n") else "")
 
     out: dict[str, Any] = {

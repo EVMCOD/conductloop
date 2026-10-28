@@ -24,7 +24,7 @@ Policy
   hand-kept list kept missing some. A foreign page could never read those
   responses anyway (no CORS), so refusing them costs no legitimate use.
 * Requests **without** ``Origin`` and without ``Sec-Fetch-Site: cross-site``
-  (curl, the CLI, server-to-server webhooks such as Stripe/Telegram) are still
+  (curl, the CLI, server-to-server webhooks such as Telegram) are still
   accepted: browsers always send ``Origin`` on cross-origin POST/PUT/DELETE and
   on any same-origin non-GET, so a missing Origin means a non-browser client.
   Those keep the existing gate (loopback trusted; remote needs auth + CSRF).
@@ -59,8 +59,6 @@ WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # _route chain dispatches them for any method). Audited 2026-10-21.
 SIDE_EFFECT_GETS = frozenset({
     "/api/auth/login", "/api/auth/signup", "/api/auth/logout",
-    "/api/billing/checkout-lifetime", "/api/billing/checkout-subscription",
-    "/api/billing/cancel-subscription",
     "/api/boardroom/recap/refresh",
     "/api/brain/ask", "/api/brain/ask-tools", "/api/brain/stream", "/api/brain/briefing",
     "/api/digest", "/api/digest/ai-summary", "/api/github/sync",

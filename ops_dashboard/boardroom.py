@@ -484,7 +484,7 @@ def all_tool_catalog() -> list[dict]:
         {"name": "publish_tradingview_script",   "category": "community", "description": "Publish a TradingView indicator/pine."},
         {"name": "post_to_discord",              "category": "community", "description": "Post a message in the Discord channel."},
         {"name": "schedule_tweet",               "category": "community", "description": "Schedule a tweet for later posting."},
-        {"name": "read_analytics_source",        "category": "analytics",        "description": "Pull GA4 / Stripe / Sentry summary."},
+        {"name": "read_analytics_source",        "category": "analytics",        "description": "Pull GA4 / Sentry summary."},
         {"name": "draft_outreach_email",         "category": "marketing",       "description": "Draft an outreach email for chairman approval."},
         {"name": "publish_blog_post",            "category": "marketing",       "description": "Publish a post on the marketing site."},
         {"name": "monitor_signups",              "category": "marketing",       "description": "Watch the waitlist for new signups."},

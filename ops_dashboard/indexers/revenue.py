@@ -1,4 +1,4 @@
-"""Revenue indexer — pulls events from Stripe, Apple App Store Connect, and Google Play.
+"""Revenue indexer — pulls events from Apple App Store Connect and Google Play.
 
 For each registered source, polls the upstream API and inserts new events into
 the `revenue_events` table (idempotent on (source_type, external_id)).
@@ -10,7 +10,7 @@ Test/live without real keys:
 
 CLI:
   python -m ops_dashboard.cli index revenue              # all enabled sources
-  python -m ops_dashboard.cli index revenue --source stripe-acme
+  python -m ops_dashboard.cli index revenue --source apple-myapp
 """
 from __future__ import annotations
 
@@ -18,7 +18,6 @@ import json
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
 
 import httpx
 
@@ -30,7 +29,7 @@ from .. import db
 
 @dataclass
 class RevenueEvent:
-    source_type: str           # 'stripe' | 'apple' | 'google' | 'mock'
+    source_type: str           # 'apple' | 'google' | 'mock'
     project_key: str
     external_id: str           # source's unique event ID (ch_xxx, txn_xxx, etc.)
     event_type: str            # 'payment_succeeded' | 'subscription_created' | 'refund' | 'dispute_opened' | etc.
@@ -88,95 +87,6 @@ class BaseSource(ABC):
         result["ok"] = True
         result["fetched"] = len(events)
         return result
-
-
-# ============================================================
-# Stripe
-# ============================================================
-
-class StripeSource(BaseSource):
-    source_type = "stripe"
-
-    def __init__(self, source_row: dict, credentials: dict | None):
-        super().__init__(source_row, credentials)
-        # Stripe: secret_key in credentials (live: sk_live_..., test: sk_test_...)
-        self.api_key = (credentials or {}).get("secret_key") or (credentials or {}).get("api_key") or ""
-        self.api_base = "https://api.stripe.com/v1"
-
-    def test(self) -> tuple[bool, str]:
-        if not self.api_key:
-            return False, "missing secret_key in connection credentials"
-        try:
-            r = httpx.get(f"{self.api_base}/account",
-                          auth=(self.api_key, ""), timeout=10)
-            if r.status_code == 200:
-                acct = r.json()
-                return True, f"Stripe account: {acct.get('id')} ({acct.get('business_profile',{}).get('name') or acct.get('email') or 'unnamed'})"
-            return False, f"HTTP {r.status_code}: {r.text[:200]}"
-        except Exception as e:
-            return False, f"{type(e).__name__}: {e}"
-
-    def fetch_events(self, since: int | None = None, limit: int = 100) -> list[RevenueEvent]:
-        if not self.api_key:
-            return []
-        events: list[RevenueEvent] = []
-        # 1) Charges
-        params: dict[str, Any] = {"limit": min(limit, 100)}
-        if since:
-            params["created[gte]"] = since
-        try:
-            r = httpx.get(f"{self.api_base}/charges", params=params,
-                          auth=(self.api_key, ""), timeout=15)
-            if r.status_code != 200:
-                raise RuntimeError(f"charges HTTP {r.status_code}: {r.text[:200]}")
-            for ch in r.json().get("data", []):
-                events.append(self._charge_to_event(ch))
-            # 2) Subscriptions (created/updated)
-            r2 = httpx.get(f"{self.api_base}/subscriptions", params=params,
-                           auth=(self.api_key, ""), timeout=15)
-            if r2.status_code == 200:
-                for sub in r2.json().get("data", []):
-                    events.append(self._subscription_to_event(sub))
-        except Exception as e:
-            raise RuntimeError(f"stripe fetch failed: {e}") from e
-        return events
-
-    def _charge_to_event(self, ch: dict) -> RevenueEvent:
-        amount = int(ch.get("amount") or 0)
-        if ch.get("refunded"):
-            amount = -amount
-        return RevenueEvent(
-            source_type="stripe",
-            project_key=self.source_row["project_key"],
-            external_id=ch["id"],
-            event_type=("refund" if ch.get("refunded") else "payment_succeeded"),
-            amount_cents=amount,
-            currency=(ch.get("currency") or "usd").upper(),
-            occurred_at=int(ch.get("created") or time.time()),
-            customer_ref=ch.get("customer"),
-            customer_email=(ch.get("billing_details") or {}).get("email"),
-            product_ref=(ch.get("metadata") or {}).get("product"),
-            product_name=ch.get("description") or (ch.get("metadata") or {}).get("plan_name"),
-            status="refunded" if ch.get("refunded") else (ch.get("status") or "succeeded"),
-            raw_payload=ch,
-        )
-
-    def _subscription_to_event(self, sub: dict) -> RevenueEvent:
-        plan = (sub.get("plan") or {}).get("nickname") or (sub.get("plan") or {}).get("id") or "subscription"
-        return RevenueEvent(
-            source_type="stripe",
-            project_key=self.source_row["project_key"],
-            external_id=f"sub_{sub['id']}_{int(sub.get('start_date') or time.time())}",
-            event_type=f"subscription_{sub.get('status', 'active')}",
-            amount_cents=int((sub.get("plan") or {}).get("amount") or 0),
-            currency=((sub.get("plan") or {}).get("currency") or "usd").upper(),
-            occurred_at=int(sub.get("start_date") or time.time()),
-            customer_ref=sub.get("customer"),
-            product_ref=(sub.get("plan") or {}).get("id"),
-            product_name=plan,
-            status=sub.get("status", "active"),
-            raw_payload=sub,
-        )
 
 
 # ============================================================
@@ -303,7 +213,7 @@ class GoogleSource(BaseSource):
 
 class MockSource(BaseSource):
     """Deterministic generator for local dev. Inserts 5-15 events over the last 30 days
-    per source. Useful for UI testing and demos without real Stripe/Apple creds."""
+    per source. Useful for UI testing and demos without real Apple/Google creds."""
     source_type = "mock"
 
     def __init__(self, source_row: dict, credentials: dict | None):
@@ -364,7 +274,6 @@ class MockSource(BaseSource):
 # ============================================================
 
 SOURCES: dict[str, type[BaseSource]] = {
-    "stripe": StripeSource,
     "apple": AppleSource,
     "google": GoogleSource,
     "mock": MockSource,

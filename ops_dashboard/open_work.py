@@ -1,19 +1,21 @@
 """What is still open, and where it is written down.
 
-Enrique's notes already say it: an unchecked box under a heading that
-names the project. The product was indexing the boxes but throwing away
-the two things that make them useful — **which section they are in** (his
-own classification: "Decisiones pendientes (bloqueantes)", "Próximos
-pasos", "Pendiente") and **which project the section belongs to**.
+Your notes already say it: an unchecked box under a heading that names the
+project. The product was indexing the boxes but throwing away the two things
+that make them useful — **which section they are in** (your own
+classification: "Blocking decisions", "Next steps", "Pending") and **which
+project the section belongs to**.
 
 This module puts the two back together:
 
 * an open item inherits the project of the section it lives in;
 * it keeps the heading, so the page can link to the exact place in the
-  note where Enrique wrote it;
+  note where it was written;
 * the sections that say they are blocking say so in the page too.
 
-Nothing here is invented: every line is Enrique's own, in his order.
+Nothing here is invented: every line is the author's own, in their order.
+What counts as an owner and as a blocking heading is configurable (see
+``vault_conventions``).
 """
 from __future__ import annotations
 
@@ -23,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from . import db
+from . import db, vault_conventions
 
 log = logging.getLogger("conductloop.openwork")
 
@@ -36,17 +38,18 @@ _DATES = (
     re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b"),
     re.compile(r"\b(\d{1,2})-([a-z]{3})[a-z]*\b", re.IGNORECASE),
 )
+# Month names of a heading date ("24-oct", "24-Oct"): Spanish and English
+# abbreviations both count, so a vault in either language is read.
 _MONTHS = {m: i + 1 for i, m in enumerate(
     ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"])}
+_MONTHS.update({"jan": 1, "apr": 4, "aug": 8, "dec": 12})
 
-# The owner at the end of the line: "- [ ] hacer X — Claude".
-_OWNER = re.compile(r"\s*[—–-]\s*(Enrique|Claude|Codex|Cursor|ChatGPT)\s*$")
-
-# Headings that say, in his words, that these ones are blocking.
-_BLOCKING = re.compile(
+# Headings that say these items are blocking (English and Spanish). More
+# patterns can be added with ``blocking_headings`` in the config.
+_BLOCKING_BASE = (
     r"bloqueant|blocking|blocker|open question|pregunta abierta|"
-    r"decisi[oó]n pendiente|pending decision|esperando|waiting",
-    re.IGNORECASE)
+    r"decisi[oó]n pendiente|pending decision|esperando|waiting"
+)
 
 
 def _section_date(heading: str, year: int) -> str:
@@ -111,6 +114,9 @@ def scan(limit_per_project: int = 0) -> dict[str, list[dict[str, Any]]]:
     """
     from . import notes_structure
 
+    conv = vault_conventions.get()
+    owner_re = conv.owner_re()
+    blocking_re = conv.blocking_re(_BLOCKING_BASE)
     out: dict[str, list[dict[str, Any]]] = {}
     for path in _notes_with_open_boxes():
         try:
@@ -134,13 +140,13 @@ def scan(limit_per_project: int = 0) -> dict[str, list[dict[str, Any]]]:
                 continue
             item = match.group(1).strip()
             # The section names the project; when it does not, the item
-            # usually names it itself ("EV Copy Engine: probar en Windows
-            # Server con MT5 real"). Both are Enrique's own words.
+            # usually names it itself ("Acme: test on a real Windows
+            # server"). Both are the author's own words.
             key = section_key or _project_of(item)
             if not key:
                 continue
             owner = ""
-            found = _OWNER.search(item)
+            found = owner_re.search(item)
             if found:
                 owner = found.group(1)
                 item = item[:found.start()].strip()
@@ -149,7 +155,7 @@ def scan(limit_per_project: int = 0) -> dict[str, list[dict[str, Any]]]:
                 "project": key,
                 "section": heading,
                 "date": _section_date(heading, year),
-                "blocking": bool(_BLOCKING.search(heading)),
+                "blocking": bool(blocking_re.search(heading)),
                 "owner": owner,
                 "text": item[:300],
             })
@@ -166,7 +172,7 @@ def scan(limit_per_project: int = 0) -> dict[str, list[dict[str, Any]]]:
             seen.add(mark)
             unique.append(row)
         rows = unique
-        # Newest section first, and inside a section the order he wrote it.
+        # Newest section first, and inside a section the order it was written.
         # What blocks comes on top of that: two stable sorts.
         rows.sort(key=lambda row: (row["date"] or "9999"), reverse=True)
         rows.sort(key=lambda row: not row["blocking"])

@@ -58,7 +58,6 @@
     "templates": "Templates",
     "alerts": "Alerts",
     "settings": "Settings",
-    "billing": "Billing",
     "logout": "Log out"
   },
   "views": {
@@ -80,7 +79,7 @@
     "decisions": "Decisions",
     "costs": "Cost tracker",
     "revenue": "Revenue & billing",
-    "revenue_subtitle": "Stripe + Apple App Store + Google Play · {sources} sources · {events} events",
+    "revenue_subtitle": "Apple App Store + Google Play · {sources} sources · {events} events",
     "ga": "Google Analytics",
     "ga_subtitle": "Daily traffic metrics · {sites} sites",
     "sentry": "Sentry issues",
@@ -166,14 +165,6 @@
     "no_services": "No services configured yet.",
     "error_load": "Could not load status.",
     "services_title": "Services"
-  },
-  "billing": {
-    "title": "Billing",
-    "founding_member": "Founding member",
-    "founding_thanks_free": "Thank you for supporting ConductLoop early.",
-    "free_edition_name": "Free edition",
-    "free_edition_tagline": "Every feature is unlocked. No trial, no subscription, no payment.",
-    "open_app": "Open ConductLoop"
   },
   "auth": {
     "login": "Log in",

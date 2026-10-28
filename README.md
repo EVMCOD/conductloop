@@ -6,7 +6,7 @@ ConductLoop indexes your own material — an Obsidian vault, memory/notes folder
 
 - **Website:** <https://conductloop.com>
 - **macOS builds:** [EVMCOD/conductloop-releases](https://github.com/EVMCOD/conductloop-releases/releases/latest)
-- **Price:** free. There is no license gate, subscription or trial in the app (`licensing.enforce()` returns `False`).
+- **Price:** free. There is no license gate, subscription or trial in the app.
 
 > The Python package is still named `ops_dashboard` for backwards compatibility. The product name is **ConductLoop**.
 
@@ -21,7 +21,7 @@ ConductLoop indexes your own material — an Obsidian vault, memory/notes folder
   2. `<repo>/data/ops.db` (dev checkout, if `data/` exists)
   3. macOS `~/Library/Application Support/com.conductloop.desktop/data/ops.db` · Linux `~/.local/share/conductloop/ops.db` · Windows `%LOCALAPPDATA%\ConductLoop\data\ops.db`
 - At-rest secrets (DB encryption key, connector credentials) go to the macOS Keychain, or to `0600` files in the data dir elsewhere (`ops_dashboard/secrets_store.py`). Connector credentials are Fernet-encrypted in the DB.
-- Network calls only happen for features you turn on: your model provider, connectors you configure (GitHub, Stripe, Slack, Telegram, Discord, Google Search Console/Analytics, Sentry, …), URL health checks, webhooks, and the Tauri auto-updater in the desktop app.
+- Network calls only happen for features you turn on: your model provider, connectors you configure (GitHub, Slack, Telegram, Discord, Google Search Console/Analytics, Sentry, …), URL health checks, webhooks, and the Tauri auto-updater in the desktop app.
 - Error reporting to Sentry is **opt-in** (only if you set `SENTRY_DSN`).
 - If you install `sentence-transformers`, the embedding model (`all-MiniLM-L6-v2`) is downloaded once from Hugging Face and then runs locally.
 
@@ -37,14 +37,14 @@ The Brain talks directly to the provider you configure; nothing is proxied throu
 | `ollama` | a local Ollama on `localhost:11434` (`OLLAMA_MODEL`, `OLLAMA_BASE_URL` optional) |
 | `mock` | nothing — offline/testing |
 
-`BRAIN_PROVIDER=auto` (default) picks the first available provider; `BRAIN_MODEL` overrides the model. Keys can also be set from the UI, which stores them in your local `config.json` (`~/ops-dashboard/config.json`, or `$OPS_CONFIG_PATH`). That file is gitignored — never commit it.
+`BRAIN_PROVIDER=auto` (default) picks the first available provider; `BRAIN_MODEL` overrides the model. Keys can also be set from the UI (`/credentials`), which stores them in the macOS keychain or, where there is none, in an encrypted file protected by a passphrase — never in plain text. Other settings live in your local `config.json` (`$OPS_CONFIG_PATH`, or in the data directory); it is gitignored — never commit it.
 
 ---
 
 ## Install
 
 ### macOS app
-Download the latest `.dmg` from [conductloop-releases](https://github.com/EVMCOD/conductloop-releases/releases/latest), drag ConductLoop to `/Applications` and open it. The app is a Tauri v2 shell that starts the bundled Python server as a sidecar and shows it in a native WebView.
+Download the latest `.dmg` from [conductloop-releases](https://github.com/EVMCOD/conductloop-releases/releases/latest), drag ConductLoop to `/Applications` and open it. Requires **macOS 13 (Ventura) or later** on Apple Silicon; the built-in browser needs **macOS 14 (Sonoma) or later** (on macOS 13 everything else works). The app is a Tauri v2 shell that starts the bundled Python server as a sidecar and shows it in a native WebView.
 
 ### From source (macOS / Linux)
 Requires Python **3.13+** (CI runs 3.14).
@@ -65,14 +65,14 @@ make index            # index all configured sources
 
 Dependency sets:
 - `requirements-core.txt` — lean runtime (server, CLI, auth, search). No ML.
-- `requirements.txt` — core + Anthropic/OpenAI SDKs + `sentence-transformers` for local semantic search (pulls PyTorch, ~2 GB).
+- `requirements.txt` — core + Anthropic/OpenAI SDKs + local semantic search: `fastembed` (ONNX, no PyTorch; what the app uses) and `sentence-transformers` (pulls PyTorch, ~2 GB).
 - `requirements-optional.txt` — Whisper voice notes, Google Analytics, PyJWT, Sentry, MCP server.
 - `requirements-dev.txt` — core + pytest, ruff, mypy, pip-audit, pre-commit.
 
 `pip install -e .` also installs the `ops` CLI entry point.
 
 ### Configuration
-A fresh install is empty: no projects, teams or URLs. Point it at your content with environment variables (see `.env.example`), e.g. `OPS_VAULT_ROOT`, `OPS_WORKSPACE`, `OPS_SKILLS_DIR`, `OPS_REPOS`, `OPS_PROJECTS_FILE`, `OPS_LIVE_URLS_FILE`. Set `CONDUCTLOOP_DEMO=1` to load fictional demo data instead.
+A fresh install is empty: no projects, teams or URLs. Point it at your content with environment variables (see `.env.example`), e.g. `OPS_VAULT_ROOT`, `OPS_WORKSPACE`, `OPS_SKILLS_DIR`, `OPS_REPOS`, `OPS_PROJECTS_FILE`, `OPS_LIVE_URLS_FILE`. Set `CONDUCTLOOP_DEMO=1` (with a throwaway `CONDUCTLOOP_DB_PATH` and `OPS_DATA_DIR`) to load fictional demo data instead; see [`docs/FIRST-5-MINUTES.md`](docs/FIRST-5-MINUTES.md).
 
 Optional notification webhooks (Slack / Discord / Telegram) are described in `config.example.json`. Remote access from a phone is documented in [`docs/REMOTE.md`](docs/REMOTE.md) (Tailscale; nothing is exposed publicly by default).
 
@@ -115,7 +115,6 @@ ops_dashboard/          Python package: server.py (HTTP API + UI), cli.py (typer
                         indexers/ (vault, memory, repos, skills, urls, …), web/ (vanilla HTML/JS UI)
 desktop/                Tauri v2 macOS app (Rust shell + PyInstaller sidecar build)
 desktop-demo/           Tauri demo build
-cloudflare-worker/      optional status-page Worker (not the license service)
 scripts/, bin/          launchd jobs, release and maintenance scripts
 tests/                  pytest suite
 ```

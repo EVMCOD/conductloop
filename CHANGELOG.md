@@ -2,6 +2,119 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 2026-10-28 — Leftover billing tables and Stripe integrations removed
+
+> **⚠️ This deletes data from your local database.** Migration 26 drops the
+> tables `entitlements`, `founders` and `payment_events` and every row in them
+> (old plan grants, founder badges, payment audit rows). Nothing in the app reads
+> them any more. If you want to keep a copy, back up `ops.db` before updating
+> (the data folder is `~/Library/Application Support/com.conductloop.desktop/data`
+> on the desktop app). It does not touch any other table, and it is safe to run
+> more than once.
+
+**What changed**
+  - New migration 26: `DROP TABLE IF EXISTS` for those three tables (their
+    indexes go with them). New databases never create them.
+  - Removed the entitlement helpers (`get_entitlement`, `grant_entitlement`,
+    `list_entitlements`, `revoke_entitlement`) from `db_auth`/`db`. Signup no
+    longer grants a "free" plan, and `/api/auth/me` no longer returns an
+    `entitlement` field.
+  - Removed the generic Stripe connector (`connectors.py`: tester, tools and
+    catalog entry) and the Stripe source of the revenue indexer. The Apple App
+    Store and Google Play sources and the mock source are unchanged.
+    Connections or revenue sources of type `stripe` that you saved earlier stay
+    in your database but can no longer be tested or polled.
+  - Removed the `cloudflare-worker/` directory (an unused status-page Worker);
+    the local `/status` page is unaffected.
+  - Removed the founders mock data from the demo build and the leftover
+    references in docs, i18n and tests.
+
+## 2026-10-28 — Billing and license code removed from the repo
+
+ConductLoop is free, so the dead billing/license code is gone.
+
+**What changed**
+  - Removed `ops_dashboard/licensing.py`, `ops_dashboard/db_billing.py`,
+    `ops_dashboard/web/billing.html`, `docs/BILLING.md` and their tests.
+  - Removed the `/license`, `/billing`, `/billing/success`, `/api/license/status`
+    and `/api/billing/*` routes (they now 404 like any unknown path). The
+    login/signup flow no longer writes a `payment_events` row, and
+    `/api/auth/me` no longer returns the founder badge fields.
+  - The README no longer lists Stripe as a connector.
+  - Database tables are untouched (no destructive migration).
+
+## 2026-10-28 — Evals live con tu clave (aprendizaje L2)
+
+`python -m ops_dashboard.evals run --live` ejecuta los casos de evals contra un
+proveedor real con la clave BYOK del llavero (`--key-ref`), solo a mano y nunca
+en CI. Presupuesto en EUR y límite de llamadas obligatorios, precio del modelo
+obligatorio, informe local comparable con la baseline offline, resultados en
+`eval_runs`/`eval_results` (migración 25), `--record` y `--judge` opcionales.
+Ver `docs/evals.md`.
+
+## 2026-10-25 — The vault no longer hangs the app
+
+**What changed** (PRs #30, #31)
+  - A note folder that stops answering (an unmounted drive, a stalled sync
+    folder) can no longer freeze the app: vault reads have a deadline, and the
+    API answers `503 vault_unresponsive` instead of hanging (deadline 240 s,
+    `CONDUCTLOOP_VAULT_TIMEOUT`).
+  - A new list of "things you linked and never wrote": `[[links]]` in your
+    notes that point to a note that does not exist.
+
+## 2026-10-24 — Offline search, credentials screen and the vault of pages
+
+**What changed** (PRs #15–#29)
+  - **Offline semantic search** (#21): the desktop app embeds notes with an
+    ONNX engine (fastembed), with no network, key or credit. The app grows from
+    41 MB to 88 MB; the model downloads once, on first use, into the data
+    folder. Changing the model re-embeds everything; the configured provider wins
+    over whatever happens to be installed.
+  - **Credentials** (#25): every key of the app lives in the macOS keychain, or
+    in a passphrase-encrypted file if there is none — never in plain text, and
+    values are never shown again. `/credentials` lists them all; keys already in
+    plain text are moved with one button. The setup checklist now points there.
+  - **Servers panel** (#24): `/servers` shows, per capability (chat, image,
+    video, speech, search), which server will answer and which others could.
+  - **The map of your work** (#15–#20, #22, #23): the library draws a map of
+    your projects from your notes and writes it into the vault as pages
+    (`pages/Index.md`, `pages/<project>.md`, `pages/areas/<area>.md`). It only
+    changes when something changes, detects lines missing from your hand-written
+    index and proposes them, inserts them without touching your text, and
+    keeps an "unclassified" section and a list of forgotten notes. A **daily
+    note** gets a marked block with what happened in the vault, without
+    overwriting what you wrote. The agent's own instructions point at the map.
+  - **Where each project stands** (#26–#29): each project page shows "Where this
+    stands" (from your handoff notes) and "What remains open", plus a
+    `pages/Waiting.md` page of what is waiting for you, and a `WAITING.md` the
+    agent reads at the start.
+
+## 2026-10-23 — Any model, any media vendor, read-only note folders
+
+**What changed** (PRs #6–#14)
+  - **Providers** (#6, #7, #8, #12, #13): MiniMax defaults to `MiniMax-M3` and the
+    MiniMax Coding Plan subscription is supported; the Brain can talk to any
+    OpenAI-compatible server (`OPENAI_BASE_URL`), and one endpoint can serve both
+    chat and images. Provider errors are readable (retired model, no credit,
+    bad key) and a failing plan call no longer wastes one call per agent. No
+    `temperature` is sent to the Anthropic SDK 2.x.
+  - **Media** (#11): the media pipeline is not tied to one vendor
+    (`media.pick_provider`).
+  - **Read-only note folders** (#10): extra folders of notes
+    (`index_folders` / `memory_workspace` in `config.json`) are indexed read-only
+    and re-indexed hourly.
+  - The notes of the detected project now reach the Brain's context (#9).
+
+## 2026-10-22 — Chat with your AI team
+
+**What changed** (PRs #2–#5)
+  - New `/chat` page (#3): talk to the Brain, the lead CEO or any executive. In
+    team mode the CEO picks one to three agents, they answer in parallel in live
+    cards, and the CEO writes the final answer (N+2 model calls per turn).
+  - The desktop app has Back / Home controls on every page and a **Go** menu (#5).
+  - Fix: every Teams load added the built-in AI squad again (#4).
+  - The test suite no longer touches your real data folder (#2).
+
 ## 2026-10-21 — License, billing and Stripe removed from the app
 
 ConductLoop is free; the leftovers of the old license/billing flow are gone.

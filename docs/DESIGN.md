@@ -13,7 +13,6 @@ sequences the rebuild of a UI that today is 30 pages and 15.106 lines of HTML.*
 | `ops_dashboard/web/index.html` | **6.749 lines** | The whole cockpit: shell, graph canvas, file browser, markdown renderer, search, alerts. Inline `<style>` + inline JS. |
 | `ops_dashboard/web/*.html` | 30 pages | `chat`, `sessions`, `learning`, `connectors`, `team`, `brain`, `voice`, `approvals`, `activity`, … |
 | `ops_dashboard/web/*.css` | 4 files | `chat.css`, `sessions.css`, `learning.css`, `connectors.css` — each with its own tokens, duplicated from scratch. |
-| `cloudflare-worker/src/index.js` | 165 lines | The marketing site worker. Separate product, separate design language. |
 
 **The problem is not the colours, it is the absence of a system.** Every page
 redefines `:root`, two accents compete (deep blue `#1e40af` and violet

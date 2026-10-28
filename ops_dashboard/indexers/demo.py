@@ -97,20 +97,9 @@ DEMO_URLS: list[dict] = [
 ]
 
 
-# - Founders (mock) -
-DEMO_FOUNDERS: list[dict] = [
-    {"name": "Alex Chen",      "tier": "founder", "badge": "gold",   "original_cents": 29900, "joined_at_offset_days": 92},
-    {"name": "Sam Rivera",     "tier": "founder", "badge": "gold",   "original_cents": 49900, "joined_at_offset_days": 58},
-    {"name": "Jordan Mills",   "tier": "founder", "badge": "gold",   "original_cents": 99900, "joined_at_offset_days": 41},
-    {"name": "Taylor Park",    "tier": "founder", "badge": "gold",   "original_cents": 1000,  "joined_at_offset_days": 12},
-    {"name": "Mira Kovacevic", "tier": "founder", "badge": "silver", "original_cents": 9900,  "joined_at_offset_days": 28},
-    {"name": "Devon Okafor",   "tier": "founder", "badge": "silver", "original_cents": 9900,  "joined_at_offset_days": 7},
-]
-
-
 # - Activity feed events (mock) -
 DEMO_ACTIVITY: list[tuple[str, str]] = [
-    ("Alex Chen",      "joined the founders circle"),
+    ("Alex Chen",      "joined the project"),
     ("Sam Rivera",     "shipped the v0.4 release"),
     ("Jordan Mills",   "published a 1,400-word essay on retention"),
     ("Taylor Park",    "completed onboarding in 4 minutes"),
@@ -188,23 +177,6 @@ DEMO_TODOS: list[dict] = [
 def run() -> dict:
     """Insert all demo data. Idempotent: clears source=demo rows first."""
     db.init_db()
-    # Ensure tables demo needs but init_db() may have skipped (FK ordering).
-    try:
-        with db.db() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS founders (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL UNIQUE,
-                    original_plan TEXT NOT NULL,
-                    original_cents INTEGER NOT NULL,
-                    badge_color TEXT DEFAULT 'gold',
-                    note TEXT,
-                    joined_at INTEGER NOT NULL,
-                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                )
-            """)
-    except Exception:
-        pass
     # live_urls has its own ensure_schema()
     try:
         from . import live_urls as _live_urls
@@ -220,7 +192,7 @@ def run() -> dict:
         for table in (
             "documents", "activity_feed", "revenue_events", "revenue_sources",
             "sentry_events", "anomalies", "ga_daily", "code_todos", "live_urls",
-            "founders", "todos",
+            "todos",
         ):
             try:
                 cur.execute(f"DELETE FROM {table} WHERE source = ?", (DEMO_TAG,))
@@ -280,36 +252,6 @@ def run() -> dict:
                 )
     except Exception as e:
         print(f"[demo] live_urls skipped: {e}")
-
-    # - Founders (requires a demo user) -
-    try:
-        with db.db() as conn:
-            cur = conn.cursor()
-            # Ensure at least one demo user exists (FK target for founders)
-            cur.execute(
-                """INSERT OR IGNORE INTO users
-                   (id, email, name, locale, is_admin, email_verified, created_at)
-                   VALUES (1, ?, ?, 'en', 1, 1, ?)""",
-                ("demo@conductloop.example", "Demo User", now),
-            )
-            for i, f in enumerate(DEMO_FOUNDERS, start=1):
-                user_id = i  # 1..N founders, all linked to demo user space
-                # Create a placeholder user per founder so the FK holds
-                cur.execute(
-                    """INSERT OR IGNORE INTO users
-                       (id, email, name, locale, is_admin, email_verified, created_at)
-                       VALUES (?, ?, ?, 'en', 0, 1, ?)""",
-                    (user_id, f"founder-{i}@conductloop.example", f["name"], now),
-                )
-                joined_at = now - f["joined_at_offset_days"] * 86400
-                cur.execute(
-                    """INSERT OR REPLACE INTO founders
-                       (user_id, original_plan, original_cents, badge_color, joined_at)
-                       VALUES (?, ?, ?, ?, ?)""",
-                    (user_id, "lifetime", f["original_cents"], f["badge"], joined_at),
-                )
-    except Exception as e:
-        print(f"[demo] founders skipped: {e}")
 
     # - Activity feed (real schema: kind, project_key, summary, created_at) -
     try:
@@ -440,7 +382,6 @@ def run() -> dict:
         "notes": len(DEMO_NOTES),
         "repos": len(DEMO_REPOS),
         "urls": len(DEMO_URLS),
-        "founders": len(DEMO_FOUNDERS),
         "revenue_months": 12,
         "sentry": len(DEMO_ERRORS),
         "ga_days": 30,

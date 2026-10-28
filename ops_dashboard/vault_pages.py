@@ -29,7 +29,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import db
+from . import db, vault_conventions
 
 log = logging.getLogger("conductloop.vault")
 
@@ -225,13 +225,15 @@ def _is_handoff(doc: dict[str, Any]) -> bool:
     """Is this note a handoff — "here is where I left off"?
 
     Two conventions say so: ``type: handoff`` in the frontmatter, and the
-    folder the vault keeps them in. Either one is enough.
+    folder the vault keeps them in. Either one is enough. Both are
+    configurable (``handoff_types``, ``handoff_folders``).
     """
+    conv = vault_conventions.get()
     front = doc.get("frontmatter") or {}
-    if str(front.get("type") or "").strip().lower() == "handoff":
+    if str(front.get("type") or "").strip().lower() in conv.handoff_types:
         return True
     parts = Path(doc.get("path") or "").parts
-    return any(part.lower() in ("handoff", "handoffs") for part in parts)
+    return any(part.lower() in conv.handoff_folders for part in parts)
 
 
 def _handoff_date(doc: dict[str, Any]) -> str:
@@ -247,27 +249,55 @@ def _handoff_date(doc: dict[str, Any]) -> str:
     return _stamp(int(doc.get("mtime") or 0))
 
 
-def _encargo(content: str) -> str:
-    """The ask of a handoff: the first blockquote under the title.
+_HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*#*\s*$")
 
-    In Enrique's handoffs that blockquote is the encargo — what was
-    actually asked, in his words. It is the one line that says what the
-    work is, and it is worth more than the rest of the note.
-    """
-    quote: list[str] = []
+
+def _ask_under_heading(content: str, names: tuple[str, ...]) -> str:
+    """The first paragraph under a heading called one of ``names``."""
+    paragraph: list[str] = []
+    inside = False
     for line in (content or "").splitlines():
-        match = _BLOCKQUOTE.match(line.strip())
-        if match:
-            text = match.group(1).strip()
-            # "[!success] El encargo" is a callout label, not the ask.
-            if text.startswith("[!"):
-                continue
-            if text:
-                quote.append(text)
-        elif quote:
+        heading = _HEADING.match(line.strip())
+        if heading:
+            if inside:
+                break
+            label = re.sub(r"^[^\w]+", "", heading.group(1)).strip().lower()
+            inside = label in names
+            continue
+        if not inside:
+            continue
+        if line.strip():
+            paragraph.append(line.strip().lstrip(">").strip())
+        elif paragraph:
             break
-    text = " ".join(quote).strip()
-    text = re.sub(r"\s+", " ", text)
+    return " ".join(paragraph)
+
+
+def _ask(content: str) -> str:
+    """The ask of a handoff: what was actually requested, in the author's words.
+
+    It is the one line that says what the work is, and it is worth more than
+    the rest of the note. By default it is the first blockquote under the
+    title; ``ask_headings`` in the config names headings (e.g. "Ask", "Brief")
+    whose first paragraph is the ask instead, checked first.
+    """
+    names = vault_conventions.get().ask_headings
+    text = _ask_under_heading(content, names) if names else ""
+    if not text:
+        quote: list[str] = []
+        for line in (content or "").splitlines():
+            match = _BLOCKQUOTE.match(line.strip())
+            if match:
+                piece = match.group(1).strip()
+                # "[!success] The ask" is a callout label, not the ask.
+                if piece.startswith("[!"):
+                    continue
+                if piece:
+                    quote.append(piece)
+            elif quote:
+                break
+        text = " ".join(quote)
+    text = re.sub(r"\s+", " ", text).strip()
     if len(text) > 320:
         text = text[:317].rstrip() + "…"
     return text
@@ -304,7 +334,7 @@ def _handoffs(documents: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]
             "path": doc["path"],
             "title": str(front.get("title") or doc.get("title") or ""),
             "date": _handoff_date(doc),
-            "encargo": _encargo(contents.get(doc["path"], "")),
+            "ask": _ask(contents.get(doc["path"], "")),
         })
     for rows in out.values():
         rows.sort(key=lambda row: row["date"], reverse=True)
@@ -441,8 +471,8 @@ def _project_page(proj: dict[str, Any], notes: list[dict[str, Any]], *,
         for row in handoffs[:5]:
             when = row["date"] or "—"
             lines.append(f"- **{when}** — {links.note(row['path'], row['title'] or 'Handoff')}")
-            if row.get("encargo"):
-                lines.append(f"  > {row['encargo']}")
+            if row.get("ask"):
+                lines.append(f"  > {row['ask']}")
         lines.append("")
 
     if open_items:
