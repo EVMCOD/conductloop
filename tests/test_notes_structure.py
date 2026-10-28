@@ -125,10 +125,10 @@ def test_the_map_groups_the_notes_and_leaves_the_ideas(env):
 
 def test_a_folder_full_of_notes_suggests_a_project(env):
     for i in range(4):
-        _note(f"/vault/polymarketea/note{i}.md", "some idea")
+        _note(f"/vault/sideproject/note{i}.md", "some idea")
     data = notes_structure.structure()
     names = [s["name"] for s in data["suggestions"]]
-    assert "polymarketea" in names
+    assert "sideproject" in names
 
 
 def test_a_tag_used_often_is_a_topic_not_a_project(env):
