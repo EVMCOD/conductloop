@@ -19,6 +19,7 @@ fn main() {
             "backend_url",
             "check_for_update",
             "install_update",
+            "pick_folder",
             "browser_open",
             "browser_navigate",
             "browser_back",

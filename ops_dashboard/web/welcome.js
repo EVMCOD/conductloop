@@ -43,7 +43,9 @@
       key_failed: 'No se pudo guardar la clave. Inténtalo de nuevo o usa la página de Credenciales.',
       key_bad: 'Esa clave no se ha aceptado. Revisa que la has copiado entera.',
       failed: 'No se pudo completar. Inténtalo de nuevo.',
-      nothing: 'No hay nada que guardar: escribe una carpeta.'
+      nothing: 'No hay nada que guardar: escribe una carpeta.',
+      choose: 'Elegir…',
+      choose_failed: 'No se pudo abrir el selector de carpetas: escribe la ruta.'
     },
     en: {
       write_env: 'This folder is set by an environment variable on this computer: it cannot be changed here.',
@@ -57,7 +59,9 @@
       key_failed: 'The key could not be saved. Try again or use the Credentials page.',
       key_bad: 'That key was not accepted. Check that you copied all of it.',
       failed: 'That did not work. Try again.',
-      nothing: 'Nothing to save: type a folder.'
+      nothing: 'Nothing to save: type a folder.',
+      choose: 'Choose…',
+      choose_failed: 'The folder picker could not open: type the path.'
     }
   };
   function t(key) {
@@ -115,6 +119,8 @@
       envLocked = r.data.write_vault_source === 'env';
       if (envLocked) {
         w.disabled = true;
+        var pick = w.parentNode.querySelector('button');
+        if (pick) pick.disabled = true;
         $('create-folder').disabled = true;
         var note = $('write-note');
         note.textContent = t('write_env');
@@ -192,8 +198,39 @@
     api('POST', '/api/onboarding/' + kind).then(home, home);
   }
 
+  // Inside the desktop app, a "Choose…" button next to each folder field opens
+  // the native macOS folder picker (Tauri command pick_folder, granted to this
+  // origin only by capabilities/folder-picker.json). In a plain browser there
+  // is no button: the path is typed, as before.
+  function addFolderPickers() {
+    var ipc = window.__TAURI_INTERNALS__;
+    if (!ipc || typeof ipc.invoke !== 'function') return;
+    ['notes-folder', 'write-folder'].forEach(function (id) {
+      var input = $(id);
+      var wrap = document.createElement('div');
+      wrap.className = 'picker';
+      input.parentNode.insertBefore(wrap, input);
+      wrap.appendChild(input);
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ghost';
+      btn.textContent = t('choose');
+      btn.addEventListener('click', function () {
+        btn.disabled = true;
+        ipc.invoke('pick_folder', {}).then(function (path) {
+          if (path) input.value = path;
+        }, function () {
+          say('folders-status', t('choose_failed'), 'bad');
+        }).then(function () { btn.disabled = input.disabled; });
+      });
+      btn.disabled = input.disabled;
+      wrap.appendChild(btn);
+    });
+  }
+
   function start() {
     applyLanguage();
+    addFolderPickers();
     $('save-folders').addEventListener('click', saveFolders);
     $('save-key').addEventListener('click', saveKey);
     $('finish').addEventListener('click', function () { leave('complete'); });

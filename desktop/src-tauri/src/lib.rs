@@ -122,6 +122,33 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
     }
 }
 
+/// The native folder picker behind the "Choose…" buttons of the folder fields
+/// (welcome page). Returns the chosen folder, or None when the user cancels.
+/// The UI only ever gets a path the user picked by hand in a system dialog.
+#[tauri::command]
+async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let mut dialog = app.dialog().file();
+    if let Ok(home) = app.path().home_dir() {
+        dialog = dialog.set_directory(home);
+    }
+    if let Some(win) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&win);
+    }
+    // blocking_pick_folder must not run on the main thread, and it would block
+    // an async worker: give it a thread of its own.
+    let picked = tauri::async_runtime::spawn_blocking(move || dialog.blocking_pick_folder())
+        .await
+        .map_err(|e| format!("folder picker failed: {e}"))?;
+    match picked {
+        None => Ok(None),
+        Some(path) => path
+            .into_path()
+            .map(|p| Some(p.to_string_lossy().into_owned()))
+            .map_err(|e| format!("folder picker failed: {e}")),
+    }
+}
+
 /// 32 random bytes as hex from /dev/urandom (no extra crate).
 #[cfg(unix)]
 fn bridge_token() -> Option<String> {
@@ -150,11 +177,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .manage(ServerProcess(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             backend_url,
             check_for_update,
             install_update,
+            pick_folder,
             browser::browser_open,
             browser::browser_navigate,
             browser::browser_back,
