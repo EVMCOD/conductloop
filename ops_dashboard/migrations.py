@@ -766,3 +766,46 @@ def _mig_24_media_provider_usage(conn: sqlite3.Connection) -> None:
 
 MIGRATIONS.append((24, "media_provider_usage: per-provider counters and daily caps (2026-10-23)",
                    _mig_24_media_provider_usage))
+
+
+# ── 25: local results of live evals (learning design §3.2/§4, PR L2) ────────
+# The design numbered these tables "12"; 9-15 and 20 are taken and 16-19 are
+# reserved for the OAuth branches, so per D15 they land after the last taken
+# number: 25 here (21-24 are used by other migrations). Additive and
+# idempotent (GAP_FILL_FROM). Only ``python -m ops_dashboard.evals run --live``
+# writes here, on the user's own machine. ``key_ref`` is the keychain item
+# NAME (never the key); no prompt or answer text is stored, only check results.
+def _mig_25_eval_runs(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS eval_runs ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  mode TEXT NOT NULL CHECK (mode IN ('offline','live')),"
+        "  suite TEXT NOT NULL,"
+        "  provider TEXT, model TEXT, key_ref TEXT,"
+        "  budget_cost_cents REAL,"
+        "  cost_cents_est REAL NOT NULL DEFAULT 0,"
+        "  max_calls INTEGER, calls INTEGER NOT NULL DEFAULT 0,"
+        "  passed INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0,"
+        "  not_run INTEGER NOT NULL DEFAULT 0,"
+        "  status TEXT NOT NULL DEFAULT 'running'"
+        "    CHECK (status IN ('running','completed','stopped','failed')),"
+        "  stop_reason TEXT,"
+        "  started_at INTEGER NOT NULL, finished_at INTEGER, report_path TEXT)"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS eval_results ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  run_id INTEGER NOT NULL REFERENCES eval_runs(id) ON DELETE CASCADE,"
+        "  case_id TEXT NOT NULL,"
+        "  status TEXT NOT NULL DEFAULT 'run' CHECK (status IN ('run','not_run')),"
+        "  passed INTEGER NOT NULL,"
+        "  checks TEXT NOT NULL DEFAULT '[]',"
+        "  tokens_in INTEGER, tokens_out INTEGER,"
+        "  usage_estimated INTEGER NOT NULL DEFAULT 0,"
+        "  cost_cents_est REAL NOT NULL DEFAULT 0,"
+        "  duration_ms INTEGER)"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_eval_results_run ON eval_results(run_id)")
+
+
+MIGRATIONS.append((25, "eval_runs + eval_results: local live-eval results (L2)", _mig_25_eval_runs))

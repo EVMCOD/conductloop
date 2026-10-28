@@ -62,7 +62,11 @@ def test_reads_suites_and_baseline_without_importing_harness(env, monkeypatch):
 def test_local_runs_only_if_l2_table_exists(env):
     from ops_dashboard import db
     from ops_dashboard.learning import evals_view as E
-    assert E.local_runs() == []
+    assert E.local_runs() == []  # L2 table (migration 25) exists but is empty
+    with db.db() as conn:
+        conn.execute("DROP TABLE eval_results")
+        conn.execute("DROP TABLE eval_runs")
+    assert E.local_runs() == []  # and a DB without the table is fine too
     with db.db() as conn:
         conn.execute("CREATE TABLE eval_runs (id INTEGER PRIMARY KEY, mode TEXT, suite TEXT, provider TEXT, "
                      "key_ref TEXT, passed INTEGER, failed INTEGER, started_at INTEGER)")
