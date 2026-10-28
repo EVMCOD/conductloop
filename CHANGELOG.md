@@ -37,6 +37,8 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 - Contributor tooling: added a pull request template (with the local-verification, migration, changelog, no-personal-data and docs checklist) and GitHub issue forms for bug reports and feature requests; blank issues are off and vulnerabilities point to private reporting.
 
+- Release tooling: `scripts/release_check.py --version X.Y.Z` is a dry-run pre-flight for desktop releases (versions in sync, dated CHANGELOG section and notes, updater key id, minimum macOS, updater endpoint, clean git tree). It publishes nothing. See `docs/RELEASING.md`.
+
 ## 2026-10-28 — Leftover billing tables and Stripe integrations removed
 
 > **⚠️ This deletes data from your local database.** Migration 26 drops the

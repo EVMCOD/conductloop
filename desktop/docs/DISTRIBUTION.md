@@ -73,6 +73,9 @@ without a manual reinstall.
 
 ## Build pipeline
 
+Before releasing, run the dry-run pre-flight check (`python3 scripts/release_check.py
+--version <VERSION>`; see [docs/RELEASING.md](../../docs/RELEASING.md)). It publishes nothing.
+
 A single script does the full release:
 
 ```bash
