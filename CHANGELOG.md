@@ -33,6 +33,8 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
   page is shown once, and never to anyone who already has notes indexed, a key
   or any setting. The old "quick tour" is still at `/tour`.
 
+- Contributor tooling: `scripts/verify.sh` (also `make verify`) runs the same checks as CI locally, with `--fast`, `--offline` and `--strict` options and an optional pre-push hook (`scripts/install-hooks.sh`). The mypy typed-module list now lives in `scripts/mypy-ratchet.txt`, shared by CI and the script.
+
 - Contributor tooling: added a pull request template (with the local-verification, migration, changelog, no-personal-data and docs checklist) and GitHub issue forms for bug reports and feature requests; blank issues are off and vulnerabilities point to private reporting.
 
 ## 2026-10-28 — Leftover billing tables and Stripe integrations removed

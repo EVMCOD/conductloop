@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Optional pre-push hook: run the quick CI-equivalent checks before anything
+# leaves your machine. Install it with scripts/install-hooks.sh.
+#
+#   VERIFY_ARGS="--fast --offline" git push   # change the options (default: --fast)
+#   SKIP_VERIFY=1 git push                    # skip it once
+#   git push --no-verify                      # git's own switch, same effect
+set -uo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+zero=0000000000000000000000000000000000000000
+
+# Pushing only deletions (git push origin :branch) has nothing to verify.
+only_deletes=1
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  [ "$local_sha" != "$zero" ] && only_deletes=0
+done
+[ "$only_deletes" = 1 ] && exit 0
+
+if [ "${SKIP_VERIFY:-0}" = 1 ]; then
+  echo "pre-push: SKIP_VERIFY=1, not running scripts/verify.sh" >&2
+  exit 0
+fi
+
+echo "pre-push: running scripts/verify.sh ${VERIFY_ARGS:---fast} (bypass: git push --no-verify)" >&2
+# shellcheck disable=SC2086
+if ! "$root/scripts/verify.sh" ${VERIFY_ARGS:---fast}; then
+  echo "pre-push: verify failed, push aborted." >&2
+  exit 1
+fi

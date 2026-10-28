@@ -1,4 +1,4 @@
-.PHONY: help install index serve app open stop clean status
+.PHONY: help install index serve app open stop clean status verify verify-fast
 
 PY := .venv/bin/python
 PORT := 7777
@@ -59,3 +59,9 @@ export:  ## Export state to tarball
 
 import:  ## Import state from tarball (destructive)
 	$(PY) -m ops_dashboard import ~/ops-dashboard-export.tar.gz --force
+
+verify:  ## Run the same checks as CI (ruff, mypy ratchet, pytest, evals, ...) before you push
+	./scripts/verify.sh $(VERIFY_ARGS)
+
+verify-fast:  ## Quick verify: skip slow/browser tests, coverage, pip-audit and whole-tree mypy
+	./scripts/verify.sh --fast $(VERIFY_ARGS)

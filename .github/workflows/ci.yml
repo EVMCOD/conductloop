@@ -55,96 +55,12 @@ jobs:
         run: mypy ops_dashboard
 
       - name: Type check (mypy) — blocking (typed-module ratchet)
-        # These modules are type-clean and must stay clean. Add modules here as
-        # they are annotated — the strict set grows over time toward the goal of
-        # a blocking whole-tree check.
-        run: >
-          mypy --follow-imports=silent
-          ops_dashboard/routing.py
-          ops_dashboard/origin_guard.py
-          ops_dashboard/logging_setup.py
-          ops_dashboard/secrets_store.py
-          ops_dashboard/byok_keys.py
-          ops_dashboard/migrations.py
-          ops_dashboard/sessions/__init__.py
-          ops_dashboard/sessions/limits.py
-          ops_dashboard/sessions/paths.py
-          ops_dashboard/sessions/store.py
-          ops_dashboard/sessions/worktrees.py
-          ops_dashboard/sessions/sandbox.py
-          ops_dashboard/sessions/code_tools.py
-          ops_dashboard/sessions/providers.py
-          ops_dashboard/sessions/runner.py
-          ops_dashboard/sessions/supervisor.py
-          ops_dashboard/routes_sessions.py
-          ops_dashboard/routes_meta.py
-          ops_dashboard/db_approvals.py
-          ops_dashboard/db_fts.py
-          ops_dashboard/db_costs.py
-          ops_dashboard/db_decisions.py
-          ops_dashboard/db_github.py
-          ops_dashboard/db_mcp.py
-          ops_dashboard/db_notelinks.py
-          ops_dashboard/db_tasktemplates.py
-          ops_dashboard/db_todos.py
-          ops_dashboard/db_voice.py
-          ops_dashboard/obsidian_sync.py
-          ops_dashboard/onboarding.py
-          ops_dashboard/host_guard.py
-          ops_dashboard/capture.py
-          ops_dashboard/calendar_sync.py
-          ops_dashboard/briefing.py
-          ops_dashboard/memory_ai.py
-          ops_dashboard/learning/__init__.py
-          ops_dashboard/learning/store.py
-          ops_dashboard/routes_learning.py
-          ops_dashboard/routes_skills.py
-          ops_dashboard/routes_lessons.py
-          ops_dashboard/learning/lessons.py
-          ops_dashboard/routes_skill_proposals.py
-          ops_dashboard/skills/propose.py
-          ops_dashboard/skills/lint.py
-          ops_dashboard/skills/store.py
-          ops_dashboard/learning/evals_view.py
-          ops_dashboard/learning/metrics.py
-          ops_dashboard/skills/__init__.py
-          ops_dashboard/skills/parse.py
-          ops_dashboard/skills/validate.py
-          ops_dashboard/skills/catalog.py
-          ops_dashboard/indexers/skills.py
-          ops_dashboard/brain_analytics.py
-          ops_dashboard/voice_autofile.py
-          ops_dashboard/sync_bundle.py
-          ops_dashboard/mcp_server.py
-          ops_dashboard/connector_registry.py
-          ops_dashboard/connector_tokens.py
-          ops_dashboard/connectors_token
-          ops_dashboard/routes_connectors_token.py
-          ops_dashboard/connector_store.py
-          ops_dashboard/connector_oauth.py
-          ops_dashboard/connector_actions.py
-          ops_dashboard/routes_connectors.py
-          ops_dashboard/mcp_client.py
-          ops_dashboard/mcp_hub.py
-          ops_dashboard/routes_mcp.py
-          ops_dashboard/mcp.py
-          ops_dashboard/db_auth.py
-          ops_dashboard/db_brainmem.py
-          ops_dashboard/db_graph.py
-          ops_dashboard/db_playbook.py
-          ops_dashboard/db_snapshots.py
-          ops_dashboard/db_tasks.py
-          ops_dashboard/db_urlchanges.py
-          ops_dashboard/evals/__init__.py
-          ops_dashboard/evals/__main__.py
-          ops_dashboard/evals/cassette.py
-          ops_dashboard/evals/checks.py
-          ops_dashboard/evals/netguard.py
-          ops_dashboard/evals/record.py
-          ops_dashboard/evals/runner.py
-          ops_dashboard/evals/live.py
-          ops_dashboard/redact.py
-          ops_dashboard/app_token_guard.py
+        # These modules are type-clean and must stay clean. The list lives in
+        # scripts/mypy-ratchet.txt (one path per line, no comments), shared with
+        # scripts/verify.sh so CI and the local check cannot diverge. Add modules
+        # there as they are annotated — the strict set grows over time toward the
+        # goal of a blocking whole-tree check.
+        run: mypy --follow-imports=silent $(cat scripts/mypy-ratchet.txt)
 
       - name: Evals (offline) — blocking
         # Replays synthetic cassettes through brain.ask / db.search with the
