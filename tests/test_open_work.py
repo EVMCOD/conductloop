@@ -1,8 +1,8 @@
 """What is still open, and where it was written down.
 
-Enrique writes the open work as unchecked boxes under a heading that names
-the project. The product was indexing the boxes and losing the two things
-that make them useful: **the section they are in** (his own
+Open work is written as unchecked boxes under a heading that names the
+project. The product was indexing the boxes and losing the two things that
+make them useful: **the section they are in** (the author's own
 classification) and **the project the section belongs to**.
 
 These tests are about that handover: the item finds its project, keeps
@@ -25,8 +25,8 @@ def env(tmp_path, monkeypatch):
     db.DB_PATH = tmp_path / "open.db"  # type: ignore[attr-defined]
     db.init_db()
     monkeypatch.setattr(projects, "PROJECTS", [
-        projects.Project(key="deepwick", name="DeepWick", aliases=["dw"]),
-        projects.Project(key="rentcla", name="Rentcla", aliases=[]),
+        projects.Project(key="globex", name="Globex", aliases=["dw"]),
+        projects.Project(key="acme", name="Acme", aliases=[]),
     ])
     return tmp_path
 
@@ -59,17 +59,17 @@ def test_an_open_item_inherits_the_project_of_its_section(env):
     from ops_dashboard import open_work
 
     _note_with_work(env, body=(
-        "## 🤖 Deepwick — Lenguaje e IA (estado real: 23-oct, 13:50)\n"
+        "## 🤖 Globex — Plataforma y IA (estado real: 23-oct, 13:50)\n"
         "\n"
         "- [ ] Leer el script de demanda cuando haya volumen\n"
         "- [x] Algo ya hecho\n"
     ))
     data = open_work.scan()
-    assert "deepwick" in data
-    rows = data["deepwick"]
+    assert "globex" in data
+    rows = data["globex"]
     assert len(rows) == 1, "a done box is not open work"
     assert rows[0]["text"].startswith("Leer el script")
-    assert rows[0]["section"] == "🤖 Deepwick — Lenguaje e IA (estado real: 23-oct, 13:50)"
+    assert rows[0]["section"] == "🤖 Globex — Plataforma y IA (estado real: 23-oct, 13:50)"
 
 
 def test_the_owner_at_the_end_of_the_line_is_read(env):
@@ -77,11 +77,11 @@ def test_the_owner_at_the_end_of_the_line_is_read(env):
     from ops_dashboard import open_work
 
     _note_with_work(env, body=(
-        "## 🤖 Deepwick — Lenguaje e IA\n"
+        "## 🤖 Globex — Plataforma y IA\n"
         "\n"
         "- [ ] Leer el script de demanda — Claude\n"
     ))
-    rows = open_work.scan()["deepwick"]
+    rows = open_work.scan()["globex"]
     assert rows[0]["owner"] == "Claude"
     assert rows[0]["text"] == "Leer el script de demanda"
 
@@ -90,11 +90,11 @@ def test_a_section_that_says_it_blocks_is_flagged(env):
     from ops_dashboard import open_work
 
     _note_with_work(env, body=(
-        "## 🤖 Deepwick — Decisiones pendientes (bloqueantes)\n"
+        "## 🤖 Globex — Decisiones pendientes (bloqueantes)\n"
         "\n"
         "- [ ] Decidir si se ocultan las funciones sin uso\n"
     ))
-    rows = open_work.scan()["deepwick"]
+    rows = open_work.scan()["globex"]
     assert rows[0]["blocking"] is True
 
 
@@ -102,11 +102,11 @@ def test_the_date_of_the_section_is_understood(env):
     from ops_dashboard import open_work
 
     _note_with_work(env, body=(
-        "## 🤖 Deepwick — Retención (estado real: 24-oct, 22:45)\n"
+        "## 🤖 Globex — Retención (estado real: 24-oct, 22:45)\n"
         "\n"
         "- [ ] Probar a mano en el navegador\n"
     ))
-    rows = open_work.scan()["deepwick"]
+    rows = open_work.scan()["globex"]
     assert rows[0]["date"] == "2026-10-24"
 
 
@@ -114,15 +114,15 @@ def test_what_blocks_comes_first(env):
     from ops_dashboard import open_work
 
     _note_with_work(env, body=(
-        "## 🤖 Deepwick — Retención (estado real: 24-oct)\n"
+        "## 🤖 Globex — Retención (estado real: 24-oct)\n"
         "\n"
         "- [ ] Algo normal\n"
         "\n"
-        "## 🤖 Deepwick — Decisiones pendientes (bloqueantes)\n"
+        "## 🤖 Globex — Decisiones pendientes (bloqueantes)\n"
         "\n"
         "- [ ] Algo que bloquea\n"
     ))
-    rows = open_work.scan()["deepwick"]
+    rows = open_work.scan()["globex"]
     assert rows[0]["text"] == "Algo que bloquea"
     assert rows[0]["blocking"] is True
 
@@ -132,32 +132,32 @@ def test_the_page_shows_it_and_links_to_the_exact_place(env, tmp_path):
     from ops_dashboard import db, vault_pages
 
     _note_with_work(env, body=(
-        "## 🤖 Deepwick — Lenguaje e IA (estado real: 23-oct, 13:50)\n"
+        "## 🤖 Globex — Plataforma y IA (estado real: 23-oct, 13:50)\n"
         "\n"
         "- [ ] Leer el script de demanda — Claude\n"
     ))
     with db.db() as conn:
-        conn.execute("UPDATE documents SET project_key='deepwick'")
+        conn.execute("UPDATE documents SET project_key='globex'")
         conn.commit()
 
     # The map is written inside the vault, where it belongs.
     export = env / "vault" / "ConductLoop"
     export.mkdir(exist_ok=True)
     vault_pages.export_pages(destinations=[export], data={
-        "projects": [{"key": "deepwick", "name": "DeepWick", "parent": None, "notes": 1,
+        "projects": [{"key": "globex", "name": "Globex", "parent": None, "notes": 1,
                       "ids": [1], "recent": [], "repos": [], "known": True}],
         "ideas": [], "drift": {"missing_from_index": [], "links_to_nothing": []},
         "unlinked": [], "suggestions": [],
         "totals": {"documents": 1, "attributed": 1, "loose": 0},
     })
-    text = (export / "pages" / "deepwick.md").read_text(encoding="utf-8")
+    text = (export / "pages" / "globex.md").read_text(encoding="utf-8")
     assert "## What remains open" in text
     assert "Leer el script de demanda" in text
     assert "Claude" in text
     # The link points at the heading, and the heading is really there.
-    assert "#🤖 Deepwick — Lenguaje e IA (estado real: 23-oct, 13:50)" in text
+    assert "#🤖 Globex — Plataforma y IA (estado real: 23-oct, 13:50)" in text
     note = (env / "vault" / "TODO.md").read_text(encoding="utf-8")
-    assert "## 🤖 Deepwick — Lenguaje e IA (estado real: 23-oct, 13:50)" in note
+    assert "## 🤖 Globex — Plataforma y IA (estado real: 23-oct, 13:50)" in note
 
 
 def test_the_waiting_page_puts_the_blocking_work_of_every_project_together(env):
@@ -165,18 +165,18 @@ def test_the_waiting_page_puts_the_blocking_work_of_every_project_together(env):
     from ops_dashboard import db, vault_pages
 
     _note_with_work(env, body=(
-        "## 🤖 Deepwick — Decisiones pendientes (bloqueantes)\n"
+        "## 🤖 Globex — Decisiones pendientes (bloqueantes)\n"
         "\n"
         "- [ ] Decidir si se ocultan las funciones sin uso\n"
     ))
     with db.db() as conn:
-        conn.execute("UPDATE documents SET project_key='deepwick'")
+        conn.execute("UPDATE documents SET project_key='globex'")
         conn.commit()
 
     export = env / "vault" / "ConductLoop"
     export.mkdir(exist_ok=True)
     vault_pages.export_pages(destinations=[export], data={
-        "projects": [{"key": "deepwick", "name": "DeepWick", "parent": None, "notes": 1,
+        "projects": [{"key": "globex", "name": "Globex", "parent": None, "notes": 1,
                       "ids": [1], "recent": [], "repos": [], "known": True}],
         "ideas": [], "drift": {"missing_from_index": [], "links_to_nothing": []},
         "unlinked": [], "suggestions": [],
@@ -187,7 +187,7 @@ def test_the_waiting_page_puts_the_blocking_work_of_every_project_together(env):
     text = page.read_text(encoding="utf-8")
     assert "## It blocks" in text
     assert "Decidir si se ocultan las funciones sin uso" in text
-    assert "**DeepWick**" in text
+    assert "**Globex**" in text
     # And the index points at it.
     index = (export / "pages" / "Index.md").read_text(encoding="utf-8")
     assert "What is waiting for you" in index
@@ -198,15 +198,15 @@ def test_the_same_item_written_twice_is_one_item(env):
     from ops_dashboard import open_work
 
     _note_with_work(env, body=(
-        "## 🤖 Deepwick — IA\n"
+        "## 🤖 Globex — IA\n"
         "\n"
         "- [ ] Una cosa\n"
         "\n"
-        "## 🤖 Deepwick — IA\n"
+        "## 🤖 Globex — IA\n"
         "\n"
         "- [ ] Una cosa\n"
     ))
-    rows = open_work.scan()["deepwick"]
+    rows = open_work.scan()["globex"]
     assert len(rows) == 1
 
 
@@ -217,11 +217,11 @@ def test_an_item_whose_text_names_the_project_finds_it(env):
     _note_with_work(env, body=(
         "## Pendiente\n"
         "\n"
-        "- [ ] DeepWick: probar el webhook en producción\n"
+        "- [ ] Globex: probar el webhook en producción\n"
     ))
     data = open_work.scan()
-    assert "deepwick" in data, "the line names the project"
-    assert len(data["deepwick"]) == 1
+    assert "globex" in data, "the line names the project"
+    assert len(data["globex"]) == 1
 
 
 def test_the_agent_gets_the_waiting_page_in_its_own_folder(env, tmp_path):
@@ -229,12 +229,12 @@ def test_the_agent_gets_the_waiting_page_in_its_own_folder(env, tmp_path):
     from ops_dashboard import db, notes_structure
 
     _note_with_work(env, body=(
-        "## 🤖 Deepwick — Decisiones pendientes (bloqueantes)\n"
+        "## 🤖 Globex — Decisiones pendientes (bloqueantes)\n"
         "\n"
         "- [ ] Decidir si se ocultan las funciones sin uso\n"
     ))
     with db.db() as conn:
-        conn.execute("UPDATE documents SET project_key='deepwick'")
+        conn.execute("UPDATE documents SET project_key='globex'")
         conn.commit()
 
     workspace = tmp_path / "workspace"
@@ -242,7 +242,7 @@ def test_the_agent_gets_the_waiting_page_in_its_own_folder(env, tmp_path):
     export = env / "vault" / "ConductLoop"
     export.mkdir(exist_ok=True)
     with db.db() as conn:
-        conn.execute("UPDATE documents SET project_key='deepwick'")
+        conn.execute("UPDATE documents SET project_key='globex'")
         conn.commit()
 
     import ops_dashboard.library as lib
@@ -288,3 +288,24 @@ def test_the_notes_you_never_wrote_are_listed(env, tmp_path):
     # And it says where the link came from.
     row = next(r for r in wanted if r["stem"] == "bing_indexnow_setup")
     assert "ideas" in row["from"]
+
+
+def test_a_blocking_heading_with_an_inline_flag_does_not_break_the_scan(env, monkeypatch):
+    import json
+
+    from ops_dashboard import open_work, vault_conventions, vault_pages
+
+    cfg = env / "config.json"
+    cfg.write_text(json.dumps({"vault_conventions": {
+        "blocking_headings": ["(?i)esperando a legal", "(unclosed"]}}), encoding="utf-8")
+    monkeypatch.setenv("OPS_CONFIG_PATH", str(cfg))
+    vault_conventions.reset_cache()
+    _note_with_work(env, body=(
+        "## Globex — Esperando A Legal\n"
+        "\n"
+        "- [ ] Firmar el contrato\n"
+    ))
+    rows = open_work.scan()["globex"]          # no exception
+    assert rows[0]["blocking"] is True
+    assert vault_pages.open_work()["globex"]    # and the wrapper does not hide everything
+    vault_conventions.reset_cache()

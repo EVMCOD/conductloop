@@ -20,8 +20,8 @@ def env(tmp_path, monkeypatch):
     db.DB_PATH = tmp_path / "notes.db"  # type: ignore[attr-defined]
     db.init_db()
     monkeypatch.setattr(projects, "PROJECTS", [
-        projects.Project(key="deepwick", name="DeepWick", aliases=["dw"]),
-        projects.Project(key="rentcla", name="Rentcla", aliases=[]),
+        projects.Project(key="globex", name="Globex", aliases=["dw"]),
+        projects.Project(key="acme", name="Acme", aliases=[]),
     ])
     monkeypatch.setattr(projects, "backfill_document_project_keys", lambda: 0)
     return tmp_path
@@ -50,51 +50,51 @@ def _note(path: str, content: str, *, title: str = "", tags=None,
 # ── attribution: what the note says ───────────────────────────────────────
 
 def test_a_tag_says_which_project_it_is(env):
-    _note("/vault/deepwick.md", "some notes", tags=["deepwick"])
+    _note("/vault/globex.md", "some notes", tags=["globex"])
     notes_structure.attribute_documents()
-    assert _project_of() == "deepwick"
+    assert _project_of() == "globex"
 
 
 def test_the_frontmatter_says_it_outright(env):
-    _note("/vault/notes/idea.md", "content", frontmatter={"project": "rentcla"})
+    _note("/vault/notes/idea.md", "content", frontmatter={"project": "acme"})
     notes_structure.attribute_documents()
-    assert _project_of() == "rentcla"
+    assert _project_of() == "acme"
 
 
 def test_a_link_points_at_the_project(env):
-    _note("/vault/notes/idea.md", "see [[DeepWick]] for the rest")
+    _note("/vault/notes/idea.md", "see [[Globex]] for the rest")
     notes_structure.attribute_documents()
-    assert _project_of() == "deepwick"
+    assert _project_of() == "globex"
 
 
 def test_the_title_names_the_project(env):
-    _note("/vault/notes/rentcla-launch.md", "content")
+    _note("/vault/notes/acme-launch.md", "content")
     notes_structure.attribute_documents()
-    assert _project_of() == "rentcla"
+    assert _project_of() == "acme"
 
 
 def test_one_word_in_passing_is_not_a_project(env):
     """A mention has to repeat before it counts."""
-    _note("/vault/notes/random.md", "I thought about deepwick once.")
+    _note("/vault/notes/random.md", "I thought about globex once.")
     notes_structure.attribute_documents()
     assert _project_of() is None
 
 
 def test_a_note_that_repeats_it_does_belong(env):
     _note("/vault/notes/random.md",
-          "deepwick deepwick deepwick — three times and it is about deepwick")
+          "globex globex globex — three times and it is about globex")
     notes_structure.attribute_documents()
-    assert _project_of() == "deepwick"
+    assert _project_of() == "globex"
 
 
 def test_an_already_assigned_note_is_left_alone(env):
     """What the user (or the path) decided wins over what the text says."""
-    _note("/vault/deepwick.md", "content", tags=["deepwick"])
+    _note("/vault/globex.md", "content", tags=["globex"])
     with db.db() as conn:
-        conn.execute("UPDATE documents SET project_key='rentcla'")
+        conn.execute("UPDATE documents SET project_key='acme'")
         conn.commit()
     notes_structure.attribute_documents()
-    assert _project_of() == "rentcla"
+    assert _project_of() == "acme"
 
 
 def test_a_short_word_does_not_match_everything(env):
@@ -109,14 +109,14 @@ def test_a_short_word_does_not_match_everything(env):
 # ── the map ───────────────────────────────────────────────────────────────
 
 def test_the_map_groups_the_notes_and_leaves_the_ideas(env):
-    _note("/vault/deepwick/a.md", "deepwick deepwick deepwick")
-    _note("/vault/deepwick/b.md", "more", tags=["deepwick"])
+    _note("/vault/globex/a.md", "globex globex globex")
+    _note("/vault/globex/b.md", "more", tags=["globex"])
     _note("/vault/inbox/c.md", "a loose idea")
     _note("/vault/inbox/d.md", "another loose idea")
 
     data = notes_structure.structure()
-    deepwick = next(p for p in data["projects"] if p["key"] == "deepwick")
-    assert deepwick["notes"] == 2
+    globex = next(p for p in data["projects"] if p["key"] == "globex")
+    assert globex["notes"] == 2
     assert data["totals"]["attributed"] == 2
     assert data["totals"]["loose"] == 2
     ideas = {g["area"]: g["count"] for g in data["ideas"]}
@@ -142,20 +142,20 @@ def test_a_tag_used_often_is_a_topic_not_a_project(env):
 
 def test_a_suggestion_never_repeats_a_registered_project(env):
     for i in range(4):
-        _note(f"/vault/deepwick/n{i}.md", "idea")
+        _note(f"/vault/globex/n{i}.md", "idea")
     data = notes_structure.structure()
     names = [s["name"] for s in data["suggestions"]]
-    assert "deepwick" not in names
+    assert "globex" not in names
 
 
 # ── the map, written where the next agent looks ───────────────────────────
 
 def test_the_export_is_a_map_an_agent_can_read(env):
-    _note("/vault/deepwick/a.md", "deepwick deepwick deepwick")
+    _note("/vault/globex/a.md", "globex globex globex")
     _note("/vault/inbox/c.md", "a loose idea")
     text = notes_structure.export_markdown()
     assert "# Projects and ideas" in text
-    assert "DeepWick" in text
+    assert "Globex" in text
     assert "Ideas (not attached to a project)" in text
     assert "inbox" in text
 
@@ -179,18 +179,18 @@ def test_the_map_is_written_to_the_agent_workspace(env, tmp_path):
 
 
 def test_the_indexer_keeps_the_frontmatter_values(env, tmp_path):
-    """A note that says "project: deepwick" has to keep saying it."""
+    """A note that says "project: globex" has to keep saying it."""
     from ops_dashboard.indexers import obsidian
 
     vault = tmp_path / "vault"
     vault.mkdir()
     (vault / "note.md").write_text(
-        "---\nproject: deepwick\ntags: [x]\n---\n\nbody here", encoding="utf-8")
+        "---\nproject: globex\ntags: [x]\n---\n\nbody here", encoding="utf-8")
     obsidian.index_path(vault / "note.md")
     with db.db() as conn:
         row = conn.execute("SELECT metadata FROM documents").fetchone()
     meta = json.loads(row["metadata"])
-    assert meta["frontmatter"]["project"] == "deepwick"
+    assert meta["frontmatter"]["project"] == "globex"
 
 
 # ── the scraper: what is gone must go ─────────────────────────────────────
@@ -202,7 +202,7 @@ def test_a_deleted_note_stops_answering(env, tmp_path):
     vault = tmp_path / "vault"
     vault.mkdir()
     note = vault / "note.md"
-    note.write_text("# DeepWick\n\nsome notes\n", encoding="utf-8")
+    note.write_text("# Globex\n\nsome notes\n", encoding="utf-8")
     obsidian.run(vault_root=vault)
     with db.db() as conn:
         assert conn.execute("SELECT COUNT(*) c FROM documents").fetchone()["c"] == 1
@@ -375,13 +375,13 @@ def test_the_pointer_says_what_changed(env, tmp_path):
     try:
         lib.memory_workspace = lambda: workspace
         notes_structure.write_agent_map()
-        _note("/vault/deepwick/new.md", "deepwick deepwick deepwick")
+        _note("/vault/globex/new.md", "globex globex globex")
         notes_structure.write_agent_map()
     finally:
         lib.memory_workspace = original
     text = (workspace / "AGENTS.md").read_text(encoding="utf-8")
     assert "Last change" in text
-    assert "DeepWick" in text
+    assert "Globex" in text
 
 
 def test_the_map_also_goes_where_the_notes_are(env, tmp_path):

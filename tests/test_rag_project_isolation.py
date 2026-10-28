@@ -2,7 +2,7 @@
 
 Until 2026-10-23 the ``documents`` table had no owner column and the
 retrieval searched every document of every project, so a question about
-DeepWick could answer with Rentcla's notes — and cite the wrong file.
+Globex could answer with Acme's notes — and cite the wrong file.
 """
 from __future__ import annotations
 

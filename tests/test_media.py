@@ -140,9 +140,9 @@ def test_video_generation_validates_model_and_duration():
 
 def test_generated_image_is_recorded_as_an_asset():
     from ops_dashboard import db
-    res = media.generate_image("un gato con gafas", project_key="deepwick")
+    res = media.generate_image("un gato con gafas", project_key="globex")
     assert res.ok
-    rows = db.list_assets(project_key="deepwick")
+    rows = db.list_assets(project_key="globex")
     assert len(rows) == 1
     assert rows[0]["kind"] == "image"
     assert rows[0]["prompt"] == "un gato con gafas"
@@ -162,9 +162,9 @@ def test_every_generated_image_is_kept_not_only_the_first():
             )
 
     media.set_engine(_MultiEngine())
-    res = media.generate_image("cuatro gatos", project_key="deepwick", n=4)
+    res = media.generate_image("cuatro gatos", project_key="globex", n=4)
     assert res.ok
-    rows = [r for r in db.list_assets(project_key="deepwick", kind="image")
+    rows = [r for r in db.list_assets(project_key="globex", kind="image")
             if r["prompt"] == "cuatro gatos"]
     assert len(rows) == 4, rows
 
@@ -187,7 +187,7 @@ def test_video_jobs_are_polled_by_the_reaper():
                                      status="succeeded", path=str(_tmp_mp4()),
                                      meta={"file_id": "f-1"})
 
-    out = media.submit_video("un gato en un plane", project_key="deepwick")
+    out = media.submit_video("un gato en un plane", project_key="globex")
     media.set_engine(_ReadyEngine())
     stats = media.reap_jobs()
     assert stats["checked"] >= 1
@@ -227,7 +227,7 @@ def test_assemble_escapes_quotes_in_paths():
 
 def test_video_job_moves_from_queued_to_succeeded():
     from ops_dashboard import db
-    out = media.submit_video("un gato en un plane", project_key="deepwick")
+    out = media.submit_video("un gato en un plane", project_key="globex")
     job_id = out["job_id"]
     job = db.get_job(job_id)
     assert job["status"] == "queued"
@@ -236,7 +236,7 @@ def test_video_job_moves_from_queued_to_succeeded():
     job = media.poll_video(job_id)
     assert job["status"] == "succeeded"
     assert job["asset_id"]
-    assets = db.list_assets(project_key="deepwick")
+    assets = db.list_assets(project_key="globex")
     assert any(a["kind"] == "video" for a in assets)
 
 
@@ -340,7 +340,7 @@ def test_media_status_endpoint(media_server):
 
 def test_media_image_endpoint_records_the_asset(media_server):
     status, body = _hit(media_server + "/api/media/image", method="POST",
-                        payload={"prompt": "un logo minimalista", "project_key": "rentcla"})
+                        payload={"prompt": "un logo minimalista", "project_key": "acme"})
     assert status == 200, body
     assert body["ok"] is True
     assert body["kind"] == "image"
