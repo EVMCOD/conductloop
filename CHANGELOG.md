@@ -16,6 +16,15 @@ ConductLoop is free, so the dead billing/license code is gone.
   - The README no longer lists Stripe as a connector.
   - Database tables are untouched (no destructive migration).
 
+## 2026-10-28 — Evals live con tu clave (aprendizaje L2)
+
+`python -m ops_dashboard.evals run --live` ejecuta los casos de evals contra un
+proveedor real con la clave BYOK del llavero (`--key-ref`), solo a mano y nunca
+en CI. Presupuesto en EUR y límite de llamadas obligatorios, precio del modelo
+obligatorio, informe local comparable con la baseline offline, resultados en
+`eval_runs`/`eval_results` (migración 25), `--record` y `--judge` opcionales.
+Ver `docs/evals.md`.
+
 ## 2026-10-21 — License, billing and Stripe removed from the app
 
 ConductLoop is free; the leftovers of the old license/billing flow are gone.

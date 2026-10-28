@@ -19,6 +19,7 @@ user can drill into any of them.
 """
 from __future__ import annotations
 
+import contextvars
 import datetime as dt
 import json
 import logging
@@ -311,32 +312,65 @@ def _resp_usage(resp) -> dict | None:
     return extract_usage(resp.get("usage") if isinstance(resp, dict) else getattr(resp, "usage", None))
 
 
+# Optional per-request gate. While a caller (the live evals' budget meter) has
+# set it, every retry that ``_retry_transient`` would make is first shown to the
+# gate — which may veto it by raising — and the SDK clients are built with
+# ``max_retries=0`` so no hidden retry can bypass the caller's call/spend limits.
+# Unset (the default) → behaviour is exactly as before.
+_attempt_gate: contextvars.ContextVar = contextvars.ContextVar("brain_attempt_gate", default=None)
+_retry_depth: contextvars.ContextVar = contextvars.ContextVar("brain_retry_depth", default=0)
+
+
+def _sdk_retry_kwargs() -> dict:
+    """``max_retries=0`` for the Anthropic/OpenAI SDK clients while a gate is set."""
+    return {"max_retries": 0} if _attempt_gate.get() is not None else {}
+
+
+def is_transient_error(e: BaseException) -> bool:
+    """Connection-level / 5xx failures worth one retry (never 401/402/429)."""
+    name = type(e).__name__.lower()
+    raw = str(e).lower()
+    return (
+        "timeout" in name or "timeout" in raw
+        or "connection" in name or "connect" in raw
+        or "reset" in raw
+        or "server_error" in name or "internal server" in raw
+        or "502" in raw or "503" in raw or "504" in raw
+    )
+
+
 def _retry_transient(fn):
     """Decorator: retry once on connection-level transient failures (Fix #7).
 
     Network blips and 5xx upstream failures get one retry with a short backoff.
     4xx client errors (401/402/429) are NOT retried — they indicate config issues
     the user needs to fix, not transient noise.
+
+    When ``_attempt_gate`` is set the retry is first offered to the gate (it can
+    raise to stop it), and a decorated call nested inside another decorated call
+    does not retry on its own: the outermost wrapper owns the single retry, so
+    every network attempt is one gate decision.
     """
     import time as _t
     def wrapper(*args, **kwargs):
+        gate = _attempt_gate.get()
+        depth = _retry_depth.get()
+        tok = _retry_depth.set(depth + 1)
         try:
-            return fn(*args, **kwargs)
-        except Exception as e:
-            name = type(e).__name__.lower()
-            raw = str(e).lower()
-            transient = (
-                "timeout" in name or "timeout" in raw
-                or "connection" in name or "connect" in raw
-                or "reset" in raw
-                or "server_error" in name or "internal server" in raw
-                or "502" in raw or "503" in raw or "504" in raw
-            )
-            if transient:
+            try:
+                return fn(*args, **kwargs)
+            except Exception as e:
+                if not is_transient_error(e):
+                    raise
+                if gate is not None:
+                    if depth > 0:
+                        raise
+                    gate(e)
                 log.info("transient failure in %s — retrying once: %s", fn.__name__, str(e)[:120])
                 _t.sleep(0.6)
                 return fn(*args, **kwargs)
-            raise
+        finally:
+            _retry_depth.reset(tok)
     return wrapper
 
 
@@ -379,8 +413,8 @@ class AnthropicProvider(Provider):
     def _client(self):
         import anthropic
         if self.base_url:
-            return anthropic.Anthropic(api_key=self.api_key, base_url=self.base_url)
-        return anthropic.Anthropic(api_key=self.api_key)
+            return anthropic.Anthropic(api_key=self.api_key, base_url=self.base_url, **_sdk_retry_kwargs())
+        return anthropic.Anthropic(api_key=self.api_key, **_sdk_retry_kwargs())
 
     @_retry_transient
     def ask(self, system: str, messages: list[dict], **kwargs) -> str:
@@ -526,7 +560,8 @@ class OpenAIProvider(Provider):
         except ImportError:
             raise RuntimeError("the openai package is required for the OpenAI-compatible provider")
         # The SDK insists on a key; a local server ignores it.
-        return openai.OpenAI(api_key=self.api_key or "local", base_url=self.base_url or None)
+        return openai.OpenAI(api_key=self.api_key or "local", base_url=self.base_url or None,
+                             **_sdk_retry_kwargs())
 
     @_retry_transient
     def ask(self, system: str, messages: list[dict], **kwargs) -> str:
@@ -636,7 +671,7 @@ class MiniMaxProvider(Provider):
     def _client(self):
         try:
             import openai
-            return openai.OpenAI(api_key=self.api_key, base_url=self.base_url)
+            return openai.OpenAI(api_key=self.api_key, base_url=self.base_url, **_sdk_retry_kwargs())
         except ImportError:
             raise RuntimeError("openai package required for MiniMax provider")
 
