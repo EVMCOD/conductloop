@@ -955,7 +955,31 @@ def get_connection() -> sqlite3.Connection:
     return conn
 
 
-def init_db() -> None:
+def _backup_before_upgrade() -> None:
+    """Back up a database this version is about to change the schema of.
+
+    Migrations can drop tables (26 does): if one goes wrong, or the new version
+    is not wanted, the copy from just before is in the backups folder. Never
+    stops the app from starting."""
+    if not DB_PATH.exists() or DB_PATH.stat().st_size == 0:
+        return
+    try:
+        from . import backups, migrations
+        conn = sqlite3.connect(DB_PATH, timeout=30)
+        try:
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            tables = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'").fetchone()[0]
+        finally:
+            conn.close()
+        if tables and version < max(v for v, _, _ in migrations.MIGRATIONS):
+            backups.backup_now(reason=f"pre-migrate-v{version}")
+    except Exception:
+        log.warning("could not back up the database before upgrading it", exc_info=True)
+
+
+def init_db(*, backup_before_upgrade: bool = True) -> None:
+    if backup_before_upgrade:
+        _backup_before_upgrade()
     with get_connection() as conn:
         # Run schema one statement at a time so we can skip ones that already exist.
         # Strip line comments first: a ';' inside a `-- ...` comment would otherwise

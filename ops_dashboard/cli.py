@@ -970,9 +970,21 @@ def daily_cmd(day: str | None = typer.Argument(None, help="YYYY-MM-DD (default: 
 
 @app.command("backup")
 def backup_cmd(reason: str = typer.Option("manual", "--reason", help="Tag for the backup")) -> None:
-    """Take a backup of the DB to the backups folder (see backups.BACKUP_DIR)."""
+    """Take a consistent backup of the DB to the backups folder (see backups.backup_dir)."""
     p = backups.backup_now(reason=reason)
     console.print(f"[green]\u2713[/green] backup saved: {p}")
+
+@app.command("restore")
+def restore_cmd(name: str = typer.Argument(..., help="File name of the backup (see `backups`)"),
+                yes: bool = typer.Option(False, "--yes", help="Do not ask for confirmation")) -> None:
+    """Put a backup back as the live DB. The current DB is backed up first ("pre-restore")."""
+    if not yes and not typer.confirm(f"Replace the current database with {name}? (it is backed up first)"):
+        raise typer.Abort()
+    try:
+        r = backups.restore(name)
+    except backups.BackupError as e:
+        raise typer.BadParameter(str(e)) from e
+    console.print(f"[green]\u2713[/green] restored {r['restored']}; the previous state is in {r['safety_backup']}")
 
 @app.command("export")
 def export_cmd(out: Path = typer.Option(Path.home() / "ops-dashboard-export.tar.gz", "--out", help="Output tarball path")) -> None:

@@ -82,7 +82,14 @@ def _system_jobs() -> list[tuple[str, str, object]]:
         out = daily.write_daily()
         return {"note": str(out)}
 
+    def _backup():
+        # Hourly check, at most one backup a day: a fixed time of day would be
+        # missed every day the Mac sleeps through it.
+        from . import backups
+        return backups.scheduled()
+
     return [
+        ("backup", os.environ.get("BACKUP_CRON", "35 * * * *"), _backup),
         ("learning_maintenance", os.environ.get("LEARNING_MAINTENANCE_CRON", "15 4 * * *"), _learning),
         ("briefing", os.environ.get("BRIEFING_CRON", "0 8 * * *"), _briefing),
         ("obsidian_export", os.environ.get("OBSIDIAN_EXPORT_CRON", "0 3 * * *"), _export),

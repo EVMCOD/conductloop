@@ -20,6 +20,19 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
   A new test runs every page script through `node --check`, so this cannot ship
   unnoticed again.
 
+- **Backups you can trust, and restore from the app.** Setup → Backups takes a
+  backup with one click, lists the last ones and restores any of them. The app
+  also takes one on its own once a day, and one right before an update changes
+  the database (migration 26 deletes tables). Backups used to be a copy of the
+  database file: one taken while the app was writing could miss the latest
+  changes or come out damaged, and inside the installed app it looked for the
+  database in the wrong folder and failed. They now go through SQLite's backup
+  API, are checked before they are kept, and live in `backups/` next to the
+  database (the last 30). A restore first backs up the current state, refuses a
+  damaged file or one made by a newer version, and brings an older backup up to
+  date. From the terminal: `python -m ops_dashboard backup`, `backups` and
+  `restore <name>`.
+
 - **Content Security Policy for the desktop app.** The Tauri window loads the UI
   from the local server, so the server's header is the policy that applies to
   it; it now restricts everything to the app itself (`default-src 'self'`, no

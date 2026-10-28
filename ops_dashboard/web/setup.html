@@ -32,6 +32,9 @@
     button.ghost{background:transparent;border:1px solid var(--border);color:var(--ink)}
     button:disabled{opacity:.5;cursor:default}
     .note{font-size:13px;color:var(--muted);margin-top:10px;min-height:18px}
+    .bk-list{margin-top:10px}
+    .bk-row{display:flex;align-items:center;gap:10px;font-size:13px;margin:6px 0}
+    .bk-row span{flex:1}
     .lib-label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
     .pick{display:flex;align-items:baseline;gap:8px;padding:3px 0}
     .pick__label{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);flex:1}
@@ -73,6 +76,17 @@
       </div>
       <div class="note" id="lib-note"></div>
       <div class="note" id="lib-status"></div>
+    </div>
+
+    <div class="section">
+      <h2>💾 Backups</h2>
+      <p class="sub">Copies of the app's database: your index, chats, agents, tasks and settings stored in the app. Taken once a day and before an update changes the database, and whenever you click below. Your notes folders are not in them: they stay where they are. The last 30 are kept.</p>
+      <div>
+        <button id="bk-now">Back up now</button>
+      </div>
+      <div class="note" id="bk-note"></div>
+      <div class="hint" id="bk-dir"></div>
+      <div id="bk-list" class="bk-list"></div>
     </div>
 
     <div class="section">
@@ -195,6 +209,72 @@
       }, 2000);
     };
     loadLibrary();
+
+    // ── backups ──────────────────────────────────────────────────────────
+    // Built with the DOM, never with innerHTML: file names come from disk.
+    function showBackups(d) {
+      document.getElementById('bk-dir').textContent = d.dir ? 'Folder: ' + d.dir : '';
+      const list = document.getElementById('bk-list');
+      list.replaceChildren();
+      const rows = d.backups || [];
+      if (!rows.length) { list.textContent = 'No backups yet.'; return; }
+      rows.slice(0, 10).forEach(b => {
+        const row = document.createElement('div');
+        row.className = 'bk-row';
+        const label = document.createElement('span');
+        label.textContent = new Date(b.mtime * 1000).toLocaleString() + ' · ' + (b.reason || 'backup') +
+          ' · ' + (b.size_kb >= 1024 ? (b.size_kb / 1024).toFixed(1) + ' MB' : b.size_kb + ' KB');
+        label.title = b.name;
+        const btn = document.createElement('button');
+        btn.className = 'ghost';
+        btn.textContent = 'Restore';
+        btn.onclick = () => restoreBackup(b);
+        row.append(label, btn);
+        list.append(row);
+      });
+      if (rows.length > 10) {
+        const more = document.createElement('div');
+        more.className = 'hint';
+        more.textContent = (rows.length - 10) + ' older in the folder above.';
+        list.append(more);
+      }
+    }
+    async function loadBackups() {
+      try {
+        showBackups(await (await fetch('/api/backups')).json());
+      } catch (e) {
+        document.getElementById('bk-list').textContent = 'Could not load backups: ' + e;
+      }
+    }
+    async function restoreBackup(b) {
+      const when = new Date(b.mtime * 1000).toLocaleString();
+      if (!window.confirm('Restore the backup of ' + when + '?\n\nEverything stored in the app since then is replaced. ' +
+                          'The current database is backed up first, so you can go back to it.')) return;
+      const note = document.getElementById('bk-note');
+      note.textContent = 'Restoring…';
+      try {
+        const r = await fetch('/api/backups/restore', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: b.name})});
+        const d = await r.json();
+        if (!r.ok) { note.textContent = '✗ ' + (d.message || d.error); return; }
+        note.textContent = '✓ Restored. The state before it is saved as a "pre-restore" backup.';
+        showBackups(d);
+        loadChecklist();
+      } catch (e) { note.textContent = '✗ ' + e; }
+    }
+    document.getElementById('bk-now').onclick = async () => {
+      const note = document.getElementById('bk-note');
+      const btn = document.getElementById('bk-now');
+      btn.disabled = true;
+      note.textContent = 'Backing up…';
+      try {
+        const r = await fetch('/api/backups', {method: 'POST'});
+        const d = await r.json();
+        note.textContent = r.ok ? '✓ Backup saved.' : '✗ ' + (d.message || d.error);
+        if (r.ok) showBackups(d);
+      } catch (e) { note.textContent = '✗ ' + e; }
+      finally { btn.disabled = false; }
+    };
+    loadBackups();
 
     // ── the map ──────────────────────────────────────────────────────────
     // Built with the DOM, never with innerHTML: the titles come from the
