@@ -11,6 +11,7 @@ import time
 
 from . import (  # noqa: F401  (importing a routes_* module registers its routes)
     db,
+    routes_backups,  # Setup → Backups: take one, list, restore
     routes_chat,  # the /chat page and its API
     routes_credentials,  # what the app holds the keys to, and where (2026-10-24)
     routes_learning,  # the Aprendizaje page (L3)
