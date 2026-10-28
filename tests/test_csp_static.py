@@ -35,7 +35,7 @@ CONF_PATH = TAURI / "tauri.conf.json"
 
 # Pages served with the strict PAGE_CSP (default-src 'self', script-src 'self',
 # style-src 'self'): zero inline anything. Every other web/*.html is "legacy".
-STRICT_PAGES = {"sessions.html", "connectors.html", "learning.html", "chat.html"}
+STRICT_PAGES = {"sessions.html", "connectors.html", "learning.html", "chat.html", "welcome.html"}
 
 # Inline code that the legacy policy has to allow ('unsafe-inline') because the
 # pages still contain it. A RATCHET: lower a number when you refactor, never
@@ -410,5 +410,5 @@ def test_server_sends_the_legacy_policy_on_legacy_pages_and_strict_on_strict(ser
     assert checked >= 4
     h = _headers(server + "/")
     assert h.get_all("Content-Security-Policy") == [legacy]
-    for path in ("/sessions", "/connectors", "/learning"):
+    for path in ("/sessions", "/connectors", "/learning", "/welcome"):
         assert set(_headers(server + path).get_all("Content-Security-Policy")) <= stricts, path

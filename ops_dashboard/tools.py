@@ -248,10 +248,12 @@ def _impl_recent_documents(args: dict) -> dict:
 import re
 from datetime import date as _date
 
-AGENT_VAULT_ROOT = _Path(os.environ.get(
-    "OPS_AGENT_VAULT",
-    str(db.vault_root() / "_agents")
-))
+
+def _agent_vault_root() -> _Path:
+    """Where agent artifacts go. Resolved per call so a vault chosen in the app
+    applies without a restart."""
+    override = os.environ.get("OPS_AGENT_VAULT")
+    return _Path(override) if override else db.vault_root() / "_agents"
 
 
 def _slugify(s: str) -> str:
@@ -291,7 +293,7 @@ def _impl_write_artifact(args: dict) -> dict:
         })
 
     # Build the file path
-    folder = AGENT_VAULT_ROOT / project
+    folder = _agent_vault_root() / project
     folder.mkdir(parents=True, exist_ok=True)
     slug = _slugify(title)
     ts = _date.today().isoformat()

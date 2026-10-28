@@ -37,9 +37,14 @@ def library_save(handler) -> None:
     if map_folder is not None and not isinstance(map_folder, str):
         _err(handler, 400, "bad_request", "map_export_folder must be a path")
         return
+    write_vault = data.get("write_vault")
+    if write_vault is not None and not isinstance(write_vault, str):
+        _err(handler, 400, "bad_request", "write_vault must be a path")
+        return
     try:
         saved = library.save_settings(index_folders=folders, memory_workspace=workspace,
-                                      map_export_folder=map_folder)
+                                      map_export_folder=map_folder, write_vault=write_vault,
+                                      create_write_vault=data.get("create_write_vault") is True)
     except ValueError as e:
         _err(handler, 400, "bad_request", str(e))
         return

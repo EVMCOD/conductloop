@@ -5,6 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Setup — ConductLoop</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="/theme.css" />
   <style>
     /* Legacy tokens are aliases of the shared design system in /theme.css. */
@@ -36,7 +37,7 @@
     .pick__label{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);flex:1}
     .pick__section{font-size:12px;max-width:220px}
     .map-lines{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;margin:6px 0}
-    #lib-folders,#lib-workspace{width:100%;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
+    #lib-folders,#lib-workspace,#lib-writevault{width:100%;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
     code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink)}
     a{color:var(--blue)}
   </style>
@@ -55,7 +56,10 @@
 
     <div class="section">
       <h2>📚 Library</h2>
-      <p class="sub">Folders ConductLoop reads and indexes every hour. It never writes to them: its own notes (daily briefing, agent notes, memory export) go to <code id="lib-write"></code>.</p>
+      <p class="sub">Folders ConductLoop reads and indexes every hour. It never writes to them: its own notes (daily briefing, agent notes, memory export) go to the folder below.</p>
+      <label class="lib-label" for="lib-writevault">Folder for ConductLoop's own notes</label>
+      <input id="lib-writevault" spellcheck="false" placeholder="~/Documents/vault" />
+      <div class="hint" id="lib-writevault-note"></div>
       <label class="lib-label" for="lib-folders">Note folders to index (one per line), e.g. your Obsidian vault</label>
       <textarea id="lib-folders" rows="3" spellcheck="false" placeholder="~/Documents/Obsidian/MyVault"></textarea>
       <label class="lib-label" for="lib-workspace">Memory folder (MEMORY.md, memory/*.md)</label>
@@ -146,7 +150,13 @@
     async function loadLibrary() {
       try {
         const d = await (await fetch('/api/library')).json();
-        document.getElementById('lib-write').textContent = d.write_vault;
+        const wv = document.getElementById('lib-writevault');
+        wv.value = d.write_vault || '';
+        wv.dataset.loaded = wv.value;
+        wv.disabled = d.write_vault_source === 'env';
+        document.getElementById('lib-writevault-note').textContent = wv.disabled
+          ? 'Set by an environment variable on this computer: it cannot be changed here.'
+          : (d.write_vault_exists ? '' : 'This folder does not exist yet: create it, or choose another.');
         document.getElementById('lib-folders').value = (d.index_folders || []).join('\n');
         document.getElementById('lib-workspace').value = d.memory_workspace || '';
         document.getElementById('lib-mapfolder').value = d.map_export_folder || '';
@@ -166,6 +176,8 @@
         memory_workspace: document.getElementById('lib-workspace').value.trim(),
         map_export_folder: document.getElementById('lib-mapfolder').value.trim(),
       };
+      const wv = document.getElementById('lib-writevault');
+      if (!wv.disabled && wv.value.trim() !== wv.dataset.loaded) body.write_vault = wv.value.trim();
       try {
         const r = await fetch('/api/library', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
         const d = await r.json();
@@ -294,25 +306,6 @@
         // The lines that would put the missing projects back in the index.
         loadProposal();
 
-        // The ideas that keep coming back: themes with notes in them.
-        const ideas = d.ideas || [];
-        if (ideas.length) {
-          const body = mapGroup('Ideas that keep coming back (' + ideas.length + ')');
-          ideas.slice(0, 10).forEach(function (idea) {
-            const row = el('div', 'detail');
-            row.textContent = idea.title + ' — ' + idea.notes + ' notes';
-            body.appendChild(row);
-          });
-          if (ideas.length > 10) {
-            const row = el('div', 'detail');
-            row.textContent = '… and ' + (ideas.length - 10) + ' more';
-            body.appendChild(row);
-          }
-          const where = el('p', 'hint');
-          where.textContent = 'The nightly pass writes these, and everything else that fell out, into PROPOSAL.md in the agent\'s workspace.';
-          body.appendChild(where);
-        }
-
         const topics = d.topics || [];
         if (topics.length) {
           const body = mapGroup('Themes in the loose notes', topics.length);
@@ -336,7 +329,28 @@
       try {
         d = await (await fetch('/api/library/proposal')).json();
       } catch (e) { return; }
-      if (!d.ok || !d.count) return;
+      if (!d.ok) return;
+
+      // The ideas that keep coming back: themes with notes in them. They come
+      // from the proposal (title + notes), not from the map (area + count).
+      const themes = d.ideas || [];
+      if (themes.length) {
+        const tbody = mapGroup('Ideas that keep coming back (' + themes.length + ')');
+        themes.slice(0, 10).forEach(function (idea) {
+          const row = el('div', 'detail');
+          row.textContent = idea.title + ' — ' + idea.notes + ' notes';
+          tbody.appendChild(row);
+        });
+        if (themes.length > 10) {
+          const row = el('div', 'detail');
+          row.textContent = '… and ' + (themes.length - 10) + ' more';
+          tbody.appendChild(row);
+        }
+        const where = el('p', 'hint');
+        where.textContent = 'The nightly pass writes these, and everything else that fell out, into PROPOSAL.md in the agent\'s workspace.';
+        tbody.appendChild(where);
+      }
+      if (!d.count) return;
       const body = mapGroup('Lines missing from your index (' + d.count + ')');
 
       // One checkbox per line: which ones go in is the user's call.
