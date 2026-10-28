@@ -2,6 +2,56 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 2026-10-28 — Leftover billing tables and Stripe integrations removed
+
+> **⚠️ This deletes data from your local database.** Migration 26 drops the
+> tables `entitlements`, `founders` and `payment_events` and every row in them
+> (old plan grants, founder badges, payment audit rows). Nothing in the app reads
+> them any more. If you want to keep a copy, back up `ops.db` before updating
+> (the data folder is `~/Library/Application Support/com.conductloop.desktop/data`
+> on the desktop app). It does not touch any other table, and it is safe to run
+> more than once.
+
+**What changed**
+  - New migration 26: `DROP TABLE IF EXISTS` for those three tables (their
+    indexes go with them). New databases never create them.
+  - Removed the entitlement helpers (`get_entitlement`, `grant_entitlement`,
+    `list_entitlements`, `revoke_entitlement`) from `db_auth`/`db`. Signup no
+    longer grants a "free" plan, and `/api/auth/me` no longer returns an
+    `entitlement` field.
+  - Removed the generic Stripe connector (`connectors.py`: tester, tools and
+    catalog entry) and the Stripe source of the revenue indexer. The Apple App
+    Store and Google Play sources and the mock source are unchanged.
+    Connections or revenue sources of type `stripe` that you saved earlier stay
+    in your database but can no longer be tested or polled.
+  - Removed the `cloudflare-worker/` directory (an unused status-page Worker);
+    the local `/status` page is unaffected.
+  - Removed the founders mock data from the demo build and the leftover
+    references in docs, i18n and tests.
+
+## 2026-10-28 — Billing and license code removed from the repo
+
+ConductLoop is free, so the dead billing/license code is gone.
+
+**What changed**
+  - Removed `ops_dashboard/licensing.py`, `ops_dashboard/db_billing.py`,
+    `ops_dashboard/web/billing.html`, `docs/BILLING.md` and their tests.
+  - Removed the `/license`, `/billing`, `/billing/success`, `/api/license/status`
+    and `/api/billing/*` routes (they now 404 like any unknown path). The
+    login/signup flow no longer writes a `payment_events` row, and
+    `/api/auth/me` no longer returns the founder badge fields.
+  - The README no longer lists Stripe as a connector.
+  - Database tables are untouched (no destructive migration).
+
+## 2026-10-28 — Evals live con tu clave (aprendizaje L2)
+
+`python -m ops_dashboard.evals run --live` ejecuta los casos de evals contra un
+proveedor real con la clave BYOK del llavero (`--key-ref`), solo a mano y nunca
+en CI. Presupuesto en EUR y límite de llamadas obligatorios, precio del modelo
+obligatorio, informe local comparable con la baseline offline, resultados en
+`eval_runs`/`eval_results` (migración 25), `--record` y `--judge` opcionales.
+Ver `docs/evals.md`.
+
 ## 2026-10-25 — The vault no longer hangs the app
 
 **What changed** (PRs #30, #31)

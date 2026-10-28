@@ -1,4 +1,4 @@
-"""Coverage for the users / auth / sessions / device-tokens / entitlements /
+"""Coverage for the users / auth / sessions / device-tokens /
 usage surface of db.py — the security-sensitive code the smoke sweep can't
 reach (localhost bypasses auth). This is the guard for splitting that section
 out into its own module.
@@ -71,17 +71,6 @@ def test_device_token_stores_hash_not_raw(db):
     assert len(db.list_device_tokens()) == 1
     assert db.revoke_device_token(row["id"]) is True
     assert db.get_device_token(raw) is None  # revoked -> unresolvable
-
-
-def test_entitlement_grant_upsert_revoke(db):
-    u = db.create_user(email="ent@example.com", password="p")
-    eid = db.grant_entitlement(user_id=u["id"], plan="lifetime", amount_cents=29900)
-    assert db.get_entitlement(u["id"])["plan"] == "lifetime"
-    # upsert: granting again returns the same row id
-    assert db.grant_entitlement(user_id=u["id"], plan="lifetime") == eid
-    assert any(e["user_id"] == u["id"] for e in db.list_entitlements(plan="lifetime"))
-    assert db.revoke_entitlement(u["id"]) is True
-    assert db.get_entitlement(u["id"])["refunded_at"] is not None
 
 
 def test_usage_metering(db):

@@ -52,7 +52,7 @@ def _encrypt_credentials(creds: dict) -> str:
     """Encrypt a credentials dict with Fernet. Required — no plaintext fallback.
 
     Audit 2026-06-23: removed plaintext 'plain:' fallback. Failing loud is
-    better than silently leaking Cloudflare/GitHub/Stripe secrets to disk.
+    better than silently leaking Cloudflare/GitHub secrets to disk.
     """
     from cryptography.fernet import Fernet
     f = Fernet(_fernet_key())

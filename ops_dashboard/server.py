@@ -17,7 +17,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from . import db, licensing, projects
+from . import db, projects
 from . import provider_errors as _pe
 from .indexers import live_urls
 from .logging_setup import get_logger
@@ -30,14 +30,6 @@ app = typer.Typer(help="Run the local web dashboard.")
 console = Console()
 
 STATIC_DIR = Path(__file__).resolve().parent / "web"
-
-# Billing endpoints retired when ConductLoop went free (Stripe removed from the app).
-_BILLING_GONE = frozenset({
-    "/api/billing/checkout-lifetime",
-    "/api/billing/checkout-subscription",
-    "/api/billing/cancel-subscription",
-    "/api/billing/stripe-webhook",
-})
 
 # In-memory rate limiter for login attempts (audit 2026-06-23).
 # Maps client IP → list of recent failure timestamps (sliding 5-min window).
@@ -387,11 +379,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._send(500, json.dumps({"error": str(e)}).encode(), "application/json")
             return
 
-        if path == "/license":
-            # ConductLoop is free: no license screen. Old bookmarks / builds land home.
-            self._send(302, b"", "text/html", {"Location": "/"}); return
-        if path == "/api/license/status":
-            self._send(200, _json(licensing.status()).encode(), "application/json"); return
         if path in ("/", "/index.html"):
             html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
             self._send(200, html.encode())
@@ -408,12 +395,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
         elif path == "/sw.js":
             sw = (STATIC_DIR / "sw.js").read_text(encoding="utf-8")
             self._send(200, sw.encode(), "application/javascript; charset=utf-8")
-        elif path == "/billing":
-            bp = (STATIC_DIR / "billing.html").read_text(encoding="utf-8")
-            self._send(200, bp.encode(), "text/html; charset=utf-8")
-        elif path == "/billing/success":
-            # Old Stripe Checkout return URL. ConductLoop is free → home.
-            self._send(302, b"", "text/html", {"Location": "/"})
         elif path == "/tour" or path == "/welcome":
             tp = STATIC_DIR / "tour.html"
             if tp.exists():
@@ -976,12 +957,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._auth_logout(); return
         elif path == "/api/auth/me":
             self._auth_me(); return
-        elif path == "/api/billing/plans":
-            self._billing_plans(); return
-        elif path in _BILLING_GONE:
-            self._billing_gone(); return
-        elif path == "/api/billing/entitlement":
-            self._billing_entitlement(); return
         elif path.startswith("/api/templates/") and path.endswith("/instantiate"):
             from . import db as _db
             if self.command != "POST":
@@ -1685,8 +1660,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         from urllib.parse import urlparse
         path = urlparse(self.path).path
         # Same auth gate as do_PUT/do_DELETE — see security note there.
-        # Public POSTs: signup/login. (The Stripe webhook was removed with
-        # billing on 2026-10-21 — ConductLoop is free.)
+        # Public POSTs: signup/login.
         # Pairing POSTs skip session+CSRF but are hard-gated to localhost inside
         # their handlers (only someone at the machine can pair a new device).
         _PUBLIC_POSTS = {"/api/auth/signup", "/api/auth/login",
@@ -1696,7 +1670,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         # path identifies the trigger and nothing else is accepted. They are
         # called by external systems (server-to-server, no session, no CSRF
         # cookie), so they skip the session gate — the same posture the origin
-        # guard already gives the Stripe/Telegram webhooks. The token is a
+        # guard already gives the Telegram webhooks. The token is a
         # secret, and origin_guard still refuses browser cross-site writes.
         _is_webhook = path.startswith("/api/webhook/")
         # Cross-site / foreign-Origin writes are refused for every path, public or
@@ -2113,8 +2087,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._auth_login(); return
             if path == "/api/auth/logout":
                 self._auth_logout(); return
-            if path in _BILLING_GONE:
-                self._billing_gone(); return
             if path == "/api/ga/sites":
                 self._ga_sites(); return
             if path == "/api/ga/seed-mock":
@@ -2955,7 +2927,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return {}
 
     # ============================================================
-    # Auth + Billing
+    # Auth
     # ============================================================
 
     def _session_token(self) -> str | None:
@@ -3514,14 +3486,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
         user = db.create_user(email=email, password=password, name=name, locale=locale, email_verified=False)
         if not user:
             self._send(500, json.dumps({"error": "could not create user"}).encode(), "application/json"); return
-        # Grant free entitlement by default
-        db.grant_entitlement(user_id=user["id"], plan="free", source="signup")
         # Issue session
         token = db.create_session(user["id"], ip=self.client_address[0] if self.client_address else None,
                                   user_agent=(self.headers.get("User-Agent") or "")[:200])
         self._set_session_cookie(token)
         db.update_user(user["id"], last_login_at=int(time.time()))
-        db.log_payment_event(user_id=user["id"], kind="signup", payload={"email": email})
         body = json.dumps({"ok": True, "user": {"id": user["id"], "email": user["email"], "name": user["name"], "locale": user["locale"]}}, default=str).encode()
         self._send(200, body, "application/json")
 
@@ -3560,7 +3529,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                                   user_agent=(self.headers.get("User-Agent") or "")[:200])
         self._set_session_cookie(token)
         db.update_user(user["id"], last_login_at=int(time.time()))
-        db.log_payment_event(user_id=user["id"], kind="login", payload={"email": email})
         body = json.dumps({"ok": True, "user": {"id": user["id"], "email": user["email"], "name": user["name"], "locale": user["locale"]}}, default=str).encode()
         self._send(200, body, "application/json")
 
@@ -3575,107 +3543,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self._send(200, b'{"ok":true}', "application/json")
 
     def _auth_me(self) -> None:
-        """GET /api/auth/me — current user + entitlement (or null if not logged in)."""
+        """GET /api/auth/me — current user (or null if not logged in)."""
         if self.command != "GET":
             self._send(405, b'{"error":"method not allowed"}', "application/json"); return
         user = self._current_user()
         if not user:
-            self._send(200, json.dumps({"user": None, "entitlement": None}).encode(), "application/json"); return
-        ent = db.get_entitlement(user["id"])
+            self._send(200, json.dumps({"user": None}).encode(), "application/json"); return
         body = json.dumps({
             "user": {"id": user["id"], "email": user["email"], "name": user["name"], "locale": user.get("locale") or "en"},
-            "entitlement": ent,
-            "is_founder": db.is_founder(user["id"]),
-            "founder": db.get_founder(user["id"]),
-        }, default=str).encode()
-        self._send(200, body, "application/json")
-
-    def _billing_plans(self) -> None:
-        """GET /api/billing/plans — return available plans and their prices.
-
-        Pivot 2026-07-16: ConductLoop is 100% free. The 'lifetime' plan is
-        retired. Founders who paid in the pre-pivot beta (original $300)
-        keep their lifetime access — surfaced via the founders roster.
-        When cloud-only features ship (cross-device sync, AI hosting,
-        team workspaces), per-feature paid tiers will be added here.
-        """
-        if self.command != "GET":
-            self._send(405, b'{"error":"method not allowed"}', "application/json"); return
-        plans = [
-            {
-                "id": "free",
-                "name": "Free",
-                "price_cents": 0,
-                "currency": "USD",
-                "period": "forever",
-                "tagline": "Everything is unlocked. Free, forever.",
-                "features": [
-                    "All current features",
-                    "All future updates",
-                    "Community support",
-                    "Local-first / single-user",
-                ],
-                "cta": "Get ConductLoop",
-            },
-        ]
-        # Surface founders roster publicly (no PII, just badge + amount paid)
-        founders_public = [
-            {"badge": f["badge_color"], "original_cents": f["original_cents"], "joined_at": f["joined_at"]}
-            for f in db.list_founders()
-        ]
-        self._send(200, json.dumps({
-            "plans": plans,
-            "currency": "USD",
-            "founders": founders_public,
-            "model": "free_edition",
-            "free_edition": True,
-            "deprecated_plans": ["lifetime"],
-        }, default=str).encode(), "application/json")
-
-    def _billing_gone(self) -> None:
-        """Retired billing endpoints (checkout-lifetime, checkout-subscription,
-        cancel-subscription, stripe-webhook). ConductLoop is free: the app no
-        longer talks to Stripe or holds Stripe keys (2026-10-21, plan R4)."""
-        self._send(410, json.dumps({
-            "error": "gone",
-            "free_edition": True,
-            "message": "ConductLoop is free. No checkout, subscription or payment.",
-        }).encode(), "application/json")
-
-    def _billing_entitlement(self) -> None:
-        """GET /api/billing/entitlement — current user's plan."""
-        if self.command != "GET":
-            self._send(405, b'{"error":"method not allowed"}', "application/json"); return
-        user = self._current_user()
-        if not user:
-            self._send(200, json.dumps({"plan": "anonymous", "features": []}).encode(), "application/json"); return
-        ent = db.get_entitlement(user["id"])
-        plan = ent["plan"] if ent else "free"
-        # What features are available on each plan
-        features_by_plan = {
-            "free":                      ["projects", "revenue", "ga", "sentry", "digest"],
-            "lifetime":                  ["projects", "revenue", "ga", "sentry", "digest", "ai_agents", "priority_support", "custom_integrations"],
-            "pro_monthly":               ["projects", "revenue", "ga", "sentry", "digest", "ai_agents"],
-            "team_monthly":              ["projects", "revenue", "ga", "sentry", "digest", "ai_agents", "multi_user", "audit_logs"],
-            "small_business_lifetime":   ["projects", "revenue", "ga", "sentry", "digest", "ai_agents", "multi_user", "audit_logs"],
-            "team_lifetime":             ["projects", "revenue", "ga", "sentry", "digest", "ai_agents", "priority_support", "custom_integrations", "multi_user", "audit_logs"],
-        }
-        # Seats: how many users can share this account
-        seats_by_plan = {
-            "free": 1,
-            "lifetime": 1,
-            "small_business_lifetime": 3,
-            "team_lifetime": 5,
-            "pro_monthly": 1,
-            "team_monthly": 5,
-        }
-        features = features_by_plan.get(plan, features_by_plan["free"])
-        body = json.dumps({
-            "user": {"id": user["id"], "email": user["email"], "name": user["name"], "locale": user.get("locale") or "en"},
-            "plan": plan,
-            "features": features,
-            "seats": seats_by_plan.get(plan, 1),
-            "entitlement": ent,
         }, default=str).encode()
         self._send(200, body, "application/json")
 

@@ -474,7 +474,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_logs_created ON agent_logs(created_at DESC)
 -- External service connections (OAuth/API keys/MCP servers)
 CREATE TABLE IF NOT EXISTS connections (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    provider      TEXT    NOT NULL,                -- 'cloudflare' | 'github' | 'notion' | 'linear' | 'stripe' | 'slack' | 'mcp' | 'openai' | 'anthropic' | 'minimax' | 'custom'
+    provider      TEXT    NOT NULL,                -- 'cloudflare' | 'github' | 'notion' | 'linear' | 'slack' | 'mcp' | 'openai' | 'anthropic' | 'minimax' | 'custom'
     name          TEXT    NOT NULL,                -- user-given label, e.g. 'production-cf'
     credentials   TEXT    NOT NULL,                -- JSON: {api_key, token, account_id, ...} (token stored in plain text - consider keychain in prod)
     config        TEXT,                            -- JSON: provider-specific config (zone, workspace, repo, etc.)
@@ -520,14 +520,14 @@ CREATE TABLE IF NOT EXISTS agent_mcp_tools (
 CREATE INDEX IF NOT EXISTS idx_agent_mcp_tools_agent ON agent_mcp_tools(agent_id);
 
 -- ============================================================
--- Revenue / Billing (unified Stripe + Apple + Google + ...)
+-- Revenue (unified Apple + Google + ...)
 -- ============================================================
 
--- One row per connected revenue source (e.g. "stripe-rentcla", "apple-evtl")
+-- One row per connected revenue source (e.g. "apple-evtl")
 CREATE TABLE IF NOT EXISTS revenue_sources (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    name            TEXT    UNIQUE NOT NULL,            -- e.g. 'stripe-rentcla', 'apple-evtl'
-    source_type     TEXT    NOT NULL,                   -- 'stripe' | 'apple' | 'google' | 'mock'
+    name            TEXT    UNIQUE NOT NULL,            -- e.g. 'apple-evtl'
+    source_type     TEXT    NOT NULL,                   -- 'apple' | 'google' | 'mock'
     project_key     TEXT    NOT NULL,                   -- 'rentcla', 'evtl-tools', 'beibo', etc.
     connection_id   INTEGER,                            -- FK to connections (encrypted creds)
     currency        TEXT    NOT NULL DEFAULT 'USD',
@@ -672,7 +672,7 @@ CREATE INDEX IF NOT EXISTS idx_sentry_issues_level_status ON sentry_issues(level
 CREATE INDEX IF NOT EXISTS idx_sentry_issues_project_key ON sentry_issues(project_key, last_seen DESC);
 
 -- ============================================================
--- Users + Auth + Billing (lifetime + Stripe-ready)
+-- Users + Auth
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS users (
@@ -729,57 +729,6 @@ CREATE TABLE IF NOT EXISTS usage_log (
     created_at        INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_log(created_at DESC);
-
--- Subscription/plan: lifetime (one-time purchase) is the focus. Stripe
--- monthly subscriptions supported but optional.
-CREATE TABLE IF NOT EXISTS entitlements (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id             INTEGER NOT NULL UNIQUE,
-    plan                TEXT    NOT NULL DEFAULT 'free', -- 'free' | 'lifetime' | 'pro_monthly' | 'team_monthly'
-    source              TEXT,                            -- 'stripe_lifetime' | 'stripe_monthly' | 'admin_grant' | 'trial' | 'launch_promo'
-    stripe_customer_id  TEXT,
-    stripe_subscription_id TEXT,
-    stripe_payment_intent_id TEXT,
-    amount_cents        INTEGER,
-    currency            TEXT    DEFAULT 'USD',
-    activated_at        INTEGER,
-    expires_at          INTEGER,                         -- NULL for lifetime (active forever)
-    refunded_at         INTEGER,
-    created_at          INTEGER NOT NULL,
-    updated_at          INTEGER NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_entitlements_plan ON entitlements(plan);
-CREATE INDEX IF NOT EXISTS idx_entitlements_stripe ON entitlements(stripe_customer_id);
-
--- Founding members: original supporters who paid at the early-bird $300 tier.
--- They keep their lifetime access at the price they paid; they are NOT counted
--- in the public sales counter (which resets to 0 after the pivot to local-first).
-CREATE TABLE IF NOT EXISTS founders (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id             INTEGER NOT NULL UNIQUE,
-    original_plan       TEXT    NOT NULL,                -- 'lifetime' | 'team_lifetime' | 'small_business_lifetime'
-    original_cents      INTEGER NOT NULL,                -- price they actually paid
-    badge_color         TEXT    DEFAULT 'gold'
-                        CHECK (badge_color IN ('gold','silver','bronze')),
-    note                TEXT,                            -- optional founder note (why they believed)
-    joined_at           INTEGER NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_founders_user ON founders(user_id);
-
--- Payment audit log (every stripe webhook + manual grant)
-CREATE TABLE IF NOT EXISTS payment_events (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id             INTEGER,
-    kind                TEXT    NOT NULL,                -- 'lifetime_purchase' | 'monthly_subscription' | 'refund' | 'webhook_received'
-    stripe_event_id     TEXT,                            -- idempotency key
-    payload             TEXT,                            -- JSON for debugging
-    created_at          INTEGER NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-);
-CREATE INDEX IF NOT EXISTS idx_payment_events_user ON payment_events(user_id);
-CREATE INDEX IF NOT EXISTS idx_payment_events_stripe ON payment_events(stripe_event_id);
 
 -- ============================================================
 -- Note links (backlinks detection between docs)
@@ -1047,46 +996,6 @@ def init_db() -> None:
         except Exception: pass
         conn.commit()
 
-    # Audit 2026-06-23: founders table migration — add CHECK constraint
-    # for badge_color. SQLite < 3.25 can't ALTER TABLE ... ADD CONSTRAINT,
-    # so we recreate the table in place (preserving data + indexes).
-    # Idempotent: only runs if the table exists without the constraint.
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='founders'"
-        ).fetchone()
-        if row and "badge_color IN ('gold','silver','bronze')" not in (row[0] or ""):
-            try:
-                conn.execute("""
-                    CREATE TABLE founders_new (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER NOT NULL UNIQUE,
-                        original_plan TEXT NOT NULL,
-                        original_cents INTEGER NOT NULL,
-                        badge_color TEXT DEFAULT 'gold'
-                            CHECK (badge_color IN ('gold','silver','bronze')),
-                        note TEXT,
-                        joined_at INTEGER NOT NULL,
-                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                    )
-                """)
-                conn.execute("""
-                    INSERT INTO founders_new (id, user_id, original_plan, original_cents,
-                                              badge_color, note, joined_at)
-                    SELECT id, user_id, original_plan, original_cents,
-                           CASE WHEN badge_color IN ('gold','silver','bronze')
-                                THEN badge_color ELSE 'gold' END,
-                           note, joined_at
-                    FROM founders
-                """)
-                conn.execute("DROP TABLE founders")
-                conn.execute("ALTER TABLE founders_new RENAME TO founders")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_founders_user ON founders(user_id)")
-                conn.commit()
-            except Exception as _e:
-                # If migration fails, log to stderr but don't crash the app
-                import sys as _sys
-                _sys.stderr.write(f"[init_db] founders CHECK migration: {_e}\n")
     # Full-text index: create, or repair the broken pre-2026-10 definition
     # (non-existent `tags` column, triggers never created) and rebuild it.
     from . import db_fts
@@ -1103,11 +1012,6 @@ def init_db() -> None:
         init_default_templates()
     except Exception:
         log.debug("init_default_templates failed", exc_info=True)
-    # Migrate pre-pivot lifetime holders into founders (idempotent)
-    try:
-        migrate_existing_founders()
-    except Exception:
-        log.debug("migrate_existing_founders failed", exc_info=True)
     # Purge expired sessions (audit 2026-06-23: was never called —
         # sessions table grew without bound. Now runs at every DB init.
     try:
@@ -1129,7 +1033,7 @@ def init_db() -> None:
 # thread-local connection (keyed by DB_PATH so tests/demo re-open on override)
 # is reused across calls to cut connect+PRAGMA churn. It is *re-entrant*: only
 # the outermost db() commits, and an exception rolls back the whole nesting —
-# so nested `with db()` (e.g. migrate_existing_founders -> register_founder)
+# so nested `with db()` (e.g. one helper calling another)
 # keeps one transaction instead of many. Enable only after validating.
 _conn_reuse = os.environ.get("OPS_DB_CONN_REUSE") == "1"
 _local = threading.local()
@@ -2182,7 +2086,7 @@ from .db_approvals import (  # noqa: E402,F401
     resolve_approval,
 )
 
-# Users / auth / sessions / device tokens / usage / entitlements moved to
+# Users / auth / sessions / device tokens / usage moved to
 # db_auth.py (2026-07-20). Re-exported so `db.<name>` keeps working.
 from .db_auth import (  # noqa: E402,F401
     create_device_token,
@@ -2190,36 +2094,17 @@ from .db_auth import (  # noqa: E402,F401
     create_user,
     delete_session,
     get_device_token,
-    get_entitlement,
     get_session,
     get_user,
     get_user_by_email,
-    grant_entitlement,
     list_device_tokens,
-    list_entitlements,
     log_usage,
     purge_expired_sessions,
     revoke_device_token,
-    revoke_entitlement,
     touch_device_token,
     update_user,
     usage_summary,
     verify_password,
-)
-
-# Founders pricing, founder registry, and payment-event log moved to
-# db_billing.py (2026-07-20). Re-exported here so `db.<name>` keeps working.
-from .db_billing import (  # noqa: E402,F401
-    FINAL_PRICE_CENTS,
-    PRICING_TIERS,
-    current_tier,
-    get_founder,
-    is_founder,
-    is_payment_event_seen,
-    list_founders,
-    log_payment_event,
-    migrate_existing_founders,
-    register_founder,
 )
 
 # External connections moved to db_connections.py (2026-07-20). Re-exported

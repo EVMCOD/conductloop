@@ -214,7 +214,7 @@ sleep 8
 PORT_OK=$(lsof -nP -iTCP:7777 -sTCP:LISTEN 2>&1 | wc -l | tr -d ' ')
 if [[ "$PORT_OK" -gt 0 ]]; then
   echo "  ✓ Sidecar bound 127.0.0.1:7777"
-  curl -s -m 5 http://127.0.0.1:7777/api/license/status | head -c 300
+  curl -s -m 5 http://127.0.0.1:7777/api/health | head -c 300
   echo ""
 else
   echo "  ✗ Sidecar did NOT bind — abort"

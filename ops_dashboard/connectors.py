@@ -9,7 +9,6 @@ Providers currently supported:
   - github       (personal access token)
   - notion       (integration token + workspace_id)
   - linear       (api key)
-  - stripe       (secret key)
   - slack        (bot token)
   - mcp          (uses mcp_servers table; tools come from MCP servers)
   - openai       (api key)
@@ -113,24 +112,6 @@ def test_linear(creds: dict) -> tuple[bool, str | None, dict]:
     return True, None, {"id": data.get("id"), "name": data.get("name"), "email": data.get("email")}
 
 
-def test_stripe(creds: dict) -> tuple[bool, str | None, dict]:
-    key = (creds.get("secret_key") or creds.get("api_key") or "").strip()
-    if not key:
-        return False, "missing secret_key", {}
-    h = {"Authorization": f"Bearer {key}"}
-    r = _get("https://api.stripe.com/v1/balance", h)
-    if isinstance(r, Exception):
-        return False, f"network: {r}", {}
-    if r.status_code != 200:
-        return False, f"HTTP {r.status_code}: {r.text[:200]}", {}
-    data = r.json()
-    return True, None, {
-        "livemode": data.get("livemode", False),
-        "currency": (data.get("available") or [{}])[0].get("currency"),
-        "balance": ((data.get("available") or [{}])[0].get("amount") or 0) / 100,
-    }
-
-
 def test_slack(creds: dict) -> tuple[bool, str | None, dict]:
     token = (creds.get("bot_token") or creds.get("token") or "").strip()
     if not token:
@@ -221,7 +202,6 @@ TESTERS = {
     "github": test_github,
     "notion": test_notion,
     "linear": test_linear,
-    "stripe": test_stripe,
     "slack": test_slack,
     "openai": test_openai,
     "anthropic": test_anthropic,
@@ -295,15 +275,6 @@ PROVIDER_TOOLS = {
         _openai_tool("linear_list_teams", "List Linear teams.",
                      {"type": "object", "properties": {}, "required": []}),
     ],
-    "stripe": [
-        _openai_tool("stripe_list_customers", "List Stripe customers.",
-                     {"type": "object", "properties": {"limit": {"type": "integer"}}, "required": []}),
-        _openai_tool("stripe_create_invoice", "Create a Stripe invoice.",
-                     {"type": "object",
-                      "properties": {"customer_id": {"type": "string"},
-                                    "amount_cents": {"type": "integer"}},
-                      "required": ["customer_id", "amount_cents"]}),
-    ],
     "slack": [
         _openai_tool("slack_send_message", "Send a message to a Slack channel.",
                      {"type": "object",
@@ -339,10 +310,6 @@ def list_provider_catalog() -> list[dict]:
          "description": "Issues, projects, cycles",
          "fields": [{"key": "api_key", "label": "API Key", "type": "password"}],
          "tools_count": len(PROVIDER_TOOLS.get("linear", []))},
-        {"id": "stripe", "name": "Stripe", "category": "billing",
-         "description": "Customers, invoices, subscriptions",
-         "fields": [{"key": "secret_key", "label": "Secret Key (sk_live_... or sk_test_...)", "type": "password"}],
-         "tools_count": len(PROVIDER_TOOLS.get("stripe", []))},
         {"id": "slack", "name": "Slack", "category": "comms",
          "description": "Messages, channels, threads",
          "fields": [{"key": "bot_token", "label": "Bot User OAuth Token (xoxb-...)", "type": "password"}],

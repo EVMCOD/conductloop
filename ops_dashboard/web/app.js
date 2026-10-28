@@ -4327,7 +4327,7 @@ async function renderCostsView() {
 }
 
 // ============================================================
-// Revenue view (💰) — Stripe + Apple + Google
+// Revenue view (💰) — Apple + Google
 // ============================================================
 async function renderRevenueView() {
   var main = document.getElementById('main-content');
@@ -4344,7 +4344,7 @@ async function renderRevenueView() {
 
     var html = '';
     html += '<div class="view-header"><h1>💰 Revenue</h1>';
-    html += '<div class="muted">Stripe + Apple App Store + Google Play · ' + sources.length + ' sources · ' + s.count + ' events</div>';
+    html += '<div class="muted">Apple App Store + Google Play · ' + sources.length + ' sources · ' + s.count + ' events</div>';
     html += '<div style="flex:1"></div>';
     html += '<button id="rev-seed" style="background:var(--bg-soft);color:var(--ink);border:1px solid var(--border);padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;margin-right:6px">+ seed mock</button>';
     html += '<button id="rev-poll" style="background:var(--blue);color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px">↻ poll all</button></div>';

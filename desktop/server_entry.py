@@ -4,8 +4,8 @@ Starts the local dashboard the same way `ops_dashboard serve` does, but without
 Typer (simpler to freeze). The packaged desktop app runs this binary as a Tauri
 sidecar and points its window at http://127.0.0.1:<port>/.
 
-ConductLoop is free (since v1.1.0): there is no license gate, so the sidecar no
-longer sets OPS_LICENSE_ENFORCE (licensing.enforce() ignores it anyway).
+ConductLoop is free (since v1.1.0): there is no license gate and the sidecar
+sets no license-related environment.
 """
 import os
 import sys
