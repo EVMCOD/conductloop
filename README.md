@@ -6,7 +6,7 @@ ConductLoop indexes your own material — an Obsidian vault, memory/notes folder
 
 - **Website:** <https://conductloop.com>
 - **macOS builds:** [EVMCOD/conductloop-releases](https://github.com/EVMCOD/conductloop-releases/releases/latest)
-- **Price:** free. There is no license gate, subscription or trial in the app (`licensing.enforce()` returns `False`).
+- **Price:** free. There is no license gate, subscription or trial in the app.
 
 > The Python package is still named `ops_dashboard` for backwards compatibility. The product name is **ConductLoop**.
 
@@ -21,7 +21,7 @@ ConductLoop indexes your own material — an Obsidian vault, memory/notes folder
   2. `<repo>/data/ops.db` (dev checkout, if `data/` exists)
   3. macOS `~/Library/Application Support/com.conductloop.desktop/data/ops.db` · Linux `~/.local/share/conductloop/ops.db` · Windows `%LOCALAPPDATA%\ConductLoop\data\ops.db`
 - At-rest secrets (DB encryption key, connector credentials) go to the macOS Keychain, or to `0600` files in the data dir elsewhere (`ops_dashboard/secrets_store.py`). Connector credentials are Fernet-encrypted in the DB.
-- Network calls only happen for features you turn on: your model provider, connectors you configure (GitHub, Stripe, Slack, Telegram, Discord, Google Search Console/Analytics, Sentry, …), URL health checks, webhooks, and the Tauri auto-updater in the desktop app.
+- Network calls only happen for features you turn on: your model provider, connectors you configure (GitHub, Slack, Telegram, Discord, Google Search Console/Analytics, Sentry, …), URL health checks, webhooks, and the Tauri auto-updater in the desktop app.
 - Error reporting to Sentry is **opt-in** (only if you set `SENTRY_DSN`).
 - If you install `sentence-transformers`, the embedding model (`all-MiniLM-L6-v2`) is downloaded once from Hugging Face and then runs locally.
 

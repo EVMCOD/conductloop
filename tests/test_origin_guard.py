@@ -194,19 +194,19 @@ def test_side_effect_gets_are_guarded(srv):
         _forbidden(call("GET", p, headers={"Sec-Fetch-Site": "cross-site"}), "cross_site")
     # Any other /api GET from a foreign page is refused too (its response was
     # unreadable anyway), so a side-effect GET missing from the list is covered.
-    _forbidden(call("GET", "/api/license/status", headers={"Sec-Fetch-Site": "cross-site"}),
+    _forbidden(call("GET", "/api/auth/me", headers={"Sec-Fetch-Site": "cross-site"}),
                "cross_site")
     # Same-origin reads (no Origin on a same-origin GET), CLI clients and the
     # public CORS paths are unaffected.
-    st, _, _ = call("GET", "/api/license/status", headers={"Sec-Fetch-Site": "same-origin"})
+    st, _, _ = call("GET", "/api/auth/me", headers={"Sec-Fetch-Site": "same-origin"})
     assert st == 200
-    st, _, _ = call("GET", "/api/license/status")
+    st, _, _ = call("GET", "/api/auth/me")
     assert st == 200
     st, _, _ = call("GET", "/api/health", headers={"Sec-Fetch-Site": "cross-site", "Origin": EVIL})
     assert st == 200
     # Non-API pages (the UI itself, notes) are not origin-checked.
     assert not origin_guard.needs_check("GET", "/")
-    assert origin_guard.SIDE_EFFECT_GETS >= {"/api/billing/cancel-subscription", "/api/docs/create"}
+    assert origin_guard.SIDE_EFFECT_GETS >= {"/api/auth/logout", "/api/docs/create"}
 
 
 def test_seed_starter_force_requires_explicit_confirmation(srv):
