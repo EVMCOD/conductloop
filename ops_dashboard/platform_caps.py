@@ -91,6 +91,20 @@ def code_message(reason: str | None) -> str:
             f"machine. ConductLoop never runs commands without a sandbox.{extra}")
 
 
+def keychain_message(reason: str | None) -> str:
+    """Why there is no system keychain (``secrets_store.keychain_status()['reason']``)."""
+    if platform_id() == LINUX and reason not in (None, "disabled"):
+        why = {"keyring_missing": "the 'keyring' Python package is not installed",
+               "no_secret_service": "no Secret Service was found (it needs a running D-Bus session and "
+                                    "GNOME Keyring, KWallet or KeePassXC)",
+               "timeout": "the Secret Service did not answer (a locked keyring may be waiting for "
+                          "an unlock prompt)"}.get(reason, "the Secret Service did not work")
+        return (f"There is no system keychain: {why}. Provider keys are kept in the encrypted vault, "
+                f"and connectors that store tokens stay off, because ConductLoop never writes them to a file.")
+    return ("Keys are kept in an encrypted file on this machine; there is no system "
+            f"keychain integration on {platform_name()} yet.")
+
+
 def require_code_sessions() -> None:
     """Raise ``PlatformUnsupported`` when code sessions cannot exist here."""
     if not code_sessions_supported():
@@ -121,6 +135,7 @@ def capabilities(*, backend: str | None = ...) -> dict[str, Any]:  # type: ignor
         backend = sandbox.detect_backend()
     from . import secrets_store
     keychain = bool(secrets_store.keychain_available())
+    kc_reason = None if keychain else secrets_store.keychain_status().get("reason")
     browser_ok = browser_supported()
     return {
         "ok": True,
@@ -130,8 +145,6 @@ def capabilities(*, backend: str | None = ...) -> dict[str, Any]:  # type: ignor
                     "reason": None if browser_ok else PLATFORM_UNSUPPORTED,
                     "requires": "macOS 14+", "message": browser_message()},
         "code_execution": code_execution(backend),
-        "keychain": {"available": keychain,
-                     "message": "" if keychain else
-                     "Keys are kept in an encrypted file on this machine; there is no system "
-                     f"keychain integration on {platform_name()} yet."},
+        "keychain": {"available": keychain, "reason": kc_reason,
+                     "message": "" if keychain else keychain_message(kc_reason)},
     }

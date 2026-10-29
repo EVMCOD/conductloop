@@ -58,6 +58,12 @@ SENSITIVE_HOME_PATHS = (".ssh", ".aws", ".azure", ".gnupg", ".kube", ".docker",
                         ".git-credentials", ".npmrc", ".pypirc", ".yarnrc",
                         ".config/conductloop", "Library/Keychains",
                         "Library/Application Support/ConductLoop")
+# Linux only (bwrap, never the macOS profile): where the Secret Service keeps its
+# keyring files. ConductLoop's own keys live there once the Linux keychain
+# backend is on, so a command must not be able to read the files either. (Reaching
+# the live keyring through D-Bus is already blocked: see ``socket_hides``.)
+LINUX_KEYRING_PATHS = (".local/share/keyrings", ".local/share/kwalletd", ".kde/share/apps/kwallet",
+                       ".local/share/kwallet")
 
 
 class SandboxUnavailable(RuntimeError):
@@ -225,7 +231,7 @@ def bwrap_argv(argv: list[str], *, worktree: Path, tmp: Path, cwd: Path) -> list
            "--die-with-parent", "--new-session",
            "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc"]
     home = _home()
-    for rel in SENSITIVE_HOME_PATHS:
+    for rel in (*SENSITIVE_HOME_PATHS, *LINUX_KEYRING_PATHS):
         p = home / rel
         if p.is_dir():
             out += ["--tmpfs", str(p)]

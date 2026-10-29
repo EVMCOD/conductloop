@@ -8,3 +8,4 @@ bcrypt>=5.0.0
 cryptography>=49.0.0
 rapidfuzz>=3.14.5
 PyYAML>=6.0.2          # SKILL.md frontmatter, safe_load only (L5, D8)
+keyring>=25.0.0; sys_platform == "linux"   # Linux only: Secret Service backend (secrets_store)
