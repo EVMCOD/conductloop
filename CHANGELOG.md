@@ -4,6 +4,8 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- Docs only: `docs/PORTABILITY.md` audits everything that is macOS-only (keychain, sandbox, in-app browser, paths, sidecar, menu, updater, CI) and plans the Linux (experimental) and Windows work. Nothing changes in the app.
+
 ## 1.2.2 — 2026-10-29 — Updates that work, a signed DMG and the folder picker in Setup
 
 **Install this one from the DMG** (1.2.1 cannot update itself, see below). From
