@@ -8,6 +8,7 @@ use std::sync::Mutex;
 
 mod agent_bridge;
 mod browser;
+mod updates;
 
 use tauri::menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
 use tauri::webview::PageLoadEvent;
@@ -31,8 +32,15 @@ const NAV_JS: &str = include_str!("nav.js");
 /// "Close Window" moves to ⇧⌘W, like in Safari.
 fn app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
     let menu = Menu::default(handle)?;
-    for item in menu.items()? {
+    for (i, item) in menu.items()?.into_iter().enumerate() {
         let MenuItemKind::Submenu(sub) = item else { continue };
+        // The app menu (ConductLoop): "Check for Updates…" right after About.
+        if i == 0 && cfg!(target_os = "macos") {
+            sub.insert(
+                &MenuItem::with_id(handle, "check-updates", "Check for Updates…", true, None::<&str>)?,
+                1,
+            )?;
+        }
         for entry in sub.items()? {
             if let MenuItemKind::Predefined(p) = &entry {
                 if p.text()? == "Close Window" {
@@ -225,6 +233,10 @@ pub fn run() {
         .menu(app_menu)
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
+            if id == "check-updates" {
+                updates::check_from_menu(app);
+                return;
+            }
             // On the browser page, ⌘W and Back/Forward act on the open tab.
             let tab = browser::visible_active_tab(app);
             match (id, tab) {
@@ -278,6 +290,10 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // Release builds look for an update once, quietly, after start-up.
+            if !cfg!(debug_assertions) {
+                updates::check_after_startup(app.handle());
+            }
             // 0. In-app browser state + filtering proxy (browser design PR 4/5).
             app.manage(browser::BrowserState::new(browser::start_proxy()));
             if let Some(win) = app.get_window("main") {

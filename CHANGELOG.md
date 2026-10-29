@@ -4,6 +4,13 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- **The app can update itself.** "Check for Updates…" is in the ConductLoop menu,
+  and the app also looks once, quietly, a little after it starts. When there is a
+  new version it asks; "Install and restart" downloads it, checks its signature,
+  replaces the app and restarts it. Nothing is installed without that click. Up to
+  1.2.1 nothing ever started a check, so no install could update itself: from
+  1.2.1, install this version from the DMG once more.
+
 - **The folder picker in Setup too.** Setup → Library now has "Choose…" next to
   each folder field and "Add folder…" for the folders to index, like the
   welcome page. It only fills the field: "Save folders" saves.
