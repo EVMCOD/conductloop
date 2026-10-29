@@ -473,8 +473,11 @@ function renderNotesHome() {
   document.getElementById('breadcrumb').innerHTML = '<span>Your notes</span>';
   var total = (_allData.stats && _allData.stats.total) || 0;
   var existing = main.querySelector('.notes-home');
-  if (existing) {  // a watch refresh: keep what is being typed
+  if (existing && _notesHomeRefresh) {  // a watch refresh: keep the fields, reload the list
     existing.querySelector('.nh-count').textContent = notesHomeCount(total);
+    var choose = existing.querySelector('.nh-sub a');
+    if (total && choose) choose.remove();
+    _notesHomeRefresh();
     return;
   }
   function el(tag, cls, text) {
@@ -541,26 +544,32 @@ function renderNotesHome() {
     });
   }
   function recent() {
-    heading.textContent = 'Recent';
     fetchJSON('/api/find/recent?n=12').then(function(rows) {
-      if (!search.value.trim()) show(rows, 'Nothing indexed yet.');
+      if (search.value.trim()) return;
+      heading.textContent = 'Recent';
+      show(rows, 'Nothing indexed yet.');
     }).catch(function() {});
+  }
+  function find(q) {
+    fetchJSON('/api/find?q=' + encodeURIComponent(q) + '&n=15').then(function(rows) {
+      if (search.value.trim() !== q) return;
+      heading.textContent = 'Results';
+      show(rows, 'No note matches “' + q + '”.');
+    }).catch(function() {});
+  }
+  function refresh() {
+    var q = search.value.trim();
+    if (q) find(q); else recent();
   }
   var timer = null;
   search.addEventListener('input', function() {
     clearTimeout(timer);
-    var q = search.value.trim();
-    if (!q) { recent(); return; }
-    timer = setTimeout(function() {
-      fetchJSON('/api/find?q=' + encodeURIComponent(q) + '&n=15').then(function(rows) {
-        if (search.value.trim() !== q) return;
-        heading.textContent = 'Results';
-        show(rows, 'No note matches “' + q + '”.');
-      }).catch(function() {});
-    }, 150);
+    timer = setTimeout(refresh, search.value.trim() ? 150 : 0);
   });
-  recent();
+  _notesHomeRefresh = refresh;
+  refresh();
 }
+var _notesHomeRefresh = null;
 
 function notesHomeCount(total) {
   if (!total) return 'No notes indexed yet.';
