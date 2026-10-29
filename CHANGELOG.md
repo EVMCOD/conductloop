@@ -4,6 +4,8 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- **Linux: a File menu with Close Tab (Ctrl+W) and Close Window (Ctrl+Shift+W).** The default Linux menu has no File menu, so the two shortcuts did nothing there. The macOS menu does not change. Not tested on a real Linux desktop yet.
+
 ## 1.2.2 — 2026-10-29 — Updates that work, a signed DMG and the folder picker in Setup
 
 **Install this one from the DMG** (1.2.1 cannot update itself, see below). From
