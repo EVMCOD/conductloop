@@ -32,6 +32,9 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 pub type AllowIp = fn(IpAddr) -> bool;
 
 const MAX_RECENT_BLOCKS: usize = 32;
+/// `resolve_allowed`'s answer for a destination the policy refuses (as
+/// opposed to a name that does not resolve).
+const NOT_ALLOWED: &str = "destination not allowed";
 static RECENT_BLOCKS: Mutex<VecDeque<(Instant, String)>> = Mutex::new(VecDeque::new());
 
 /// A tab whose request the proxy refuses only sees a failed load: WebKit
@@ -229,7 +232,7 @@ pub fn resolve_allowed(
         if let Verdict::Block(_) = check_host(host) {
             // Literal IPs and local names are judged without DNS.
             if host.parse::<IpAddr>().is_err() || !allow(host.parse().unwrap()) {
-                return Err("destination not allowed");
+                return Err(NOT_ALLOWED);
             }
         }
     }
@@ -239,7 +242,7 @@ pub fn resolve_allowed(
         .collect();
     let ok: Vec<SocketAddr> = addrs.into_iter().filter(|a| allow(a.ip())).collect();
     if ok.is_empty() {
-        Err("destination not allowed")
+        Err(NOT_ALLOWED)
     } else {
         Ok(ok)
     }
@@ -343,7 +346,11 @@ fn handle(mut client: TcpStream, allow: AllowIp, check_names: bool) -> io::Resul
     let addrs = match resolve_allowed(&host, port, allow, check_names) {
         Ok(a) => a,
         Err(why) => {
-            note_block(&host);
+            // Only policy refusals: a name that does not resolve is not
+            // "a local or private address" and must not be reported as one.
+            if why == NOT_ALLOWED {
+                note_block(&host);
+            }
             return respond(&client, 403, why);
         }
     };
@@ -544,6 +551,18 @@ mod tests {
         assert!(r.starts_with("HTTP/1.1 403"), "{r}");
         assert!(recent_blocks(Duration::from_secs(30)).contains(&"localhost".to_string()));
         assert!(!recent_blocks(Duration::ZERO).contains(&"localhost".to_string()));
+        p.stop();
+    }
+
+    #[test]
+    fn a_name_that_does_not_resolve_is_not_reported_as_a_block() {
+        let p = spawn(is_public_ip).unwrap();
+        let r = roundtrip(p.addr, "GET http://no-such-host.invalid/x HTTP/1.1\r\n\r\n");
+        assert!(r.starts_with("HTTP/1.1 403"), "{r}");
+        assert!(r.contains("cannot resolve"), "{r}");
+        assert!(
+            !recent_blocks(Duration::from_secs(30)).contains(&"no-such-host.invalid".to_string())
+        );
         p.stop();
     }
 
