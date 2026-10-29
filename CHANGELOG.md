@@ -2,7 +2,13 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
-## Unreleased
+## 1.2.3 — 2026-10-29 — A home for your notes and a Brain that helps without a key
+
+The first version that installs from the app: in 1.2.2, "Check for Updates…"
+(or the quiet check a little after start-up) offers it. On the Mac, what
+changes is the first part of the list below (the notes home, the Brain without
+a key, Setup); the Linux and Windows items are groundwork for those systems and
+leave the Mac app as it was.
 
 - **A home for your notes.** Without projects (a fresh install has none), the
   dashboard opened on an empty project canvas and search hid behind ⌘P. It now

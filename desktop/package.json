@@ -1,6 +1,6 @@
 {
   "name": "conductloop-desktop",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "private": true,
   "description": "ConductLoop — desktop wrapper for the local-first second-brain",
   "scripts": {
