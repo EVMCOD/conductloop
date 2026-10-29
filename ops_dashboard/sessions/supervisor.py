@@ -27,6 +27,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from .. import platform_caps
 from . import limits, providers
 from .runner import RunOutcome
 from .store import SessionStore
@@ -84,6 +85,8 @@ class Supervisor:
             raise SupervisorError(f"session is {s['status']}; only {STARTABLE_STATUSES} can start")
         if not s["worktree_path"] and str(s.get("browser_mode") or "off") == "off":
             raise SupervisorError("session has no worktree")  # browser sessions (PR 8) have none
+        if s["worktree_path"]:
+            platform_caps.require_code_sessions()  # Windows: no sandbox, no code sessions
         with self._lock:
             alive = [sid for sid, h in self._handles.items() if h.thread.is_alive()]
             if session_id in alive:

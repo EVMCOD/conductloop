@@ -40,11 +40,14 @@
     #agent[hidden]{display:none}
     #agent input,#agent textarea{background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:5px;font:inherit;font-size:12px}
     #agent button{background:var(--amber);color:#111;border:0;border-radius:6px;padding:6px;cursor:pointer}
+    #unsupported{margin:24px;padding:16px;border:1px solid var(--amber);border-radius:8px;color:var(--amber);font-size:14px;line-height:1.5}
+    #unsupported[hidden]{display:none}
     #empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px;text-align:center;padding:24px}
     .badge{font-size:10px;border:1px solid var(--amber);color:var(--amber);border-radius:4px;padding:0 4px;margin-left:6px}
   </style>
 </head>
 <body>
+  <div id="unsupported" role="status" hidden></div>
   <div id="tabs"></div>
   <div id="bar">
     <a href="/" style="color:var(--muted);text-decoration:none;padding:4px 6px" title="Back to ConductLoop">←&nbsp;App</a>
@@ -87,6 +90,18 @@
 <script>
 (function () {
   "use strict";
+  // Platform gate: the browser only exists on macOS. Elsewhere the server says
+  // so (GET /api/platform) and the page shows why instead of offering to enable it.
+  fetch("/api/platform", { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (p) {
+    if (!p || !p.browser || p.browser.available !== false) return;
+    var u = document.getElementById("unsupported");
+    u.textContent = p.browser.message || "The in-app browser is not available on this system.";
+    u.hidden = false;
+    ["tabs", "bar", "msg", "agentbar", "approvals", "main"].forEach(function (id) {
+      var el = document.getElementById(id); if (el) el.style.display = "none";
+    });
+  }).catch(function () { /* unknown: leave the page as it was */ });
+
   // Browser design PR 4. Native child webviews (tab-*) are positioned over
   // #viewport by the desktop app; this page only draws the chrome. Pages in
   // the tabs never get IPC, cookies of this app, nor loopback/LAN access.
@@ -115,6 +130,7 @@
     "invalid_url": "That does not look like a URL.",
     "too_many_tabs": "Too many tabs (max 8).",
     "macos_14_required": "The in-app browser needs macOS 14 (Sonoma) or later.",
+    "platform_unsupported": "The in-app browser is only available on macOS 14 or later. It is turned off on this system.",
     "proxy_unavailable": "The browser's network filter could not start, so tabs are disabled. Restart the app.",
     "extract_timeout": "The page did not answer in time. Try again when it has finished loading.",
     "extract_too_large": "This page is too large to save.",

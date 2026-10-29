@@ -15,6 +15,8 @@ What the OS sandbox gives (design doc D2):
   the Keychain denied. ``sandbox-exec`` is deprecated by Apple but still
   shipped and used by major tools; the profile is probed at start-up and a
   profile that fails to load fails CLOSED (the command doesn't run).
+* **Windows**: there is no backend and ``run`` always refuses, even with
+  ``allow_unsandboxed`` (see ``platform_caps``).
 * **No backend**: commands are REFUSED unless the caller passes
   ``allow_unsandboxed=True``; then they run with only the environment
   protections below and the result says ``sandbox: "none"``. Environment
@@ -43,6 +45,8 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+
+from .. import platform_caps
 
 DEFAULT_TIMEOUT_S = 300
 DEFAULT_MAX_OUTPUT = 64 * 1024            # bytes kept (half head, half tail)
@@ -287,6 +291,8 @@ def detect_backend() -> str | None:
     forced = os.environ.get("CONDUCTLOOP_SANDBOX", "").strip().lower()
     if forced == "none":
         return None
+    if not platform_caps.code_sessions_supported():
+        return None  # Windows: no OS sandbox exists
     if sys.platform == "darwin" and os.path.exists("/usr/bin/sandbox-exec"):
         tmp = Path(tempfile.gettempdir()).resolve()
         if _probe("sandbox-exec", ["/usr/bin/sandbox-exec", "-p",
@@ -343,6 +349,10 @@ def run(argv: list[str], *, worktree: Path, cwd: Path, path_dirs: list[str],
         allow_unsandboxed: bool = False) -> RunResult:
     if not argv or not all(isinstance(a, str) and "\0" not in a for a in argv):
         raise ValueError("argv must be a non-empty list of strings")
+    if not platform_caps.code_sessions_supported():
+        # No sandbox backend exists here (and the POSIX-only limits below would
+        # not apply). Refused even with allow_unsandboxed or an explicit backend.
+        raise SandboxUnavailable(platform_caps.code_message(platform_caps.PLATFORM_UNSUPPORTED))
     backend = backend if backend is not None else detect_backend()
     if backend not in (None, "bwrap", "sandbox-exec"):
         # A typo ("bubblewrap") must not fall through to running unsandboxed.
