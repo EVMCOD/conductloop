@@ -23,15 +23,35 @@ const BACKEND_URL: &str = "http://localhost:7777";
 /// browser chrome, so most pages had no way back to the dashboard.
 const NAV_JS: &str = include_str!("nav.js");
 
-/// The default macOS menu plus a Go menu (Back ⌘[, Forward ⌘], Home ⇧⌘H),
-/// placed after View like in Safari and Finder.
+/// What this app adds to the File menu: (id, label, accelerator). The ids are
+/// matched in `on_menu_event`. `CmdOrCtrl` is ⌘ on macOS and Ctrl elsewhere.
 ///
 /// ⌘W is "Close Tab": on the browser page it closes the open tab, elsewhere
 /// it closes the window as before. It used to be the default "Close Window"
 /// everywhere, so ⌘W in the browser quit the whole app and its server.
 /// "Close Window" moves to ⇧⌘W, like in Safari.
+const FILE_ITEMS: [(&str, &str, &str); 2] = [
+    ("close-tab", "Close Tab", "CmdOrCtrl+W"),
+    ("close-window", "Close Window", "CmdOrCtrl+Shift+W"),
+];
+
+fn file_items<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<Vec<MenuItem<R>>> {
+    FILE_ITEMS
+        .iter()
+        .map(|(id, label, accel)| MenuItem::with_id(handle, *id, *label, true, Some(*accel)))
+        .collect()
+}
+
+/// The default menu plus a Go menu (Back ⌘[, Forward ⌘], Home ⇧⌘H), placed
+/// after View like in Safari and Finder.
+///
+/// macOS (and Windows) already have a File menu in the default menu: the two
+/// items are appended to it, as before. The default Linux menu has no File
+/// menu at all, so there Close Tab (Ctrl+W) and Close Window (Ctrl+Shift+W)
+/// would have no menu and no shortcut: a File menu is created first.
 fn app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
     let menu = Menu::default(handle)?;
+    let mut has_file = false;
     for (i, item) in menu.items()?.into_iter().enumerate() {
         let MenuItemKind::Submenu(sub) = item else { continue };
         // The app menu (ConductLoop): "Check for Updates…" right after About.
@@ -49,15 +69,17 @@ fn app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<Me
             }
         }
         if sub.text()? == "File" {
-            sub.append(&MenuItem::with_id(handle, "close-tab", "Close Tab", true, Some("CmdOrCtrl+W"))?)?;
-            sub.append(&MenuItem::with_id(
-                handle,
-                "close-window",
-                "Close Window",
-                true,
-                Some("CmdOrCtrl+Shift+W"),
-            )?)?;
+            has_file = true;
+            for it in file_items(handle)? {
+                sub.append(&it)?;
+            }
         }
+    }
+    if !has_file {
+        let items = file_items(handle)?;
+        let refs: Vec<&dyn tauri::menu::IsMenuItem<R>> =
+            items.iter().map(|i| i as &dyn tauri::menu::IsMenuItem<R>).collect();
+        menu.insert(&Submenu::with_items(handle, "File", true, &refs)?, 0)?;
     }
     let go = Submenu::with_items(
         handle,
@@ -404,4 +426,40 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running ConductLoop desktop app");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FILE_ITEMS;
+
+    /// These are the exact ids, labels and shortcuts macOS had before the
+    /// Linux File menu: changing any of them changes the macOS menu.
+    #[test]
+    fn file_items_keep_their_ids_labels_and_shortcuts() {
+        assert_eq!(
+            FILE_ITEMS,
+            [
+                ("close-tab", "Close Tab", "CmdOrCtrl+W"),
+                ("close-window", "Close Window", "CmdOrCtrl+Shift+W"),
+            ]
+        );
+    }
+
+    /// `CmdOrCtrl` is Ctrl on Linux and Windows: no item may use a
+    /// macOS-only modifier (Cmd, Command, Super).
+    #[test]
+    fn file_shortcuts_are_ctrl_on_linux() {
+        for (_, _, accel) in FILE_ITEMS {
+            assert!(accel.starts_with("CmdOrCtrl+"), "{accel}");
+        }
+    }
+
+    /// Both File items have an arm in the menu event handler. (The strings
+    /// are escaped so this test does not match its own source.)
+    #[test]
+    fn file_item_ids_are_handled() {
+        let src = include_str!("lib.rs");
+        assert!(src.contains("(\"close-tab\", Some(tab))"));
+        assert!(src.contains("(\"close-tab\" | \"close-window\", _)"));
+    }
 }

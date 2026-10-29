@@ -61,6 +61,9 @@
       err_forbidden_origin: 'Request refused: it did not come from this app.',
       err_limit: 'Limit reached: {0}', err_path_conflict: 'Path conflict: {0}',
       err_invalid_state: 'Not possible right now: {0}',
+      err_platform: 'Not available on this system: {0}',
+      code_off_platform: 'Code sessions are turned off on this system (Windows): there is no OS sandbox for running commands yet, and ConductLoop never runs them without one.',
+      code_off_sandbox: 'Running commands is turned off: the OS sandbox (bubblewrap on Linux) is missing or does not work. Agents can still read and edit files, but cannot run tests.',
       err_price_missing: 'Set a price for this model first (Prices panel), then resume.',
       err_budget_exhausted: 'Budget exhausted: raise the budget to resume.',
       err_iteration_limit: 'Iteration limit reached: raise max iterations to resume.',
@@ -121,6 +124,9 @@
       err_forbidden_origin: 'Petición rechazada: no viene de esta aplicación.',
       err_limit: 'Límite alcanzado: {0}', err_path_conflict: 'Conflicto de rutas: {0}',
       err_invalid_state: 'No es posible ahora mismo: {0}',
+      err_platform: 'No disponible en este sistema: {0}',
+      code_off_platform: 'Las sesiones de código están desactivadas en este sistema (Windows): todavía no hay sandbox del sistema para ejecutar comandos, y ConductLoop nunca los ejecuta sin uno.',
+      code_off_sandbox: 'La ejecución de comandos está desactivada: falta el sandbox del sistema (bubblewrap en Linux) o no funciona. Los agentes pueden leer y editar archivos, pero no ejecutar tests.',
       err_price_missing: 'Pon primero un precio para este modelo (panel Precios) y reanuda.',
       err_budget_exhausted: 'Presupuesto agotado: súbelo para reanudar.',
       err_iteration_limit: 'Límite de iteraciones alcanzado: súbelo para reanudar.',
@@ -229,6 +235,7 @@
       case 'limit_reached': return t('err_limit', msg);
       case 'path_conflict': return t('err_path_conflict', msg);
       case 'invalid_state': return t('err_invalid_state', msg);
+      case 'platform_unsupported': return t('err_platform', msg);
       case 'price_missing': return t('err_price_missing');
       case 'budget_exhausted': return t('err_budget_exhausted');
       case 'iteration_limit': return t('err_iteration_limit');
@@ -691,9 +698,24 @@
     });
   }
 
+  // What this OS cannot do (GET /api/platform): say so up front instead of failing later.
+  async function loadPlatform() {
+    var p = await api('GET', '/api/platform');
+    var c = p.code_execution || {};
+    var note = $('platform-note');
+    if (c.available !== false) { clearError(note); return; }
+    note.hidden = false;
+    note.textContent = t(c.reason === 'platform_unsupported' ? 'code_off_platform' : 'code_off_sandbox');
+    if (c.reason === 'platform_unsupported') {
+      var btn = $('session-form').querySelector('button[type="submit"]');
+      if (btn) btn.disabled = true;
+    }
+  }
+
   async function init() {
     translatePage();
     wire();
+    try { await loadPlatform(); } catch (e) { /* unknown platform: no banner */ }
     try { await Promise.all([loadRepos(), loadPrices()]); } catch (e) { if (e instanceof ApiFailure) showError($('global-error'), e); }
     await refresh(true);
     var m = /[?&]session=(\d+)/.exec(location.search);

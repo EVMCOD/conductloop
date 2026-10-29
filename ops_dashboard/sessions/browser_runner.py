@@ -25,7 +25,7 @@ import json
 import threading
 from typing import Any
 
-from .. import web_ask
+from .. import platform_caps, web_ask
 from . import providers
 from .browser import BrowserBridge, BrowserDenied, BrowserTools, BrowserUnavailable, allowed_tools
 from .runner import (
@@ -155,7 +155,9 @@ class BrowserRunner(SessionRunner):
         tools.seed_sites(f"{task['title']}\n{task['prompt']}")   # sites the user named
         if not self.bridge.available:
             return self._stop(task, session_status="waiting_human", task_status="blocked",
-                              reason="the in-app browser is not available (desktop app, macOS 14+)",
+                              reason=("the in-app browser is not available (desktop app, macOS 14+)"
+                                      if platform_caps.browser_supported()
+                                      else platform_caps.browser_message()),
                               iterations=0)
         nonce = web_ask.new_nonce()
         messages: list[dict] = [{"role": "user", "content":
