@@ -4,6 +4,23 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- **A home for your notes.** Without projects (a fresh install has none), the
+  dashboard opened on an empty project canvas and search hid behind ⌘P. It now
+  opens on "Your notes": how many are indexed, a box to ask a question (it goes
+  to the Brain in Chat, filled in, not sent), a search box and the recent notes,
+  each opening in the note view. With projects the canvas is unchanged.
+- **The Brain is useful without an AI key.** With no provider it answered with a
+  placeholder, even when it had found the right note. It now quotes the lines of
+  the notes it found that share the most words with the question, with their
+  [N] sources, and says how to get written answers. Same in Chat, team mode
+  included.
+- **Setup marks what is optional.** Semantic search, projects and the memory
+  export to Obsidian are extras: shown with "–" and "optional", and no longer
+  counted against "ready". Their hints no longer ask for a terminal (`pip
+  install`, `OPS_PROJECTS_FILE`, `ops obsidian-sync`), which the desktop app does
+  not have, and the checklist shows folder names as text.
+- The dashboard's "Aprendizaje" link and "Yo creo — segundo cerebro" node are in
+  English, like the rest of the dashboard.
 - Docs only: `docs/PORTABILITY.md` audits everything that is macOS-only (keychain, sandbox, in-app browser, paths, sidecar, menu, updater, CI) and plans the Linux (experimental) and Windows work. Nothing changes in the app.
 
 ## 1.2.2 — 2026-10-29 — Updates that work, a signed DMG and the folder picker in Setup

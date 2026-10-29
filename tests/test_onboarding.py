@@ -23,7 +23,8 @@ def test_checklist_shape(onboarding):
     assert r["total"] == 9
     assert len(r["checks"]) == 9
     assert 0 <= r["passed"] <= 9
-    assert r["ready"] is (r["passed"] == 9)
+    assert r["ready"] is (r["required_passed"] == r["required"])
+    assert r["required"] == 6 and {c["id"] for c in r["checks"] if c["optional"]} == {"embeddings", "projects", "obsidian_sync"}
     steps = [c["step"] for c in r["checks"]]
     assert steps == list(range(1, 10))
     assert "edition" not in {c["id"] for c in r["checks"]}
@@ -41,3 +42,23 @@ def test_passing_checks_reflect_environment(onboarding):
     assert by_id["logging"]["ok"] is True
     # A fresh install has no indexed documents yet.
     assert by_id["documents"]["ok"] is False
+
+
+def test_details_need_no_terminal_in_the_desktop_app(onboarding, monkeypatch):
+    import builtins
+    import sys
+    real_import = builtins.__import__
+
+    def no_st(name, *a, **k):
+        if name == "sentence_transformers":
+            raise ImportError(name)
+        return real_import(name, *a, **k)
+    monkeypatch.setattr(builtins, "__import__", no_st)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr("ops_dashboard.projects.PROJECTS", [])
+    by_id = {c["id"]: c for c in onboarding.checklist()["checks"]}
+    for cid in ("embeddings", "projects", "obsidian_sync"):
+        assert by_id[cid]["optional"] is True
+        detail = by_id[cid]["detail"]
+        assert "pip install" not in detail and "OPS_PROJECTS_FILE" not in detail and "`ops " not in detail, detail
+    assert "not in the desktop app" in by_id["embeddings"]["detail"]
