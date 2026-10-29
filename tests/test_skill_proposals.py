@@ -108,7 +108,7 @@ def _spy_resolve(monkeypatch, providers: dict):
 
 
 def _files_under(root: Path) -> list[str]:
-    return sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
+    return sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
 
 
 # ---------- migration ----------

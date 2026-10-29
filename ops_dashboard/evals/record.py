@@ -132,7 +132,7 @@ def record_case(suite: _runner.Suite, case: _runner.Case, *, provider: str, mode
     if suite.target != "brain.ask":
         raise RecordRefused("no_cassette_target", f"suite {suite.name} does not use cassettes")
     rec = RecordingProvider(provider_builder(provider, model, key_name))
-    with tempfile.TemporaryDirectory(prefix="cl-eval-rec-") as td:
+    with tempfile.TemporaryDirectory(prefix="cl-eval-rec-", ignore_cleanup_errors=True) as td:
         with _runner.case_env(suite, case, Path(td)):
             from .. import brain
             orig = brain.resolve_provider

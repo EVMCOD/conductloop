@@ -65,6 +65,8 @@ def pytest_collection_modifyitems(config, items):
     from windows_skips import SKIPPED_ON_WINDOWS
 
     for item in items:
-        reason = SKIPPED_ON_WINDOWS.get(Path(str(item.fspath)).name)
+        name = Path(str(item.fspath)).name
+        test = getattr(item, "originalname", None) or item.name
+        reason = SKIPPED_ON_WINDOWS.get(name) or SKIPPED_ON_WINDOWS.get(f"{name}::{test}")
         if reason:
             item.add_marker(pytest.mark.skip(reason=f"not on Windows: {reason}"))

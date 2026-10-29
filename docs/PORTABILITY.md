@@ -781,6 +781,12 @@ byte-for-byte (see "Invariantes de macOS"). "Tests" are what that PR must add.
    `tests/windows_skips.py` (sandbox, bash scripts, AF_UNIX bridge), applied by
    `tests/conftest.py` on `win32` only. It builds, signs and publishes nothing,
    uses no secret and is not a required check.
+   The first run found 108 Windows failures (1676 tests passed, including the
+   real-Windows tests of PR 8): the evals harness leaked an open sqlite file into
+   a temp dir it then could not delete (fixed: `ignore_cleanup_errors`), and the
+   rest is skipped with a written reason in `tests/windows_skips.py`; the entries
+   marked "not investigated" (vault index/notes tools, skills compat, one HTTP
+   test) are the to-do list for Windows support.
 10. **Windows Credential Manager backend** (with the blob-size handling).
     *Tests:* selector and size-limit tests with a fake backend.
 11. **Windows packaging (NSIS), Help menu entry and release-manifest design:** a

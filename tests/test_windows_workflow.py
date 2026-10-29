@@ -71,14 +71,18 @@ def test_it_is_not_a_required_check():
 def test_every_skipped_file_exists_and_has_a_reason():
     assert SKIPPED_ON_WINDOWS
     for name, reason in SKIPPED_ON_WINDOWS.items():
-        assert (TESTS / name).is_file(), f"{name} is listed but does not exist"
+        file, _, test = name.partition("::")
+        assert (TESTS / file).is_file(), f"{name} is listed but does not exist"
+        if test:
+            assert re.search(rf"^\s*def {re.escape(test)}\(", (TESTS / file).read_text(encoding="utf-8"), re.M), \
+                f"{name}: no such test"
         assert len(reason.split()) >= 4, f"{name}: say why it cannot run on Windows"
     assert not any(n.startswith("test_windows") for n in SKIPPED_ON_WINDOWS), \
         "the Windows tests themselves must run on Windows"
 
 
 def _items(*names):
-    return [SimpleNamespace(fspath=str(TESTS / n), marks=[], add_marker=lambda m, _n=n: marks.setdefault(_n, []).append(m))
+    return [SimpleNamespace(fspath=str(TESTS / n), name="test_x", marks=[], add_marker=lambda m, _n=n: marks.setdefault(_n, []).append(m))
             for n in names]
 
 
@@ -89,6 +93,12 @@ def test_the_conftest_hook_skips_only_on_windows(monkeypatch):
     import conftest
     victim = next(iter(SKIPPED_ON_WINDOWS))
     items = _items(victim, "test_auth.py")
+    node = next(n for n in SKIPPED_ON_WINDOWS if "::" in n)
+    nfile, _, ntest = node.partition("::")
+    items.append(SimpleNamespace(fspath=str(TESTS / nfile), name=ntest, marks=[],
+                                 add_marker=lambda m: marks.setdefault(node, []).append(m)))
+    items.append(SimpleNamespace(fspath=str(TESTS / nfile), name="test_some_other_test", marks=[],
+                                 add_marker=lambda m: marks.setdefault("other", []).append(m)))
 
     marks.clear()
     monkeypatch.setattr(sys, "platform", "linux")
@@ -97,7 +107,7 @@ def test_the_conftest_hook_skips_only_on_windows(monkeypatch):
 
     monkeypatch.setattr(sys, "platform", "win32")
     conftest.pytest_collection_modifyitems(None, items)
-    assert list(marks) == [victim]
+    assert sorted(marks) == sorted([victim, node])
     mark = marks[victim][0]
     assert mark.name == "skip" and SKIPPED_ON_WINDOWS[victim] in mark.kwargs["reason"]
 
