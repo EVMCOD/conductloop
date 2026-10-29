@@ -40,7 +40,10 @@
     .pick__label{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);flex:1}
     .pick__section{font-size:12px;max-width:220px}
     .map-lines{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;margin:6px 0}
-    #lib-folders,#lib-workspace,#lib-writevault{width:100%;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
+    .lib-pick{display:flex;gap:8px;align-items:flex-start}
+    .lib-pick > input,.lib-pick > textarea{flex:1;min-width:0}
+    .lib-pick > button{flex:none;margin-right:0}
+    #lib-folders,#lib-workspace,#lib-writevault,#lib-mapfolder{width:100%;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
     code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink)}
     a{color:var(--blue)}
   </style>
@@ -168,6 +171,8 @@
         wv.value = d.write_vault || '';
         wv.dataset.loaded = wv.value;
         wv.disabled = d.write_vault_source === 'env';
+        const pickWv = wv.parentNode.querySelector('button');  // the folder picker, in the app
+        if (pickWv) pickWv.disabled = wv.disabled;
         document.getElementById('lib-writevault-note').textContent = wv.disabled
           ? 'Set by an environment variable on this computer: it cannot be changed here.'
           : (d.write_vault_exists ? '' : 'This folder does not exist yet: create it, or choose another.');
@@ -209,6 +214,42 @@
       }, 2000);
     };
     loadLibrary();
+
+    // ── native folder picker (desktop app only) ──────────────────────────
+    // As on the welcome page: "Choose…" next to each folder field and "Add
+    // folder…" for the folders to index (Tauri command pick_folder). It only
+    // fills the field; "Save folders" saves. In a browser there is no button.
+    (function () {
+      const ipc = window.__TAURI_INTERNALS__;
+      if (!ipc || typeof ipc.invoke !== 'function') return;
+      const set = (el, path) => { el.value = path; };
+      const add = (el, path) => {
+        const lines = el.value.split('\n').map(s => s.trim()).filter(Boolean);
+        if (!lines.includes(path)) lines.push(path);
+        el.value = lines.join('\n');
+      };
+      [['lib-writevault', 'Choose…', set], ['lib-folders', 'Add folder…', add],
+       ['lib-workspace', 'Choose…', set], ['lib-mapfolder', 'Choose…', set]].forEach(([id, label, apply]) => {
+        const el = document.getElementById(id);
+        const row = document.createElement('div');
+        row.className = 'lib-pick';
+        el.parentNode.insertBefore(row, el);
+        row.appendChild(el);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ghost';
+        btn.textContent = label;
+        btn.addEventListener('click', () => {
+          if (el.disabled) return;  // set by an environment variable
+          btn.disabled = true;
+          ipc.invoke('pick_folder', {})
+            .then(path => { if (path) apply(el, path); },
+                  () => { document.getElementById('lib-note').textContent = '✗ The folder picker could not open: type the path.'; })
+            .then(() => { btn.disabled = false; });
+        });
+        row.appendChild(btn);
+      });
+    })();
 
     // ── backups ──────────────────────────────────────────────────────────
     // Built with the DOM, never with innerHTML: file names come from disk.
