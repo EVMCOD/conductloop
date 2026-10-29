@@ -193,6 +193,13 @@ def setup_checklist(handler) -> None:
     _json_ok(handler, onboarding.checklist())
 
 
+@router.get("/api/platform")
+def platform_info(handler) -> None:
+    """What this OS can do (in-app browser, running code, keychain)."""
+    from . import platform_caps
+    _json_ok(handler, platform_caps.capabilities())
+
+
 @router.get("/api/obsidian/status")
 def obsidian_status(handler) -> None:
     from . import obsidian_sync
