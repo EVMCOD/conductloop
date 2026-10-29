@@ -206,23 +206,39 @@ EOF
 echo ""
 
 # ── 8. Smoke-test the .app ───────────────────────────────────────────────────
+# Starts the built app with a throwaway data folder (never the maintainer's own
+# library: the first start of a new version migrates it) and waits for its
+# server to answer /api/health as this version. It used to `open` the app on
+# the real data, wait 8 s and count lsof lines: lsof finding nothing exits 1,
+# which under `set -euo pipefail` ended the script silently, and a first start
+# that migrates a large library takes longer than 8 s anyway.
 echo "▸ Smoke-testing .app"
-pkill -9 -f conductloop 2>/dev/null || true
-sleep 1
-open "$APP_PATH"
-sleep 8
-PORT_OK=$(lsof -nP -iTCP:7777 -sTCP:LISTEN 2>&1 | wc -l | tr -d ' ')
-if [[ "$PORT_OK" -gt 0 ]]; then
-  echo "  ✓ Sidecar bound 127.0.0.1:7777"
-  curl -s -m 5 http://127.0.0.1:7777/api/health | head -c 300
-  echo ""
-else
-  echo "  ✗ Sidecar did NOT bind — abort"
+if curl -s -m 2 -o /dev/null http://127.0.0.1:7777/api/health; then
+  echo "  ✗ Something already answers on 127.0.0.1:7777 (ConductLoop or make serve): quit it and run again" >&2
   exit 1
 fi
-osascript -e 'tell application "ConductLoop" to quit' 2>/dev/null || true
+SMOKE_DIR="$(mktemp -d)"
+OPS_DATA_DIR="$SMOKE_DIR/data" OPS_CONFIG_PATH="$SMOKE_DIR/config.json" \
+  "$APP_PATH/Contents/MacOS/conductloop-desktop" >/dev/null 2>&1 &
+SMOKE_PID=$!
+HEALTH=""
+for _ in $(seq 1 90); do
+  HEALTH="$(curl -s -m 2 http://127.0.0.1:7777/api/health || true)"
+  [[ "$HEALTH" == *"\"version\": \"$VERSION\""* ]] && break
+  sleep 1
+done
+# The server exits with the app (parent_watch): no pkill of everything named conductloop.
+kill "$SMOKE_PID" 2>/dev/null || true
+wait "$SMOKE_PID" 2>/dev/null || true
 sleep 2
-pkill -9 -f conductloop 2>/dev/null || true
+rm -rf "$SMOKE_DIR"
+if [[ "$HEALTH" == *"\"version\": \"$VERSION\""* ]]; then
+  echo "  ✓ The app's server answered on 127.0.0.1:7777 as $VERSION"
+else
+  echo "  ✗ The app's server did not answer as $VERSION within 90 s — abort" >&2
+  echo "    last answer: ${HEALTH:-none}" >&2
+  exit 1
+fi
 echo ""
 
 # ── 9. Upload to GitHub release ──────────────────────────────────────────────
