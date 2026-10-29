@@ -20,9 +20,9 @@ JOB = DOC["jobs"]["linux-bundles"]
 TRIGGERS = DOC.get(True) or DOC.get("on")  # PyYAML reads the key `on` as True
 
 
-def test_it_runs_on_ubuntu_latest_only():
+def test_it_runs_on_ubuntu_22_04_for_an_older_glibc_and_nowhere_else():
     assert list(DOC["jobs"]) == ["linux-bundles"]
-    assert JOB["runs-on"] == "ubuntu-latest"
+    assert JOB["runs-on"] == "ubuntu-22.04"  # older glibc: the AppImage runs on older distributions
     assert JOB["timeout-minutes"] <= 90
 
 

@@ -6,6 +6,11 @@ name: Linux bundles
 # nothing: no release, no tag, no secret, no signing (there is no signing and no
 # updater on Linux). Runs only on GitHub-hosted runners (this repo is public);
 # never a self-hosted one (tests/test_workflows_guard.py).
+#
+# This is the one job pinned to ubuntu-22.04 instead of ubuntu-latest: an
+# AppImage bundles what it was built against, and one built on a newer glibc
+# does not start on older distributions, so it is built on an older image.
+# tests/test_workflows_guard.py allows ubuntu-22.04 here and nowhere else.
 on:
   workflow_dispatch:
   pull_request:
@@ -23,7 +28,7 @@ concurrency:
 
 jobs:
   linux-bundles:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
