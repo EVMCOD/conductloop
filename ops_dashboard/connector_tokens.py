@@ -5,7 +5,8 @@ tokens must never land on disk in plaintext. If no keychain is available the
 store refuses (``TokenStoreUnavailable``) and the connector stays disconnected.
 
 Backends (``backend()``):
-  * ``_KeychainBackend`` — macOS login Keychain through ``secrets_store``.
+  * ``_KeychainBackend`` — the macOS login Keychain or, on Linux, the Secret
+    Service, both through ``secrets_store``.
     - With #16 merged it uses ``secrets_store.keychain_available/get/set``.
     - With #17 merged writes go through ``secrets_store._kc_write`` (value on
       stdin, never argv). On a base without #17 the ``security`` CLI would get
@@ -22,7 +23,6 @@ from __future__ import annotations
 
 import json
 import logging
-import subprocess
 import time
 from typing import Any, Protocol
 
@@ -71,15 +71,11 @@ class _KeychainBackend:
             raise TokenStoreUnavailable("keychain_write_failed")
 
     def delete(self, item: str) -> None:
-        fn = getattr(secrets_store, "_kc_delete", None)                   # #17
+        # ``_kc_delete`` passes only the item name, on every platform (the macOS
+        # ``security`` call and the Linux Secret Service live in secrets_store).
+        fn = getattr(secrets_store, "_kc_delete", None)
         if callable(fn):
             fn(item)
-        elif secrets_store._keychain_enabled():
-            try:  # argv carries only the item name, never a value
-                subprocess.run(["security", "delete-generic-password", "-a", item, "-s",  # noqa: S603,S607
-                                secrets_store._SERVICE], capture_output=True, text=True, timeout=5)
-            except Exception as e:
-                log.debug("keychain delete failed for %s: %s", item, type(e).__name__)
         # The delete helpers swallow timeouts/denials: confirm the item is gone
         # so "disconnected" is never reported while the token is still stored.
         if self.available() and self.get(item) is not None:
