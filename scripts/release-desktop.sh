@@ -165,6 +165,14 @@ rm -f "ConductLoop_${VERSION}_aarch64.dmg"
   "ConductLoop_${VERSION}_aarch64.dmg" "$APP_PATH" 2>&1 | tail -3
 echo ""
 
+# Up to 1.2.1 the DMG itself was not signed (only its notarization ticket was
+# stapled): `spctl -t open` rejected it with "no usable signature". Sign it
+# with the same Developer ID before notarizing it.
+echo "▸ Signing DMG"
+codesign --force --timestamp --sign "$IDENTITY" "ConductLoop_${VERSION}_aarch64.dmg"
+codesign --verify --verbose=2 "ConductLoop_${VERSION}_aarch64.dmg" 2>&1 | tail -1
+echo ""
+
 echo "▸ Notarizing DMG (this takes ~30s)"
 xcrun notarytool submit "ConductLoop_${VERSION}_aarch64.dmg" \
   --key "$NOTARY_KEY" \
@@ -176,6 +184,13 @@ echo ""
 echo "▸ Stapling"
 xcrun stapler staple "ConductLoop_${VERSION}_aarch64.dmg" 2>&1 | tail -2
 xcrun stapler validate "ConductLoop_${VERSION}_aarch64.dmg" 2>&1 | tail -1
+# What Gatekeeper checks when a downloaded DMG is opened.
+if ! spctl -a -t open --context context:primary-signature "ConductLoop_${VERSION}_aarch64.dmg" 2>/dev/null; then
+  spctl -a -vv -t open --context context:primary-signature "ConductLoop_${VERSION}_aarch64.dmg" >&2 || true
+  echo "✗ Gatekeeper does not accept the DMG — abort" >&2
+  exit 1
+fi
+echo "  ✓ Gatekeeper accepts the DMG"
 echo ""
 
 # ── 6. Sign updater tar.gz ───────────────────────────────────────────────────
