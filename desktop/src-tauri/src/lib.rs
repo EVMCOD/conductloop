@@ -9,7 +9,7 @@ use std::sync::Mutex;
 mod agent_bridge;
 mod browser;
 
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
 use tauri::webview::PageLoadEvent;
 use tauri::Manager;
 use tauri_plugin_shell::process::CommandChild;
@@ -24,8 +24,33 @@ const NAV_JS: &str = include_str!("nav.js");
 
 /// The default macOS menu plus a Go menu (Back ⌘[, Forward ⌘], Home ⇧⌘H),
 /// placed after View like in Safari and Finder.
+///
+/// ⌘W is "Close Tab": on the browser page it closes the open tab, elsewhere
+/// it closes the window as before. It used to be the default "Close Window"
+/// everywhere, so ⌘W in the browser quit the whole app and its server.
+/// "Close Window" moves to ⇧⌘W, like in Safari.
 fn app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
     let menu = Menu::default(handle)?;
+    for item in menu.items()? {
+        let MenuItemKind::Submenu(sub) = item else { continue };
+        for entry in sub.items()? {
+            if let MenuItemKind::Predefined(p) = &entry {
+                if p.text()? == "Close Window" {
+                    sub.remove(&entry)?;
+                }
+            }
+        }
+        if sub.text()? == "File" {
+            sub.append(&MenuItem::with_id(handle, "close-tab", "Close Tab", true, Some("CmdOrCtrl+W"))?)?;
+            sub.append(&MenuItem::with_id(
+                handle,
+                "close-window",
+                "Close Window",
+                true,
+                Some("CmdOrCtrl+Shift+W"),
+            )?)?;
+        }
+    }
     let go = Submenu::with_items(
         handle,
         "Go",
@@ -199,20 +224,57 @@ pub fn run() {
         ])
         .menu(app_menu)
         .on_menu_event(|app, event| {
-            let js = match event.id().as_ref() {
+            let id = event.id().as_ref();
+            // On the browser page, ⌘W and Back/Forward act on the open tab.
+            let tab = browser::visible_active_tab(app);
+            match (id, tab) {
+                ("close-tab", Some(tab)) => {
+                    let _ = browser::close_tab(app, &tab);
+                    return;
+                }
+                ("close-tab" | "close-window", _) => {
+                    if let Some(win) = app.get_window("main") {
+                        let _ = win.close();
+                    }
+                    return;
+                }
+                ("go-back" | "go-forward", Some(tab)) => {
+                    if let Some(view) = app.get_webview(&tab) {
+                        let _ = view.eval(if id == "go-back" { "history.back()" } else { "history.forward()" });
+                    }
+                    return;
+                }
+                _ => {}
+            }
+            let js = match id {
                 "go-back" => "history.back()",
                 "go-forward" => "history.forward()",
                 "go-home" => "location.assign('/')",
                 _ => return,
             };
-            // The main webview only: browser tabs keep their own back/forward.
             if let Some(view) = app.get_webview("main") {
                 let _ = view.eval(js);
             }
         })
         .on_page_load(|webview, payload| {
-            if webview.label() == "main" && payload.event() == PageLoadEvent::Finished {
-                let _ = webview.eval(NAV_JS.replace("__CL_ORIGIN__", BACKEND_URL));
+            if webview.label() != "main" {
+                return;
+            }
+            // Tabs are shown on the browser page only. Leaving it (or
+            // reloading) hides them, so they are not drawn over the next page;
+            // landing on it shows them, also when it comes back from the
+            // history cache, where its script does not run again.
+            let on_browser = matches!(payload.url().path(), "/browser" | "/browser.html");
+            match payload.event() {
+                PageLoadEvent::Started => {
+                    let _ = browser::set_visible(webview.app_handle(), false);
+                }
+                PageLoadEvent::Finished => {
+                    if on_browser {
+                        let _ = browser::set_visible(webview.app_handle(), true);
+                    }
+                    let _ = webview.eval(NAV_JS.replace("__CL_ORIGIN__", BACKEND_URL));
+                }
             }
         })
         .setup(|app| {
