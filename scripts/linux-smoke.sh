@@ -64,7 +64,8 @@ case "$MODE" in
     # shellcheck disable=SC2024
     sudo apt-get install -y "$PKG" > "$OUT/linux-smoke-apt.log" 2>&1 || {
       tail -20 "$OUT/linux-smoke-apt.log"; echo "✗ apt could not install $PKG" >&2; exit 1; }
-    BIN="$(dpkg-deb -c "$PKG" | awk '{print $NF}' | sed 's#^\./#/#' | grep '/conductloop-desktop$' | head -1)"
+    # dpkg-deb lists "usr/bin/x" or "./usr/bin/x": make it absolute either way.
+    BIN="$(dpkg-deb -c "$PKG" | awk '{print $NF}' | sed -E 's#^\.?/?#/#' | grep '/conductloop-desktop$' | head -1)"
     ARGS=()
     ;;
   appimage)
@@ -156,15 +157,18 @@ fi
 # 5. Closing the app stops its server.
 pkill -TERM -f conductloop-desktop 2>/dev/null || true
 kill "$APP_PID" 2>/dev/null || true
+# The port closes before the process has exited: wait for both.
 freed=""
 for i in $(seq 1 15); do
-  if ! curl -s -m 1 -o /dev/null "$BASE/api/health"; then freed=$i; break; fi
+  if ! curl -s -m 1 -o /dev/null "$BASE/api/health" && ! pgrep -f conductloop-server >/dev/null; then freed=$i; break; fi
   sleep 1
 done
-if [[ -n "$freed" ]] && ! pgrep -f conductloop-server >/dev/null; then
+if [[ -n "$freed" ]]; then
   ok "closing the app stopped its server (${freed} s)"
 else
-  bad "the server kept running after the app was closed"
+  bad "the server kept running 15 s after the app was closed"
+  ps -o pid,ppid,stat,etime,args -p "$(pgrep -d, -f conductloop-server)" 2>/dev/null || true
+  curl -s -m 1 -o /dev/null -w '    port 7777: HTTP %{http_code}\n' "$BASE/api/health" || echo "    port 7777: closed"
 fi
 APP_PID=""
 
