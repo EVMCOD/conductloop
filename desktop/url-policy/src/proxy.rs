@@ -13,12 +13,13 @@
 //!
 //! std only (thread per connection, bounded); tested on Linux CI.
 
+use std::collections::VecDeque;
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::{check_host, Verdict};
 
@@ -29,6 +30,33 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Decides whether a resolved address may be contacted.
 pub type AllowIp = fn(IpAddr) -> bool;
+
+const MAX_RECENT_BLOCKS: usize = 32;
+static RECENT_BLOCKS: Mutex<VecDeque<(Instant, String)>> = Mutex::new(VecDeque::new());
+
+/// A tab whose request the proxy refuses only sees a failed load: WebKit
+/// shows nothing and keeps the previous page. The proxy notes the host so
+/// the browser UI can say why (a public name that points to 127.0.0.1 or the
+/// LAN looks fine to the URL bar check and is only caught here).
+fn note_block(host: &str) {
+    let mut q = RECENT_BLOCKS.lock().unwrap_or_else(|e| e.into_inner());
+    if q.len() >= MAX_RECENT_BLOCKS {
+        q.pop_front();
+    }
+    q.push_back((Instant::now(), host.chars().take(253).collect()));
+}
+
+/// Hosts blocked in the last `within`, oldest first (duplicates removed).
+pub fn recent_blocks(within: Duration) -> Vec<String> {
+    let q = RECENT_BLOCKS.lock().unwrap_or_else(|e| e.into_inner());
+    let mut out: Vec<String> = Vec::new();
+    for (at, host) in q.iter() {
+        if at.elapsed() <= within && !out.contains(host) {
+            out.push(host.clone());
+        }
+    }
+    out
+}
 
 pub struct ProxyHandle {
     pub addr: SocketAddr,
@@ -314,7 +342,10 @@ fn handle(mut client: TcpStream, allow: AllowIp, check_names: bool) -> io::Resul
     };
     let addrs = match resolve_allowed(&host, port, allow, check_names) {
         Ok(a) => a,
-        Err(why) => return respond(&client, 403, why),
+        Err(why) => {
+            note_block(&host);
+            return respond(&client, 403, why);
+        }
     };
     let mut upstream = match connect_first(&addrs) {
         Ok(u) => u,
@@ -499,6 +530,20 @@ mod tests {
             &format!("GET http://localhost:{}/x HTTP/1.1\r\n\r\n", up.port()),
         );
         assert!(r.starts_with("HTTP/1.1 403"), "{r}");
+        p.stop();
+    }
+
+    #[test]
+    fn a_refused_host_is_remembered_for_the_ui() {
+        let up = upstream_echo();
+        let p = spawn(is_public_ip).unwrap();
+        let r = roundtrip(
+            p.addr,
+            &format!("GET http://localhost:{}/x HTTP/1.1\r\n\r\n", up.port()),
+        );
+        assert!(r.starts_with("HTTP/1.1 403"), "{r}");
+        assert!(recent_blocks(Duration::from_secs(30)).contains(&"localhost".to_string()));
+        assert!(!recent_blocks(Duration::ZERO).contains(&"localhost".to_string()));
         p.stop();
     }
 

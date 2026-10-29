@@ -96,7 +96,14 @@
   var empty = $("empty"), msg = $("msg");
   var state = { tabs: [], active: null };
 
-  function say(t) { msg.textContent = t || ""; }
+  // Messages clear themselves after a while; they used to stay until the next
+  // one ("Too many tabs" after closing tabs, an old error on a new page...).
+  var sayTimer = null;
+  function say(t) {
+    msg.textContent = t || "";
+    clearTimeout(sayTimer);
+    if (t) sayTimer = setTimeout(function () { msg.textContent = ""; }, 8000);
+  }
   function inv(cmd, args) { return T.invoke(cmd, args || {}); }
   var REASONS = {
     "blocked:loopback": "Blocked: local addresses (127.0.0.1, ::1) are not reachable from browser tabs.",
@@ -114,7 +121,8 @@
     "extract_bad_result": "Could not read this page.",
     "empty": "Nothing readable on this page.",
     "bad_url": "Only http(s) pages can be saved or asked about.",
-    "question_required": "Type a question first."
+    "question_required": "Type a question first.",
+    "provider: required": "Choose the AI provider first (anthropic, openai, ollama…)."
   };
   function err(e) { say(REASONS[String(e)] || ("Error: " + e)); }
 
@@ -141,22 +149,37 @@
     if (r.width < 50 || r.height < 50) return;
     inv("browser_set_bounds", { x: r.left, y: r.top, width: r.width, height: r.height }).catch(err);
   }
+  // The URL bar shows the active tab's address unless you are typing in it
+  // (focus alone is not enough: it stays focused after Enter and after a click
+  // in the page, and the bar then kept an old address).
+  var editing = false;
+  var lastBlocked = "";
+  // An address typed in the bar that the network filter may still refuse
+  // (a public name pointing to 127.0.0.1 or the LAN): {host, at}.
+  var pending = null;
+  function hostOf(v) {
+    try { return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : "https://" + v).hostname; } catch (e) { return ""; }
+  }
   function render() {
     var box = $("tabs"); box.textContent = "";
     state.tabs.forEach(function (t) {
       var el = document.createElement("div");
       el.className = "tab" + (t.id === state.active ? " active" : "") + (t.agent ? " agent" : "");
       var s = document.createElement("span"); s.className = "t";
-      s.textContent = (t.agent ? "Agent #" + t.agent + " · " : "") + (t.loading ? "… " : "") + (t.title || t.url || "New tab");
+      var blank = !t.url || t.url === "about:blank";
+      s.textContent = (t.agent ? "Agent #" + t.agent + " · " : "") + (t.loading && !blank ? "… " : "") +
+        (t.title || (blank ? "New tab" : t.url));
       s.title = t.url;
       var x = document.createElement("button"); x.textContent = "×"; x.title = "Close tab";
       x.onclick = function (ev) { ev.stopPropagation(); inv("browser_close", { id: t.id }).then(refresh).catch(err); };
-      el.onclick = function () { inv("browser_activate", { id: t.id }).then(refresh).catch(err); };
+      el.onclick = function () { editing = false; inv("browser_activate", { id: t.id }).then(refresh).catch(err); };
       el.appendChild(s); el.appendChild(x); box.appendChild(el);
     });
     var cur = state.tabs.filter(function (t) { return t.id === state.active; })[0];
-    if (cur && document.activeElement !== $("url")) $("url").value = cur.url === "about:blank" ? "" : cur.url;
-    if (cur && cur.blocked) say("Navigation blocked (" + cur.blocked.split(" ")[0] + "): " + cur.blocked.split(" ").slice(1).join(" "));
+    if (cur && !editing) $("url").value = cur.url === "about:blank" ? "" : cur.url;
+    var blocked = (cur && cur.blocked) || "";
+    if (blocked && blocked !== lastBlocked) say("Navigation blocked (" + blocked.split(" ")[0] + "): " + blocked.split(" ").slice(1).join(" "));
+    lastBlocked = blocked;
     empty.textContent = state.tabs.length ? "" : "No tabs. Type a URL above.";
     // PR 8: agent tab controls (pause / take control / give back).
     var ab = $("agentbar");
@@ -211,16 +234,31 @@
       (l.new_window_requests || []).forEach(function (u) {
         inv("browser_open", { url: u }).catch(err);
       });
+      if (pending && Date.now() - pending.at > 15000) pending = null;
+      if (pending && (l.recent_blocks || []).indexOf(pending.host) >= 0) {
+        say("Blocked: " + pending.host + " points to a local or private address, which browser tabs cannot reach.");
+        pending = null;
+      }
       render();
     }).catch(err);
   }
   function go() {
     var v = $("url").value.trim(); say("");
+    editing = false;
+    pending = v ? { host: hostOf(v), at: Date.now() } : null;
     if (!state.active) { inv("browser_open", { url: v }).then(refresh).catch(err); return; }
     inv("browser_navigate", { id: state.active, url: v }).then(refresh).catch(err);
   }
-  $("url").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
-  $("newtab").onclick = function () { say(""); inv("browser_open", { url: "" }).then(refresh).catch(err); };
+  $("url").addEventListener("input", function () { editing = true; });
+  $("url").addEventListener("blur", function () { editing = false; });
+  $("url").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") go();
+    if (e.key === "Escape") { editing = false; $("url").blur(); render(); }
+  });
+  $("newtab").onclick = function () {
+    say(""); editing = false;
+    inv("browser_open", { url: "" }).then(refresh).then(function () { $("url").focus(); }).catch(err);
+  };
   // PR 6: «Enviar al vault». Extraction runs in the tab (Readability, hidden
   // nodes dropped); the backend re-validates and stores it as source="web".
   $("clip").onclick = function () {
@@ -267,7 +305,28 @@
   $("ag-pause").onclick = function () { control("paused"); };
   $("ag-take").onclick = function () { control("human"); };
   $("ag-give").onclick = function () { control("agent"); };
-  $("agenttoggle").onclick = function () { var a = $("agent"); a.hidden = !a.hidden; sendBounds(); };
+  // The agent needs a provider, a model and a key: start from the first
+  // provider that is set up instead of three empty boxes.
+  var agentFilled = false;
+  function fillAgentDefaults() {
+    if (agentFilled) return;
+    agentFilled = true;
+    if (!$("ag-budget").value) $("ag-budget").value = "0.50";
+    fetch("/api/brain/providers", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); }).then(function (rows) {
+        var p = (rows || []).filter(function (x) { return x.available && x.name !== "mock"; })[0];
+        if (!p) { say("No AI provider is set up yet: add a key in Credentials to use the agent."); return; }
+        if (!$("ag-provider").value) $("ag-provider").value = p.name;
+        if (!$("ag-model").value && p.model) $("ag-model").value = p.model;
+        if (!$("ag-key").value && (p.key_storage === "keychain" || p.key_storage === "vault")) {
+          $("ag-key").value = "byok." + p.name + ".default";
+        }
+      }).catch(function () {});
+  }
+  $("agenttoggle").onclick = function () {
+    var a = $("agent"); a.hidden = !a.hidden; sendBounds();
+    if (!a.hidden) fillAgentDefaults();
+  };
   function api(path, body) {
     return fetch(path, { method: "POST", credentials: "same-origin",
       headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
@@ -294,10 +353,16 @@
 
   new ResizeObserver(sendBounds).observe($("viewport"));
   window.addEventListener("resize", sendBounds);
-  // Native webviews sit above this page: hide them whenever we leave it.
-  window.addEventListener("pagehide", function () { inv("browser_set_visible", { visible: false }); });
-  document.addEventListener("visibilitychange", function () {
-    inv("browser_set_visible", { visible: document.visibilityState === "visible" }).catch(err);
+  // Native webviews sit above this page. The app hides them as soon as the
+  // window starts loading another page and shows them when this one loads
+  // (lib.rs). Asking from here on pagehide/visibilitychange went wrong: the
+  // call made while leaving was frozen with the page in the history cache and
+  // delivered on the way back, hiding the tabs again.
+  // Back from the history cache (Go › Back, ⌘[) the script does not run again.
+  window.addEventListener("pageshow", function (e) {
+    if (!e.persisted) return;
+    say(""); editing = false; sendBounds();
+    inv("browser_set_visible", { visible: true }).then(refresh).catch(err);
   });
   sendBounds();
   inv("browser_set_visible", { visible: true }).then(refresh).catch(err);

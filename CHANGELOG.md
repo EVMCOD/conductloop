@@ -4,13 +4,26 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
-## 1.2.1 — 2026-10-29 — Backups, a folder picker, and an app that starts
+## 1.2.1 — 2026-10-29 — Backups, a folder picker, a browser that stays in its page, and an app that starts
 
 The first release since 1.2.0 (2026-07-23), so it also carries every dated
 section below down to the updater key fix. **If you are on 1.2.0 or earlier,
 install this one from the DMG**: those builds embed an updater key that does
 not match the releases and can never update themselves (see "Updater signing
 key fixed" below). From 1.2.1 on, updates install from the app.
+
+- **Fixed: the in-app browser got in the way of the rest of the app.** Leaving
+  the browser page left the open web page drawn over the dashboard and every
+  other page; coming back with Go › Back showed no page at all. ⌘W quit the
+  whole app instead of closing the tab, and ⌘[ / ⌘] left the browser instead
+  of going back in the tab. Now the tabs are hidden as soon as you leave the
+  browser page and shown when you come back, ⌘W closes the tab (Close Window
+  is ⇧⌘W) and Back/Forward act on the tab. Also: the URL bar shows the page you
+  are on, new tabs are called "New tab" instead of "… about:blank", messages
+  clear themselves, an address that points to your own machine or your LAN
+  says it was blocked instead of doing nothing, the first click on the app's
+  bar after using a page is no longer lost, the agent panel starts from your
+  configured AI provider, and "Ask" without a key points to Credentials.
 
 - **Fixed: the desktop app never got past "Connecting to local server…".** The
   window waits for its own server by looking for a per-launch id in

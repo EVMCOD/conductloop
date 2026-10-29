@@ -387,11 +387,11 @@ class MockProvider(Provider):
         return (
             f"[mock brain · no LLM configured]\n\n"
             f"You asked: {last[:200]}\n\n"
-            f"To get real answers, set BRAIN_PROVIDER=anthropic and "
-            f"ANTHROPIC_API_KEY, or BRAIN_PROVIDER=ollama with a local Ollama "
-            f"server running on :11434. The retrieval pipeline already works — "
-            f"this provider is just a placeholder so the rest of the system "
-            f"can be tested without a key."
+            f"No AI provider is set up, so this is a placeholder answer. To get "
+            f"real answers, add a key in Credentials (Anthropic, OpenAI, "
+            f"MiniMax...) or point Connect AI at a local Ollama. From a "
+            f"terminal, BRAIN_PROVIDER=anthropic with ANTHROPIC_API_KEY works "
+            f"too. Search and your notes work without a key."
         )
 
 

@@ -26,8 +26,9 @@ NAV = (SRC / "nav.js").read_text(encoding="utf-8")
 def test_lib_injects_nav_into_the_main_webview_only():
     lib = (SRC / "lib.rs").read_text(encoding="utf-8")
     assert 'include_str!("nav.js")' in lib
-    assert 'webview.label() == "main" && payload.event() == PageLoadEvent::Finished' in lib
-    assert 'NAV_JS.replace("__CL_ORIGIN__", BACKEND_URL)' in lib
+    assert 'if webview.label() != "main" {' in lib
+    finished = lib.index("PageLoadEvent::Finished => {")
+    assert 'NAV_JS.replace("__CL_ORIGIN__", BACKEND_URL)' in lib[finished:finished + 400]
     for item in ('"go-back"', '"go-forward"', '"go-home"', '"CmdOrCtrl+["', '"CmdOrCtrl+]"'):
         assert item in lib
     assert "location.origin !== '__CL_ORIGIN__'" in NAV
@@ -48,6 +49,7 @@ def _dump(tmp_path: Path, url: str) -> str:
     ("/", False, False),            # placeholder kept: wrong origin → nothing
     ("/", True, False),             # the dashboard root has its own navigation
     ("/chat", False, False),        # another site (a browser tab): nothing
+    ("/browser", True, False),      # the browser page: tabs cover that corner, it has ← App
 ])
 def test_controls_only_on_app_pages(tmp_path, path, origin_matches, expected):
     site = tmp_path / "site"
@@ -66,8 +68,9 @@ def test_controls_only_on_app_pages(tmp_path, path, origin_matches, expected):
             + script + measure + "});</script></body></html>")
     (site / "index.html").write_text(page, encoding="utf-8")
     (site / "chat.html").write_text(page, encoding="utf-8")
+    (site / "browser.html").write_text(page, encoding="utf-8")
     try:
-        dom = _dump(tmp_path, origin + ("/chat.html" if path == "/chat" else "/"))
+        dom = _dump(tmp_path, origin + {"/chat": "/chat.html", "/browser": "/browser.html"}.get(path, "/"))
     finally:
         srv.shutdown()
     assert "<h1>Page</h1>" in dom, dom[-500:]

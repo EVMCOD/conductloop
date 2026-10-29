@@ -8,6 +8,9 @@
   'use strict';
   if (location.origin !== '__CL_ORIGIN__') return;
   if (location.pathname === '/' || location.pathname === '/index.html') return;
+  // The browser page has its own way back (← App), and native tabs are drawn
+  // over this corner of it, so the controls would sit unreachable underneath.
+  if (location.pathname === '/browser' || location.pathname === '/browser.html') return;
   if (document.getElementById('cl-nav') || !document.body) return;
 
   var bar = document.createElement('nav');

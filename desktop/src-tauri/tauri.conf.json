@@ -35,7 +35,8 @@
         "url": "index.html",
         "visible": true,
         "decorations": true,
-        "titleBarStyle": "Visible"
+        "titleBarStyle": "Visible",
+        "acceptFirstMouse": true
       }
     ]
   },
