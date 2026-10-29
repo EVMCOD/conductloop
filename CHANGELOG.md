@@ -4,6 +4,10 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- **The folder picker in Setup too.** Setup → Library now has "Choose…" next to
+  each folder field and "Add folder…" for the folders to index, like the
+  welcome page. It only fills the field: "Save folders" saves.
+
 ## 1.2.1 — 2026-10-29 — Backups, a folder picker, a browser that stays in its page, and an app that starts
 
 The first release since 1.2.0 (2026-07-23), so it also carries every dated
