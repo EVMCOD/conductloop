@@ -4,6 +4,14 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+## 1.2.1 — 2026-10-29 — Backups, a folder picker, a browser that stays in its page, and an app that starts
+
+The first release since 1.2.0 (2026-07-23), so it also carries every dated
+section below down to the updater key fix. **If you are on 1.2.0 or earlier,
+install this one from the DMG**: those builds embed an updater key that does
+not match the releases and can never update themselves (see "Updater signing
+key fixed" below). From 1.2.1 on, updates install from the app.
+
 - **Fixed: the in-app browser got in the way of the rest of the app.** Leaving
   the browser page left the open web page drawn over the dashboard and every
   other page; coming back with Go › Back showed no page at all. ⌘W quit the
