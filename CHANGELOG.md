@@ -2,6 +2,10 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased
+
+- **Windows: a script to build an installer (experimental, unsigned).** `scripts/build-windows.ps1` freezes the server with PyInstaller and runs `tauri build --bundles nsis` (an `.msi` with `-Bundles nsis,msi`); the Windows settings live in `desktop/src-tauri/tauri.windows.conf.json`, so the macOS build does not change. The installer is not signed, so Windows SmartScreen warns when it runs ("More info", then "Run anyway"), and it needs WebView2 (included in Windows 11 and current Windows 10; the installer downloads it if missing). No updates on Windows: the app does not look for updates at start-up there. On Windows the bundled server now runs in UTF-8 mode. Not tested on a real Windows machine yet; Windows is still not a supported platform. `docs/PORTABILITY.md` has the status.
+
 ## 1.2.3 — 2026-10-29 — A home for your notes and a Brain that helps without a key
 
 The first version that installs from the app: in 1.2.2, "Check for Updates…"
