@@ -4,6 +4,13 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- **The app can update itself.** "Check for Updates…" is in the ConductLoop menu,
+  and the app also looks once, quietly, a little after it starts. When there is a
+  new version it asks; "Install and restart" downloads it, checks its signature,
+  replaces the app and restarts it. Nothing is installed without that click. Up to
+  1.2.1 nothing ever started a check, so no install could update itself: from
+  1.2.1, install this version from the DMG once more.
+
 ## 1.2.1 — 2026-10-29 — Backups, a folder picker, a browser that stays in its page, and an app that starts
 
 The first release since 1.2.0 (2026-07-23), so it also carries every dated
