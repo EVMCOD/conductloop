@@ -874,6 +874,12 @@ byte-for-byte (see "Invariantes de macOS"). "Tests" are what that PR must add.
    rest is skipped with a written reason in `tests/windows_skips.py`; the entries
    marked "not investigated" (vault index/notes tools, skills compat, one HTTP
    test) are the to-do list for Windows support.
+   Tests about POSIX permission bits (`st_mode`, `S_IMODE`, the executable bit,
+   `os.access`) are not listed one by one: they carry `@pytest.mark.posix_perms`
+   (skipped on `win32` by `tests/conftest.py`) or assert through
+   `tests/posix_perms.py`, whose helpers do nothing on Windows and leave the rest
+   of the test running. `tests/test_posix_perms_guard.py` fails when a test reads
+   permission bits without one of the two.
 10. **Windows Credential Manager backend** (with the blob-size handling).
     *Tests:* selector and size-limit tests with a fake backend.
 11. **Windows packaging (NSIS), Help menu entry and release-manifest design:** a

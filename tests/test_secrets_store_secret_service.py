@@ -11,13 +11,13 @@ UNTESTED on a real Linux desktop: see docs/PORTABILITY.md.
 from __future__ import annotations
 
 import logging
-import stat
 import sys
 import threading
 import types
 from pathlib import Path
 
 import pytest
+from posix_perms import assert_mode
 
 SECRET = "sk-test-VALUE-0123456789"
 
@@ -181,7 +181,8 @@ def test_set_secret_falls_back_to_a_0600_file_and_warns_without_the_value(ss, mo
         s.set_secret("fernet-key", SECRET)
         s.set_secret("fernet-key", SECRET + "2")
     f = tmp_path / "files" / ".fernet-key.secret"
-    assert f.read_text() == SECRET + "2" and stat.S_IMODE(f.stat().st_mode) == 0o600
+    assert f.read_text() == SECRET + "2"
+    assert_mode(f, 0o600)
     assert s.get_secret("fernet-key") == SECRET + "2"
     msgs = [r.getMessage() for r in caplog.records]
     assert any("0600 file" in m and "fernet-key" in m for m in msgs)

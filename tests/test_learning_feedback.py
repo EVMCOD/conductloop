@@ -10,7 +10,6 @@ import json
 import os
 import socket
 import sqlite3
-import stat
 import threading
 import time
 import urllib.error
@@ -18,6 +17,7 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 
 import pytest
+from posix_perms import assert_mode
 
 from ops_dashboard import migrations
 
@@ -230,7 +230,7 @@ def test_export_is_local_anonymised_and_private(tmpdb):
                              comment="comentario")
     path = learning.export_local()
     assert path.parent == learning.store.export_dir()
-    assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+    assert_mode(path, 0o600)
     text = path.read_text()
     assert "respuesta secreta" not in text and "comentario" not in text
     data = json.loads(text)

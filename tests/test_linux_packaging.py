@@ -105,6 +105,7 @@ def test_the_macos_release_script_is_not_wired_to_the_linux_one():
     assert "build-linux" not in (ROOT / "scripts" / "release-desktop.sh").read_text()
 
 
+@pytest.mark.posix_perms
 def test_the_script_is_executable_and_valid_bash():
     assert os.access(SCRIPT, os.X_OK)
     subprocess.run(["bash", "-n", str(SCRIPT)], check=True)

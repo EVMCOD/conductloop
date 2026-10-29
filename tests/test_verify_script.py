@@ -145,6 +145,7 @@ def test_mypy_ratchet_list_is_shared_and_valid():
     assert not any(e.startswith("#") for e in entries), "no comments in the list: $(cat ...) feeds it to mypy"
 
 
+@pytest.mark.posix_perms
 def test_verify_script_is_executable_shell_that_parses():
     assert VERIFY.stat().st_mode & 0o111, "scripts/verify.sh must be executable"
     for script in (VERIFY, ROOT / "scripts" / "install-hooks.sh", ROOT / ".githooks" / "pre-push"):

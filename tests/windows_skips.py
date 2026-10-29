@@ -31,12 +31,8 @@ SKIPPED_ON_WINDOWS: dict[str, str] = {
     "test_vault_conventions.py": "not investigated: the vault index preview fails on Windows paths",
     "test_notes_structure.py": "not investigated: the notes structure tools fail on Windows paths",
     "test_skills_compat.py": "not investigated: skill directory resolution and symlinks differ on Windows",
-    # Single tests.
-    "test_byok_keys.py::test_config_written_owner_only": "asserts POSIX mode 0600; Windows has no such permission bits (docs/PORTABILITY.md 4.3)",
-    "test_secrets_store.py::test_file_is_owner_only": "asserts POSIX mode 0600; Windows has no such permission bits (docs/PORTABILITY.md 4.3)",
-    "test_learning_feedback.py::test_export_is_local_anonymised_and_private": "asserts POSIX mode 0600; Windows has no such permission bits (docs/PORTABILITY.md 4.3)",
-    "test_token_kit.py::test_config_validation": "asserts POSIX mode 0600; Windows has no such permission bits (docs/PORTABILITY.md 4.3)",
-    "test_linux_bundles_workflow.py::test_the_script_it_calls_exists_and_is_executable": "asserts the POSIX executable bit of a shell script",
+    # Single tests. (Tests about POSIX permission bits are not listed here: they carry the
+    # `posix_perms` marker or use tests/posix_perms.py, which the guard in test_windows_workflow.py enforces.)
     "test_release_check.py::test_not_a_git_repo_fails": "the test's cleanup cannot delete read-only .git objects on Windows",
     "test_media.py::test_assemble_refuses_files_outside_the_data_directory": "uses a POSIX /tmp path",
     "test_lessons.py::test_scope_validation": "uses a POSIX absolute path (repo:/...), which is not absolute on Windows",

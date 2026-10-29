@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -59,6 +60,7 @@ def test_it_publishes_nothing_and_takes_no_secret():
     assert DOC["permissions"] == {"contents": "read"}
 
 
+@pytest.mark.posix_perms
 def test_the_script_it_calls_exists_and_is_executable():
     script = ROOT / "scripts" / "build-linux.sh"
     assert script.is_file() and script.stat().st_mode & 0o111

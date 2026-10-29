@@ -82,7 +82,8 @@ def test_every_skipped_file_exists_and_has_a_reason():
 
 
 def _items(*names):
-    return [SimpleNamespace(fspath=str(TESTS / n), name="test_x", marks=[], add_marker=lambda m, _n=n: marks.setdefault(_n, []).append(m))
+    return [SimpleNamespace(fspath=str(TESTS / n), name="test_x", marks=[], get_closest_marker=lambda _n: None,
+                            add_marker=lambda m, _n=n: marks.setdefault(_n, []).append(m))
             for n in names]
 
 
@@ -95,10 +96,14 @@ def test_the_conftest_hook_skips_only_on_windows(monkeypatch):
     items = _items(victim, "test_auth.py")
     node = next(n for n in SKIPPED_ON_WINDOWS if "::" in n)
     nfile, _, ntest = node.partition("::")
-    items.append(SimpleNamespace(fspath=str(TESTS / nfile), name=ntest, marks=[],
+    items.append(SimpleNamespace(fspath=str(TESTS / nfile), name=ntest, marks=[], get_closest_marker=lambda _n: None,
                                  add_marker=lambda m: marks.setdefault(node, []).append(m)))
     items.append(SimpleNamespace(fspath=str(TESTS / nfile), name="test_some_other_test", marks=[],
+                                 get_closest_marker=lambda _n: None,
                                  add_marker=lambda m: marks.setdefault("other", []).append(m)))
+    items.append(SimpleNamespace(fspath=str(TESTS / "test_auth.py"), name="test_about_modes", marks=[],
+                                 get_closest_marker=lambda n: object() if n == "posix_perms" else None,
+                                 add_marker=lambda m: marks.setdefault("perms", []).append(m)))
 
     marks.clear()
     monkeypatch.setattr(sys, "platform", "linux")
@@ -107,7 +112,8 @@ def test_the_conftest_hook_skips_only_on_windows(monkeypatch):
 
     monkeypatch.setattr(sys, "platform", "win32")
     conftest.pytest_collection_modifyitems(None, items)
-    assert sorted(marks) == sorted([victim, node])
+    assert sorted(marks) == sorted([victim, node, "perms"])
+    assert marks["perms"][0].name == "skip" and "permission bits" in marks["perms"][0].kwargs["reason"]
     mark = marks[victim][0]
     assert mark.name == "skip" and SKIPPED_ON_WINDOWS[victim] in mark.kwargs["reason"]
 

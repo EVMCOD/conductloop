@@ -57,11 +57,16 @@ def _vault_open():
 
 
 def pytest_collection_modifyitems(config, items):
-    """On Windows, skip the files of tests/windows_skips.py, with their reason."""
+    """On Windows, skip what cannot exist there, each with its reason.
+
+    * the files and tests of tests/windows_skips.py;
+    * every test marked ``posix_perms`` (asserts POSIX permission bits).
+    """
     import sys
 
     if sys.platform != "win32":
         return
+    from posix_perms import REASON as PERMS_REASON
     from windows_skips import SKIPPED_ON_WINDOWS
 
     for item in items:
@@ -70,3 +75,5 @@ def pytest_collection_modifyitems(config, items):
         reason = SKIPPED_ON_WINDOWS.get(name) or SKIPPED_ON_WINDOWS.get(f"{name}::{test}")
         if reason:
             item.add_marker(pytest.mark.skip(reason=f"not on Windows: {reason}"))
+        elif item.get_closest_marker("posix_perms"):
+            item.add_marker(pytest.mark.skip(reason=f"not on Windows: {PERMS_REASON}"))

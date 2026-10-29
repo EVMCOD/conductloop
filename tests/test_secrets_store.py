@@ -34,6 +34,7 @@ def test_get_or_create_is_stable(store):
     assert calls["n"] == 1  # factory ran once, then read from store
 
 
+@pytest.mark.posix_perms
 def test_file_is_owner_only(store, tmp_path):
     store.set_secret("sekret", "value")
     f = tmp_path / ".sekret.secret"
