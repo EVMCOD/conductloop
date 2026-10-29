@@ -323,7 +323,8 @@ def test_the_linux_build_still_has_no_updater():
     assert "unset TAURI_SIGNING_PRIVATE_KEY" in build
     assert lum.MANIFEST_NAME not in build and "linux_update_manifest" not in build
     lib = (ROOT / "desktop" / "src-tauri" / "src" / "lib.rs").read_text()
-    assert "!cfg!(target_os = \"linux\")" in lib          # no update check at start-up on Linux
+    # No update check at start-up on Linux: it runs on macOS only.
+    assert 'if !cfg!(debug_assertions) && cfg!(target_os = "macos") {' in lib
 
 
 def test_the_bundle_workflow_publishes_nothing():

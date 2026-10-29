@@ -140,9 +140,10 @@ def test_it_refuses_to_run_off_linux_x86_64(tmp_path, system, machine):
     assert not (tmp_path / "build").exists() and not (tmp_path / "dist").exists()
 
 
-def test_the_startup_update_check_is_off_on_linux_and_unchanged_elsewhere():
+def test_the_startup_update_check_is_off_on_linux_and_unchanged_on_macos():
+    # Since the Windows packaging it is "macOS only" (Linux stays off, as before).
     lib = (TAURI / "src" / "lib.rs").read_text()
-    assert 'if !cfg!(debug_assertions) && !cfg!(target_os = "linux") {' in lib
+    assert 'if !cfg!(debug_assertions) && cfg!(target_os = "macos") {' in lib
     assert "updates::check_after_startup(app.handle());" in lib
     # The plugin stays registered on every platform (the commands need its state).
     assert ".plugin(tauri_plugin_updater::Builder::new().build())" in lib
