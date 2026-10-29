@@ -50,7 +50,10 @@ def _embeddings():
         import sentence_transformers  # noqa: F401
         return True, "sentence-transformers installed (semantic search on)"
     except Exception:
-        return False, "optional: pip install sentence-transformers for semantic search"
+        import sys
+        if getattr(sys, "frozen", False):  # the desktop app ships without it
+            return False, "not in the desktop app: search matches words, not meaning"
+        return False, "pip install sentence-transformers for semantic search"
 
 
 def _secrets():
@@ -87,7 +90,11 @@ def _logging():
 def _projects():
     from . import projects
     n = len(projects.PROJECTS)
-    return n > 0, (f"{n} project(s) configured" if n else "no projects — add projects.local.json or OPS_PROJECTS_FILE")
+    if n:
+        return True, f"{n} project(s) configured"
+    from .app_paths import path as _app_path
+    return False, ("none — projects group notes, repos and URLs by business; "
+                   f"they are defined in {_app_path('projects.local.json')}")
 
 
 def _documents():
@@ -101,13 +108,16 @@ def _obsidian():
     s = obsidian_sync.status()
     ok = s["folder_exists"]
     return ok, (f"{s['note_count']} memory notes in vault" if ok
-                else "not synced yet — run `ops obsidian-sync`")
+                else "not exported yet — press Export under “Obsidian memory” below")
 
 
 # (id, label, fn) — order = the tutorial's steps 1..9. (The 'edition' step was
 # removed on 2026-10-21: ConductLoop is free, there is nothing to resolve.)
+# Extras someone who only brings their notes does without: shown, never
+# counted against "ready".
+OPTIONAL = frozenset({"embeddings", "projects", "obsidian_sync"})
 _CHECKS = [
-    ("vault", "Obsidian vault configured", _vault),
+    ("vault", "Folder for ConductLoop's own notes", _vault),
     ("database", "Database initialized + migrated", _database),
     ("provider", "AI provider (BYOK) configured", _provider),
     ("embeddings", "Semantic-search embeddings available", _embeddings),
@@ -120,13 +130,18 @@ _CHECKS = [
 
 
 def checklist() -> dict:
-    """Run all onboarding checks. Returns {ready, passed, total, checks:[...]}."""
+    """Run all onboarding checks. Returns {ready, passed, total, required,
+    required_passed, checks:[...]}; ``ready`` looks at the required ones only."""
     items = []
     for step, (cid, label, fn) in enumerate(_CHECKS, start=1):
         ok, detail = _safe(fn)
-        items.append({"step": step, "id": cid, "label": label, "ok": bool(ok), "detail": detail})
+        items.append({"step": step, "id": cid, "label": label, "ok": bool(ok), "detail": detail,
+                      "optional": cid in OPTIONAL})
     passed = sum(1 for i in items if i["ok"])
-    return {"ready": passed == len(items), "passed": passed, "total": len(items), "checks": items}
+    required = [i for i in items if not i["optional"]]
+    required_passed = sum(1 for i in required if i["ok"])
+    return {"ready": required_passed == len(required), "passed": passed, "total": len(items),
+            "required": len(required), "required_passed": required_passed, "checks": items}
 
 
 # --- first run -------------------------------------------------------------

@@ -1249,9 +1249,9 @@ def setup_cmd() -> None:
     from .onboarding import checklist
     r = checklist()
     state = "[green]ready[/green]" if r["ready"] else "[yellow]incomplete[/yellow]"
-    console.print(f"[bold]Setup: {r['passed']}/{r['total']} ready[/bold] ({state})")
+    console.print(f"[bold]Setup: {r['required_passed']}/{r['required']} required ready[/bold] ({state})")
     for c in r["checks"]:
-        mark = "[green]✓[/green]" if c["ok"] else "[red]✗[/red]"
+        mark = "[green]✓[/green]" if c["ok"] else "[dim]–[/dim]" if c["optional"] else "[red]✗[/red]"
         console.print(f"  {mark} {c['step']:>2}. {c['label']} — [dim]{c['detail']}[/dim]")
 
 

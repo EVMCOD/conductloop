@@ -385,15 +385,109 @@ class MockProvider(Provider):
 
     def ask(self, system: str, messages: list[dict], **kwargs) -> str:
         last = messages[-1]["content"] if messages else ""
+        # Without a key the brain can still show where the answer is: the
+        # lines of the retrieved notes that share words with the question.
+        found = _matching_lines(system, last)
+        if found:
+            return (
+                "No AI key is set up, so ConductLoop cannot write an answer yet. "
+                "These lines from your notes match your question:\n\n"
+                + "\n\n".join(found)
+                + f"\n\n{_NO_KEY_TIP}"
+            )
         return (
-            f"[mock brain · no LLM configured]\n\n"
-            f"You asked: {last[:200]}\n\n"
-            f"No AI provider is set up, so this is a placeholder answer. To get "
-            f"real answers, add a key in Credentials (Anthropic, OpenAI, "
-            f"MiniMax...) or point Connect AI at a local Ollama. From a "
-            f"terminal, BRAIN_PROVIDER=anthropic with ANTHROPIC_API_KEY works "
-            f"too. Search and your notes work without a key."
+            f"No AI key is set up, so ConductLoop cannot write an answer yet, "
+            f"and nothing in your notes matches “{last[:200]}”.\n\n{_NO_KEY_TIP}"
         )
+
+
+_NO_KEY_TIP = (
+    "To get written answers, add a key in Credentials (Anthropic, OpenAI, "
+    "MiniMax...) or point Connect AI at a local Ollama. From a terminal, "
+    "BRAIN_PROVIDER=anthropic with ANTHROPIC_API_KEY works too."
+)
+
+# The context block written by _format_context: "[N] (source) title", then
+# "path: ..." (or "content:" for web clips), then "content:" and the text.
+_CONTEXT_START = re.compile(r"^Relevant context\b.*:$", re.M)
+_CONTEXT_DOC = re.compile(r"^\[(\d+)\] \(([^)\n]*)\)(?: (.*))?$")
+# What the prompt builders append after the last document.
+_CONTEXT_END = ("[Guardrails for low-context answers", "[Untrusted web content", "<lessons>")
+_STOPWORDS = frozenset(
+    "the and for are was were what when where which who whom why how does did done "
+    "have has had with from that this these those there their about into your you "
+    "can could should would will shall may might must not but any all our out its "
+    "que qué los las del una uno unos unas por para con cómo como cuándo cuando dónde "
+    "donde cuál cual quién quien sobre tengo tiene hay mis tus sus esta este esto ese "
+    "esa eso han fue ser está están".split()
+)
+
+
+def _terms(text: str) -> set[str]:
+    words = re.findall(r"[^\W_]{3,}", text.lower())
+    return {w[:-1] if len(w) > 4 and w.endswith("s") else w for w in words if w not in _STOPWORDS}
+
+
+def _matching_lines(system: str, question: str, *, docs: int = 3, per_doc: int = 2) -> list[str]:
+    """For the no-key answer: up to ``per_doc`` lines from each of the first
+    ``docs`` notes in the prompt's context block that share words with the
+    question, as markdown ("**title** [N]" and quoted lines)."""
+    starts = list(_CONTEXT_START.finditer(system or ""))
+    terms = _terms(question)
+    if not starts or not terms:
+        return []
+    blocks: list[dict] = []
+    lines = system[starts[-1].end():].splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith(_CONTEXT_END):
+            break
+        head = _CONTEXT_DOC.match(line)
+        nxt = lines[i + 1] if i + 1 < len(lines) else ""
+        if head and nxt.startswith(("path: ", "content:")):
+            blocks.append({"n": head.group(1), "title": (head.group(3) or head.group(2)).strip(), "lines": []})
+            i += 1
+            continue
+        if blocks:
+            blocks[-1]["lines"].append(line)
+        i += 1
+    out: list[str] = []
+    for b in blocks:
+        body = b["lines"]
+        # Drop the header lines and a YAML front matter at the top of the note.
+        while body and (body[0].startswith(("path: ", "content:")) or not body[0].strip()):
+            body = body[1:]
+        if body and body[0].strip() == "---":
+            end = next((k for k in range(1, len(body)) if body[k].strip() == "---"), None)
+            body = body[end + 1:] if end is not None else body
+        scored = []
+        for k, raw in enumerate(body):
+            text = re.sub(r"^#+\s*", "", raw.strip())
+            if not text or text.startswith(("<<<", "url: ")):
+                continue
+            if text.startswith("title: "):
+                b["title"] = text[7:].strip() or b["title"]
+                continue
+            if text.lower() == b["title"].lower():  # the note's own heading
+                continue
+            score = sum(1 for t in terms if t in text.lower())
+            if score:
+                scored.append((score, k, text if len(text) <= 240 else text[:239] + "…"))
+        b["scored"] = scored
+    # A line has to share at least half as many words with the question as the
+    # best line does: one common word ("need") is not a match next to four.
+    top = max((s[0] for b in blocks for s in b["scored"]), default=0)
+    floor = max(1, (top + 1) // 2)
+    for b in blocks:
+        scored = [s for s in b["scored"] if s[0] >= floor]
+        if not scored:
+            continue
+        best = sorted(sorted(scored, key=lambda s: (-s[0], s[1]))[:per_doc], key=lambda s: s[1])
+        out.append(f"**{b['title']}** [{b['n']}]\n" + "\n".join(f"> {s[2]}" for s in best))
+        if len(out) >= docs:
+            break
+    return out
 
 
 class AnthropicProvider(Provider):

@@ -476,6 +476,10 @@
     renderHeader();
     var thread = parseInt(params.get('thread') || '', 10);
     if (thread) openThread(thread); else newChat();
+    // "Ask" on the dashboard's notes home: the question is put in the box,
+    // not sent, so a link alone never spends a call on the user's key.
+    var ask = params.get('q');
+    if (ask && !thread) { $('input').value = ask.slice(0, 4000); autosize(); }
     loadThreads();
   }
   boot();
