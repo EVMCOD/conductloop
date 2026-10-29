@@ -4,6 +4,7 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- **Linux: the command sandbox no longer lets commands reach local sockets.** Tests and linters run by agent sessions on Linux could still connect to the desktop's D-Bus session bus, the X11 server, ssh-agent/gpg-agent and the Docker socket from inside bubblewrap; those are now hidden. Without bubblewrap, commands stay off. macOS is unchanged. Sockets nested deeper than three levels under /tmp or /run, or in other directories, can still be reached (a seccomp filter would close that).
 - **Honest about what each system can do.** The in-app browser is now off on Linux and Windows (it only exists on macOS 14+), and the Browser page says why instead of offering to enable it. On Windows, code sessions are turned off with an explanation: there is no OS sandbox there yet and ConductLoop never runs commands without one. Where the sandbox is missing on Linux, the Sessions page says that commands are off. macOS is unchanged.
 - Docs only: `docs/PORTABILITY.md` audits everything that is macOS-only (keychain, sandbox, in-app browser, paths, sidecar, menu, updater, CI) and plans the Linux (experimental) and Windows work. Nothing changes in the app.
 

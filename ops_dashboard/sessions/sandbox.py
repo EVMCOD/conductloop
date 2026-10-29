@@ -7,7 +7,9 @@ What the OS sandbox gives (design doc D2):
   interfaces except loopback (no network at all), the whole filesystem
   mounted read-only except the worktree and a private temp dir, credential
   dirs (``~/.ssh``, ``~/.aws``…) and the ConductLoop data dir hidden,
-  PID namespace + ``--die-with-parent`` so nothing outlives the run.
+  PID namespace + ``--die-with-parent`` so nothing outlives the run, and the
+  Unix sockets on the filesystem (D-Bus, X11, ssh/gpg agent, Docker…) covered
+  so they cannot be connected to (see "filesystem Unix sockets" below).
 * **macOS — ``sandbox-exec``** (Seatbelt): ``(deny network*)``, writes denied
   outside the worktree / temp dir / ``/dev``, reads of credential dirs and
   the Keychain denied. ``sandbox-exec`` is deprecated by Apple but still
@@ -31,13 +33,16 @@ from __future__ import annotations
 
 import collections
 import os
+import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -111,6 +116,109 @@ def _data_dir() -> Path | None:
         return None
 
 
+# ── Linux: filesystem Unix sockets ─────────────────────────────────────────
+# ``--ro-bind / /`` is recursive and ``--unshare-net`` only hides *abstract*
+# sockets, so a command inside bwrap could still ``connect()`` to a socket that
+# lives on the filesystem: the D-Bus session bus (``$XDG_RUNTIME_DIR/bus``), the
+# X11 server (``/tmp/.X11-unix``), ssh-agent / gpg-agent, the Docker socket…
+# Those are credentials and a way out of the sandbox (a bus or Docker call runs
+# code outside it). Read-only does not stop ``connect()``; the paths must be
+# covered. Directories that hold sockets get a tmpfs; every other socket found
+# under /tmp and /run is covered with /dev/null (connect() then fails).
+# Limit: sockets deeper than ``_SOCKET_SCAN_DEPTH`` or in other directories are
+# not found; a seccomp filter on socket(AF_UNIX) would be the complete fix.
+
+_SOCKET_SCAN_ROOTS = ("/tmp", "/run")
+_SOCKET_SCAN_DEPTH = 3
+_SOCKET_SCAN_MAX_ENTRIES = 20_000
+_SOCKET_DIRS = ("/run/user", "/run/dbus", "/tmp/.X11-unix", "/tmp/.ICE-unix")
+# Never replaced wholesale by a tmpfs, whatever an environment variable says.
+_NEVER_HIDE = frozenset({"/", "/tmp", "/run", "/var", "/usr", "/etc", "/bin", "/lib", "/home",
+                         "/dev", "/proc", "/sys", "/opt", "/root"})
+
+
+def _is_socket(p: str | Path) -> bool:
+    try:
+        return stat.S_ISSOCK(os.lstat(p).st_mode)
+    except OSError:
+        return False
+
+
+def _env_socket_paths(environ: Mapping[str, str]) -> list[str]:
+    """Socket paths the parent's environment points at (agents, buses, X)."""
+    out: list[str] = []
+    for part in environ.get("DBUS_SESSION_BUS_ADDRESS", "").split(";"):
+        for kv in part.removeprefix("unix:").split(","):
+            if kv.startswith("path="):
+                out.append(kv[5:])
+    out.append(environ.get("SSH_AUTH_SOCK", ""))
+    out.append(environ.get("GPG_AGENT_INFO", "").split(":")[0])
+    host = environ.get("DOCKER_HOST", "")
+    if host.startswith("unix://"):
+        out.append(host[7:])
+    xdg = environ.get("XDG_RUNTIME_DIR", "")
+    wl = environ.get("WAYLAND_DISPLAY", "")
+    if xdg and wl:
+        out.append(wl if os.path.isabs(wl) else os.path.join(xdg, wl))
+    disp = environ.get("DISPLAY", "")
+    m = re.match(r"^[^:]*:(\d+)", disp)
+    if m:
+        out.append(f"/tmp/.X11-unix/X{m.group(1)}")
+    return [p for p in out if p and os.path.isabs(p)]
+
+
+def _walk_sockets(root: str, skip: tuple[str, ...]) -> list[str]:
+    found: list[str] = []
+    seen = 0
+    stack = [(root, 0)]
+    while stack:
+        d, depth = stack.pop()
+        try:
+            with os.scandir(d) as it:
+                for e in it:
+                    seen += 1
+                    if seen > _SOCKET_SCAN_MAX_ENTRIES:
+                        return found
+                    if any(e.path == k or e.path.startswith(k + os.sep) for k in skip):
+                        continue
+                    if e.is_symlink():
+                        continue
+                    if e.is_dir(follow_symlinks=False):
+                        if depth + 1 < _SOCKET_SCAN_DEPTH:
+                            stack.append((e.path, depth + 1))
+                    elif stat.S_ISSOCK(e.stat(follow_symlinks=False).st_mode):
+                        found.append(e.path)
+        except OSError:
+            continue
+    return found
+
+
+def socket_hides(*, worktree: Path, tmp: Path,
+                 environ: Mapping[str, str] | None = None) -> tuple[list[str], list[str]]:
+    """``(dirs, files)`` to cover inside bwrap: ``dirs`` get a tmpfs, ``files``
+    (sockets) get /dev/null bound over them. The worktree and the run's private
+    temp dir are never touched."""
+    env = os.environ if environ is None else environ
+    keep = (str(worktree), str(tmp))
+    dirs: list[str] = []
+    xdg = env.get("XDG_RUNTIME_DIR", "")
+    for d in (*_SOCKET_DIRS, xdg):
+        if not d or not os.path.isabs(d) or os.path.realpath(d) in _NEVER_HIDE:
+            continue
+        if os.path.isdir(d) and not os.path.islink(d) and d not in dirs:
+            dirs.append(d)
+    files: list[str] = []
+    for p in [*_env_socket_paths(env),
+              *(q for r in _SOCKET_SCAN_ROOTS for q in _walk_sockets(r, keep))]:
+        if p in files or any(p == d or p.startswith(d + os.sep) for d in dirs):
+            continue
+        if any(p == k or p.startswith(k + os.sep) for k in keep):
+            continue
+        if _is_socket(p):
+            files.append(p)
+    return dirs, files
+
+
 def bwrap_argv(argv: list[str], *, worktree: Path, tmp: Path, cwd: Path) -> list[str]:
     exe = shutil.which("bwrap") or "bwrap"
     out = [exe, "--unshare-net", "--unshare-ipc", "--unshare-pid", "--unshare-uts",
@@ -128,6 +236,11 @@ def bwrap_argv(argv: list[str], *, worktree: Path, tmp: Path, cwd: Path) -> list
         # Hide the ConductLoop data dir (DB, fallback secrets); the worktree is
         # bound back below when it lives inside it.
         out += ["--tmpfs", str(data)]
+    sock_dirs, sock_files = socket_hides(worktree=worktree, tmp=tmp)
+    for d in sock_dirs:
+        out += ["--tmpfs", d]
+    for f in sock_files:
+        out += ["--ro-bind", os.devnull, f]
     out += ["--bind", str(worktree), str(worktree), "--bind", str(tmp), str(tmp),
             "--chdir", str(cwd), "--", *argv]
     return out
