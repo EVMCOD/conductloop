@@ -122,6 +122,8 @@ tests/                  pytest suite
 ### Desktop app
 See [`desktop/README.md`](desktop/README.md) and [`desktop/docs/DISTRIBUTION.md`](desktop/docs/DISTRIBUTION.md). Building and signing a release needs your own Apple Developer ID and your own Tauri updater key; neither is in this repository.
 
+Linux (experimental) and Windows are **not shipped**. [`docs/PORTABILITY.md`](docs/PORTABILITY.md) is the audit of everything that is macOS-only today, with the plan to port it.
+
 ---
 
 ## Contributing & security
