@@ -2,6 +2,11 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased
+
+- CI only: the Linux bundles workflow now **starts the AppImage and the .deb** it builds, on Ubuntu 22.04 (the build image) and on ubuntu-latest, on a virtual display with an empty HOME and no keyring. `scripts/linux-smoke.sh` checks that the local server answers, that `/api/platform` says Linux with the in-app browser off, that it is a first run with the welcome page, that a ConductLoop window is on screen, and that closing the app stops the server; screenshots and logs are kept for 3 days. Until now the Linux packages were only built, never run. The script also works by hand on a Linux machine.
+- CI only: a "Windows (compile and tests)" workflow checks on every relevant pull request that the desktop wrapper still compiles for Windows and that the Windows-safe part of the Python tests passes there. It builds no installer, signs nothing, publishes nothing and is not a required check. Windows is still not supported.
+
 ## 1.2.3 — 2026-10-29 — A home for your notes and a Brain that helps without a key
 
 The first version that installs from the app: in 1.2.2, "Check for Updates…"
@@ -10,7 +15,6 @@ changes is the first part of the list below (the notes home, the Brain without
 a key, Setup); the Linux and Windows items are groundwork for those systems and
 leave the Mac app as it was.
 
-- CI only: a "Windows (compile and tests)" workflow checks on every relevant pull request that the desktop wrapper still compiles for Windows and that the Windows-safe part of the Python tests passes there. It builds no installer, signs nothing, publishes nothing and is not a required check. Windows is still not supported.
 - **A home for your notes.** Without projects (a fresh install has none), the
   dashboard opened on an empty project canvas and search hid behind ⌘P. It now
   opens on "Your notes": how many are indexed, a box to ask a question (it goes

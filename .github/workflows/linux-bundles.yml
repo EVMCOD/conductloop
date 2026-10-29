@@ -2,7 +2,10 @@ name: Linux bundles
 
 # Builds the Linux AppImage and .deb of the desktop app with
 # scripts/build-linux.sh and keeps them as workflow artifacts for 3 days, so a
-# Linux user (or a reviewer) can try a build of a pull request. It publishes
+# Linux user (or a reviewer) can try a build of a pull request. Then
+# scripts/linux-smoke.sh starts both on a virtual display with an empty HOME,
+# on the build image (22.04) and on ubuntu-latest, and checks that the app comes
+# up as a new user would see it; screenshots and logs are kept for 3 days too. It publishes
 # nothing: no release, no tag, no secret, no signing (there is no signing and no
 # updater on Linux). Runs only on GitHub-hosted runners (this repo is public);
 # never a self-hosted one (tests/test_workflows_guard.py).
@@ -17,6 +20,7 @@ on:
     paths:
       - "desktop/**"
       - "scripts/build-linux.sh"
+      - "scripts/linux-smoke.sh"
       - ".github/workflows/linux-bundles.yml"
 
 permissions:
@@ -37,7 +41,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
-            libayatana-appindicator3-dev librsvg2-dev patchelf
+            libayatana-appindicator3-dev librsvg2-dev patchelf \
+            xvfb x11-utils imagemagick
 
       # The sidecar is frozen with Python 3.14, the version the macOS release uses.
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -86,4 +91,61 @@ jobs:
           name: conductloop-linux-deb
           path: desktop/src-tauri/target/release/bundle/deb/*.deb
           if-no-files-found: error
+          retention-days: 3
+
+      # After the uploads, so the bundles are there even when a check fails.
+      - name: Smoke-test the AppImage
+        run: OUT=smoke scripts/linux-smoke.sh appimage desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+
+      - name: Smoke-test the .deb
+        if: ${{ !cancelled() }}
+        run: OUT=smoke scripts/linux-smoke.sh deb desktop/src-tauri/target/release/bundle/deb/*.deb
+
+      - name: Upload the smoke-test screenshots and logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: conductloop-linux-smoke-ubuntu-22.04
+          path: smoke/
+          if-no-files-found: warn
+          retention-days: 3
+
+  # The same bundles on the newest image: they are built on 22.04 for an older
+  # glibc, so check that they also start (and the .deb installs) on a newer one.
+  linux-smoke:
+    needs: linux-bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Display and screenshot tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb x11-utils imagemagick
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: conductloop-linux-appimage
+          path: bundles/appimage
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: conductloop-linux-deb
+          path: bundles/deb
+
+      - name: Smoke-test the AppImage
+        run: OUT=smoke scripts/linux-smoke.sh appimage bundles/appimage/*.AppImage
+
+      - name: Smoke-test the .deb
+        if: ${{ !cancelled() }}
+        run: OUT=smoke scripts/linux-smoke.sh deb bundles/deb/*.deb
+
+      - name: Upload the smoke-test screenshots and logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: conductloop-linux-smoke-ubuntu-latest
+          path: smoke/
+          if-no-files-found: warn
           retention-days: 3
