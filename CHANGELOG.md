@@ -4,6 +4,19 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- **Fixed: the in-app browser got in the way of the rest of the app.** Leaving
+  the browser page left the open web page drawn over the dashboard and every
+  other page; coming back with Go › Back showed no page at all. ⌘W quit the
+  whole app instead of closing the tab, and ⌘[ / ⌘] left the browser instead
+  of going back in the tab. Now the tabs are hidden as soon as you leave the
+  browser page and shown when you come back, ⌘W closes the tab (Close Window
+  is ⇧⌘W) and Back/Forward act on the tab. Also: the URL bar shows the page you
+  are on, new tabs are called "New tab" instead of "… about:blank", messages
+  clear themselves, an address that points to your own machine or your LAN
+  says it was blocked instead of doing nothing, the first click on the app's
+  bar after using a page is no longer lost, the agent panel starts from your
+  configured AI provider, and "Ask" without a key points to Credentials.
+
 - **Fixed: the desktop app never got past "Connecting to local server…".** The
   window waits for its own server by looking for a per-launch id in
   `/api/health`, but the server only echoed the first 16 characters of it. The

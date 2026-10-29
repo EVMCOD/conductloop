@@ -34,4 +34,15 @@ def test_no_innerhtml_with_page_data():
 
 
 def test_hides_tabs_when_leaving():
-    assert '"pagehide"' in HTML and "browser_set_visible" in HTML
+    # The app hides the tabs when the main webview starts loading any page and
+    # shows them when the browser page has loaded (also from the history cache).
+    lib = (Path(__file__).resolve().parent.parent / "desktop" / "src-tauri" / "src" / "lib.rs").read_text()
+    started = lib.index("PageLoadEvent::Started => {")
+    assert "browser::set_visible(webview.app_handle(), false)" in lib[started:started + 200]
+    finished = lib.index("PageLoadEvent::Finished => {")
+    assert "browser::set_visible(webview.app_handle(), true)" in lib[finished:finished + 300]
+    assert '"/browser" | "/browser.html"' in lib
+    # A visibility call from the page while it is being left gets frozen in the
+    # history cache and delivered on the way back, hiding the tabs again.
+    assert '"pagehide"' not in HTML and '"visibilitychange"' not in HTML
+    assert '"pageshow"' in HTML

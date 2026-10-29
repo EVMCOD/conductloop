@@ -197,6 +197,9 @@ pub struct BrowserList {
     active: Option<String>,
     /// URLs pages tried to open with window.open / target=_blank (drained).
     new_window_requests: Vec<String>,
+    /// Hosts the filtering proxy refused lately. A refused load shows nothing
+    /// in the tab, so the UI uses this to say why.
+    recent_blocks: Vec<String>,
 }
 
 /// URL bar input → URL, or an error code for the UI. Pure (unit-tested).
@@ -285,6 +288,10 @@ fn tab_builder(app: &AppHandle, label: &str, url: Url, proxy: Url) -> WebviewBui
         // through the filtering proxy (PR 5): DNS is resolved and checked there.
         .proxy_url(proxy)
         .incognito(true)
+        // A click on a tab while the app's own page has the focus acts at
+        // once instead of only moving the focus (and the other way round,
+        // see acceptFirstMouse in tauri.conf.json).
+        .accept_first_mouse(true)
         .devtools(cfg!(debug_assertions))
         .on_navigation(move |u| match check_navigation(u.as_str()) {
             // B10: agent tabs only go to sites opened in the session.
@@ -398,6 +405,41 @@ fn apply_visibility(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Show or hide the tabs. lib.rs hides them whenever the main webview starts
+/// loading a page: the browser page's own `pagehide` call does not always get
+/// through before the page is gone, and native tabs left visible are drawn
+/// over the rest of the app.
+pub fn set_visible(app: &AppHandle, visible: bool) -> Result<(), String> {
+    app.state::<BrowserState>().inner.lock().unwrap().visible = visible;
+    apply_visibility(app)
+}
+
+/// The tab shown on the browser page, if the page is showing tabs.
+pub fn visible_active_tab(app: &AppHandle) -> Option<String> {
+    let state = app.state::<BrowserState>();
+    let g = state.inner.lock().unwrap();
+    if g.visible {
+        g.active.clone()
+    } else {
+        None
+    }
+}
+
+/// Close tab `id` and activate the last remaining one.
+pub fn close_tab(app: &AppHandle, id: &str) -> Result<(), String> {
+    let wv = tab_webview(app, id)?;
+    wv.close().map_err(|e| e.to_string())?;
+    {
+        let state = app.state::<BrowserState>();
+        let mut g = state.inner.lock().unwrap();
+        g.tabs.retain(|t| t.id != id);
+        if g.active.as_deref() == Some(id) {
+            g.active = g.tabs.last().map(|t| t.id.clone());
+        }
+    }
+    apply_visibility(app)
+}
+
 fn tab_webview(app: &AppHandle, id: &str) -> Result<tauri::Webview, String> {
     if !valid_tab_id(id) {
         return Err("bad_tab".into());
@@ -439,7 +481,8 @@ pub fn open_tab(
         let info = TabInfo {
             id: label.clone(),
             url: target.to_string(),
-            loading: true,
+            // about:blank never reports a finished load: it would stay "…" forever.
+            loading: target.as_str() != "about:blank",
             agent,
             control: agent.map(|_| CONTROL_AGENT.to_string()),
             sites: if agent.is_some() { sites } else { Vec::new() },
@@ -465,6 +508,18 @@ pub fn open_tab(
         }
     }
     apply_visibility(app)?;
+    // A new webview takes the keyboard once it has loaded: for an empty tab,
+    // give it back to the URL bar afterwards, or what the user types next goes
+    // into the blank page. (Done right away, the tab took it back.)
+    if agent.is_none() && target.as_str() == "about:blank" {
+        let app = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            if let Some(main) = app.get_webview(UI_WINDOW) {
+                let _ = main.set_focus();
+            }
+        });
+    }
     Ok(info)
 }
 
@@ -563,21 +618,8 @@ pub fn forget_tab(app: &AppHandle, id: &str) {
 }
 
 #[tauri::command]
-pub async fn browser_close(
-    app: AppHandle,
-    state: tauri::State<'_, BrowserState>,
-    id: String,
-) -> Result<(), String> {
-    let wv = tab_webview(&app, &id)?;
-    wv.close().map_err(|e| e.to_string())?;
-    {
-        let mut g = state.inner.lock().unwrap();
-        g.tabs.retain(|t| t.id != id);
-        if g.active.as_deref() == Some(id.as_str()) {
-            g.active = g.tabs.last().map(|t| t.id.clone());
-        }
-    }
-    apply_visibility(&app)
+pub async fn browser_close(app: AppHandle, id: String) -> Result<(), String> {
+    close_tab(&app, &id)
 }
 
 #[tauri::command]
@@ -606,13 +648,8 @@ pub async fn browser_set_bounds(
 }
 
 #[tauri::command]
-pub async fn browser_set_visible(
-    app: AppHandle,
-    state: tauri::State<'_, BrowserState>,
-    visible: bool,
-) -> Result<(), String> {
-    state.inner.lock().unwrap().visible = visible;
-    apply_visibility(&app)
+pub async fn browser_set_visible(app: AppHandle, visible: bool) -> Result<(), String> {
+    set_visible(&app, visible)
 }
 
 #[tauri::command]
@@ -622,6 +659,7 @@ pub async fn browser_list(state: tauri::State<'_, BrowserState>) -> Result<Brows
         tabs: g.tabs.clone(),
         active: g.active.clone(),
         new_window_requests: std::mem::take(&mut g.new_window_requests),
+        recent_blocks: conductloop_url_policy::proxy::recent_blocks(std::time::Duration::from_secs(15)),
     })
 }
 
