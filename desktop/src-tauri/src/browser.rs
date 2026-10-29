@@ -147,7 +147,8 @@ pub struct BrowserState {
     /// Filtering proxy for every tab request (PR 5). None = browser disabled
     /// (fail closed: tabs are never created without it).
     proxy_url: Option<Url>,
-    /// macOS < 14 can't set a per-webview proxy (B4): browser disabled.
+    /// macOS < 14 can't set a per-webview proxy (B4), and the browser is only
+    /// built for macOS (WKWebView + Network.framework proxy): disabled there.
     supported: bool,
 }
 
@@ -185,9 +186,12 @@ fn os_supported() -> bool {
             .and_then(|o| parse_macos_major(&String::from_utf8_lossy(&o.stdout)))
             .is_some_and(|major| major >= 14)
     }
+    // Linux and Windows: the in-app browser is not supported (it relies on the
+    // macOS web view and its per-webview proxy). Off, and said so, rather than
+    // opening tabs that cannot be filtered.
     #[cfg(not(target_os = "macos"))]
     {
-        true
+        false
     }
 }
 
@@ -467,7 +471,10 @@ pub fn open_tab(
     sites: Vec<String>,
 ) -> Result<TabInfo, String> {
     if !state.supported {
+        #[cfg(target_os = "macos")]
         return Err("macos_14_required".into());
+        #[cfg(not(target_os = "macos"))]
+        return Err("platform_unsupported".into());
     }
     let proxy = state.proxy_url.clone().ok_or("proxy_unavailable")?;
     let window = app.get_window(UI_WINDOW).ok_or("no_main_window")?;
@@ -712,6 +719,13 @@ pub async fn browser_extract(app: AppHandle, id: String) -> Result<serde_json::V
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn in_app_browser_is_off_outside_macos() {
+        assert!(!os_supported());
+        assert!(!BrowserState::new(None).supported);
+    }
 
     #[test]
     fn url_bar_input() {

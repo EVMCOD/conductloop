@@ -17,7 +17,11 @@ import pytest
 import yaml
 
 WORKFLOWS = sorted((Path(__file__).resolve().parent.parent / ".github" / "workflows").glob("*.y*ml"))
-HOSTED = re.compile(r"^(ubuntu|macos|windows)-[a-z0-9.\-]+$")
+# The only runner labels a job may use. A pinned image (ubuntu-22.04, macos-14,
+# ...) is not allowed, with ONE decision-backed exception: the Linux bundles job
+# builds on ubuntu-22.04 so the AppImage works with an older glibc.
+HOSTED_LABELS = frozenset({"ubuntu-latest", "macos-latest", "windows-latest"})
+PINNED_IMAGE_EXCEPTIONS = {("linux-bundles.yml", "linux-bundles"): "ubuntu-22.04"}
 FORBIDDEN = ("self-hosted", "vars.runs_on", "runs_on")
 USES = re.compile(r"^\s*-?\s*uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
 PINNED = re.compile(r"^[\w.\-]+/[\w.\-]+(/[\w.\-/]+)?@[0-9a-f]{40}$")
@@ -29,6 +33,17 @@ def _code_lines(path: Path):
         code = re.sub(r"(^|\s)#.*$", "", line)
         if code.strip():
             yield n, code
+
+
+def runner_problem(workflow: str, job: str, runs_on) -> str | None:
+    """Why ``runs-on`` is not allowed for this job, or None when it is."""
+    if not isinstance(runs_on, str):
+        return "runs-on must be a plain label"
+    if runs_on == PINNED_IMAGE_EXCEPTIONS.get((workflow, job)):
+        return None
+    if runs_on not in HOSTED_LABELS:
+        return f"{runs_on!r} is not an allowed GitHub-hosted label ({', '.join(sorted(HOSTED_LABELS))})"
+    return None
 
 
 def test_there_are_workflows_to_check():
@@ -49,9 +64,8 @@ def test_every_job_runs_on_a_literal_github_hosted_runner(path):
     jobs = doc.get("jobs") or {}
     assert jobs, f"{path.name} has no jobs"
     for name, job in jobs.items():
-        runs_on = job.get("runs-on")
-        assert isinstance(runs_on, str), f"{path.name}:{name}: runs-on must be a plain label"
-        assert HOSTED.match(runs_on), f"{path.name}:{name}: {runs_on!r} is not a GitHub-hosted label"
+        problem = runner_problem(path.name, name, job.get("runs-on"))
+        assert problem is None, f"{path.name}:{name}: {problem}"
         assert job.get("timeout-minutes"), f"{path.name}:{name}: set timeout-minutes"
 
 
@@ -86,3 +100,29 @@ def test_the_desktop_wrapper_is_compiled_on_macos_only_when_desktop_changes():
     triggers = doc.get(True) or doc.get("on")  # PyYAML reads the key `on` as True
     for event in ("push", "pull_request"):
         assert triggers[event]["paths"] == ["desktop/**", ".github/workflows/desktop.yml"]
+
+
+def test_ubuntu_22_04_is_allowed_only_for_the_linux_bundles_job():
+    assert runner_problem("linux-bundles.yml", "linux-bundles", "ubuntu-22.04") is None
+    # Anywhere else it is rejected: another job of the same workflow, another workflow.
+    assert runner_problem("linux-bundles.yml", "other", "ubuntu-22.04")
+    assert runner_problem("ci.yml", "test", "ubuntu-22.04")
+    assert runner_problem("desktop.yml", "desktop-rust", "ubuntu-22.04")
+    # And the exception does not open the door to other pinned images or to self-hosted runners.
+    assert runner_problem("linux-bundles.yml", "linux-bundles", "ubuntu-20.04")
+    assert runner_problem("linux-bundles.yml", "linux-bundles", "ubuntu-24.04")
+    assert runner_problem("linux-bundles.yml", "linux-bundles", "self-hosted")
+    assert runner_problem("ci.yml", "test", "macos-14")
+    assert runner_problem("ci.yml", "test", ["self-hosted", "linux"])
+    assert runner_problem("ci.yml", "test", "${{ vars.RUNS_ON }}")
+    for label in sorted(HOSTED_LABELS):
+        assert runner_problem("ci.yml", "test", label) is None
+
+
+def test_only_the_linux_bundles_job_runs_on_a_pinned_image():
+    pinned = {}
+    for path in WORKFLOWS:
+        for name, job in (yaml.safe_load(path.read_text(encoding="utf-8")).get("jobs") or {}).items():
+            if job.get("runs-on") not in HOSTED_LABELS:
+                pinned[(path.name, name)] = job.get("runs-on")
+    assert pinned == PINNED_IMAGE_EXCEPTIONS

@@ -1,0 +1,89 @@
+name: Linux bundles
+
+# Builds the Linux AppImage and .deb of the desktop app with
+# scripts/build-linux.sh and keeps them as workflow artifacts for 3 days, so a
+# Linux user (or a reviewer) can try a build of a pull request. It publishes
+# nothing: no release, no tag, no secret, no signing (there is no signing and no
+# updater on Linux). Runs only on GitHub-hosted runners (this repo is public);
+# never a self-hosted one (tests/test_workflows_guard.py).
+#
+# This is the one job pinned to ubuntu-22.04 instead of ubuntu-latest: an
+# AppImage bundles what it was built against, and one built on a newer glibc
+# does not start on older distributions, so it is built on an older image.
+# tests/test_workflows_guard.py allows ubuntu-22.04 here and nowhere else.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "scripts/build-linux.sh"
+      - ".github/workflows/linux-bundles.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-bundles-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-bundles:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: System dependencies (WebKitGTK 4.1)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      # The sidecar is frozen with Python 3.14, the version the macOS release uses.
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Build the AppImage and the .deb
+        env:
+          # Skip linuxdeploy's own (older) strip: a known failure with newer
+          # system libraries; only costs some size.
+          NO_STRIP: "true"
+        run: scripts/build-linux.sh
+
+      - name: Bundle sizes
+        run: |
+          set -euo pipefail
+          bundle=desktop/src-tauri/target/release/bundle
+          {
+            echo "### Linux bundles"
+            echo '```'
+            ls -l "$bundle"/appimage/*.AppImage "$bundle"/deb/*.deb
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "--- contents of the .deb"
+          dpkg-deb -c "$bundle"/deb/*.deb | grep -i conductloop
+
+      - name: Upload the AppImage
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: conductloop-linux-appimage
+          path: desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Upload the .deb
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: conductloop-linux-deb
+          path: desktop/src-tauri/target/release/bundle/deb/*.deb
+          if-no-files-found: error
+          retention-days: 3

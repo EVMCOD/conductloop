@@ -29,6 +29,7 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from . import platform_caps
 from .routing import router
 from .sessions import limits, providers, worktrees
 from .sessions.limits import SessionLimitError, SessionValidationError
@@ -185,6 +186,8 @@ def route(method: str, path: str) -> Callable:
                 _error(handler, ApiError(409, "limit_reached", str(e)))
             except PathConflictError as e:
                 _error(handler, ApiError(409, "path_conflict", str(e), conflicts=e.conflicts))
+            except platform_caps.PlatformUnsupported as e:
+                _error(handler, ApiError(409, e.code, str(e), capability=e.capability))
             except ResumeBlocked as e:
                 _error(handler, ApiError(409, e.code, str(e)))
             except SupervisorError as e:
@@ -344,6 +347,7 @@ def list_sessions(handler):
 
 @route("POST", "/api/sessions")
 def create_session(handler):
+    platform_caps.require_code_sessions()  # Windows: refuse before anything is created
     data = _body(handler)
     role = _str(data, "role", max_len=60) or ""
     provider = (_str(data, "provider", max_len=40) or "").lower()

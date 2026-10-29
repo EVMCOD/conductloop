@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import db
+from ..fileperms import restrict_to_owner
 
 log = logging.getLogger("conductloop.learning")
 
@@ -262,8 +263,5 @@ def export_local(*, include_comments: bool = False) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / time.strftime("learning-export-%Y%m%d-%H%M%S.json")
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    try:
-        path.chmod(0o600)
-    except OSError:
-        pass
+    restrict_to_owner(path)
     return path

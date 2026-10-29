@@ -2797,6 +2797,10 @@ function qcSwitchTab(kind) {
 // The in-app browser only exists inside the desktop app (Tauri IPC).
 if (window.__TAURI_INTERNALS__ && document.getElementById('nav-browser')) {
   document.getElementById('nav-browser').hidden = false;
+  // Only macOS has the in-app browser: hide the link when the server says no.
+  fetch('/api/platform', { credentials: 'same-origin' }).then(function(r) { return r.json(); }).then(function(p) {
+    if (p && p.browser && p.browser.available === false) document.getElementById('nav-browser').hidden = true;
+  }).catch(function() {});
 }
 
 // ---- Service worker (retired) + PWA install ----
