@@ -82,6 +82,11 @@ NO_CONTEXT_MARKER = "[Guardrails for low-context answers"
 _CITE_RE = re.compile(r"\[(\d{1,3})\]")
 
 
+def _posix(path: Any) -> str:
+    """A document path with forward slashes: Windows indexes ``a\\b.md``, the cases say ``a/b.md``."""
+    return str(path).replace("\\", "/")
+
+
 def _req(spec: dict, key: str) -> Any:
     if key not in spec:
         raise CheckSpecError(f"check {spec.get('type')!r} needs {key!r}")
@@ -136,7 +141,7 @@ def _check(o: Outcome, spec: dict) -> CheckResult:  # noqa: C901 - flat dispatch
                            + (f"; invalid {invalid}" if invalid else ""))
     if t == "cites":
         path = str(_req(spec, "path"))
-        nums = [c["n"] for c in o.citations if str(c.get("path", "")).endswith(path)]
+        nums = [c["n"] for c in o.citations if _posix(c.get("path", "")).endswith(path)]
         answer_refs = {int(x) for x in _CITE_RE.findall(o.answer)}
         ok = any(n in answer_refs for n in nums)
         return CheckResult(t, ok, f"{path} is citation {nums or 'none'}; answer cites {sorted(answer_refs)}")
@@ -144,7 +149,7 @@ def _check(o: Outcome, spec: dict) -> CheckResult:  # noqa: C901 - flat dispatch
         path = str(_req(spec, "path"))
         top = spec.get("within_top")
         pool = o.citations[: int(top)] if top else o.citations
-        ok = any(str(c.get("path", "")).endswith(path) for c in pool)
+        ok = any(_posix(c.get("path", "")).endswith(path) for c in pool)
         return CheckResult(t, ok, f"{path} {'in' if ok else 'not in'} "
                                   f"{'top ' + str(top) if top else 'citations'} ({len(o.citations)} total)")
     if t == "citations_min":
@@ -172,7 +177,7 @@ def _check(o: Outcome, spec: dict) -> CheckResult:  # noqa: C901 - flat dispatch
         path = str(_req(spec, "path"))
         top = spec.get("within_top")
         pool = o.results[: int(top)] if top else o.results
-        ok = any(str(r.get("path", "")).endswith(path) for r in pool)
+        ok = any(_posix(r.get("path", "")).endswith(path) for r in pool)
         return CheckResult(t, ok, f"{path} {'in' if ok else 'not in'} {len(o.results)} result(s)")
     if t == "result_title":
         title = str(_req(spec, "text"))
