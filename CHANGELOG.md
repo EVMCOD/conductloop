@@ -4,6 +4,11 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+## 1.2.2 — 2026-10-29 — Updates that work, a signed DMG and the folder picker in Setup
+
+**Install this one from the DMG** (1.2.1 cannot update itself, see below). From
+1.2.2 on, new versions install from the app.
+
 - **The app can update itself.** "Check for Updates…" is in the ConductLoop menu,
   and the app also looks once, quietly, a little after it starts. When there is a
   new version it asks; "Install and restart" downloads it, checks its signature,
