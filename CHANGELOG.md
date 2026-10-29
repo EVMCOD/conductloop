@@ -10,6 +10,7 @@ changes is the first part of the list below (the notes home, the Brain without
 a key, Setup); the Linux and Windows items are groundwork for those systems and
 leave the Mac app as it was.
 
+- CI only: a "Windows (compile and tests)" workflow checks on every relevant pull request that the desktop wrapper still compiles for Windows and that the Windows-safe part of the Python tests passes there. It builds no installer, signs nothing, publishes nothing and is not a required check. Windows is still not supported.
 - **A home for your notes.** Without projects (a fresh install has none), the
   dashboard opened on an empty project canvas and search hid behind ⌘P. It now
   opens on "Your notes": how many are indexed, a box to ask a question (it goes

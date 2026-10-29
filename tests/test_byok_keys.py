@@ -127,6 +127,7 @@ def test_empty_key_clears_both(monkeypatch):
     assert _cfg() == {}
 
 
+@pytest.mark.posix_perms
 def test_config_written_owner_only(monkeypatch):
     FakeKeychain(enabled=False).install(monkeypatch)
     brain.set_provider_key("openai", api_key=FAKE)

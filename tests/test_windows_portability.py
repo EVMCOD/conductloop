@@ -20,7 +20,6 @@ from ops_dashboard import fileperms, parent_watch, server
 
 ROOT = Path(__file__).resolve().parent.parent
 windows_only = pytest.mark.skipif(sys.platform != "win32", reason="needs a real Windows")
-posix_only = pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits do not exist on Windows")
 
 
 # ── parent_watch.alive: never os.kill on Windows ─────────────────────────────
@@ -188,7 +187,7 @@ def test_elsewhere_the_bind_is_exactly_what_it_was(monkeypatch, platform):
 
 # ── owner-only permissions ───────────────────────────────────────────────────
 
-@posix_only
+@pytest.mark.posix_perms
 def test_files_and_dirs_are_restricted_on_posix(tmp_path):
     f = tmp_path / "secret"
     f.write_text("x")

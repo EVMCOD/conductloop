@@ -14,6 +14,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from posix_perms import assert_mode
 from token_fake import FAKE_TOKEN, Recorded, fake_recorded, make_fake, token_env
 
 pytest.importorskip("cryptography")
@@ -172,7 +173,8 @@ def test_config_validation(env):
         base.save_config("fakenotes", {"folders": "../etc"})
     assert e.value.code == "bad_config"
     state = base._state_path("fakenotes")
-    assert oct(state.stat().st_mode & 0o777) == "0o600" and FAKE_TOKEN not in state.read_text()
+    assert_mode(state, 0o600)
+    assert FAKE_TOKEN not in state.read_text()
 
 
 def test_none_mode_and_disconnect(env):

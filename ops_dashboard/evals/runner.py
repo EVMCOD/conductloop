@@ -363,7 +363,10 @@ def run_case(suite: Suite, case: Case, *, guard: Any = None,
     error: str | None = None
     results: list[dict] = []
     before = len(guard.attempts) if guard is not None else 0
-    with tempfile.TemporaryDirectory(prefix="cl-eval-") as td:
+    # ignore_cleanup_errors: the case's sqlite file may still be open (a connection
+    # not yet garbage-collected); Windows refuses to delete it, and a throwaway
+    # directory that cannot be removed must not fail the case.
+    with tempfile.TemporaryDirectory(prefix="cl-eval-", ignore_cleanup_errors=True) as td:
         provider: Any = None
         try:
             with case_env(suite, case, Path(td)) as patches:

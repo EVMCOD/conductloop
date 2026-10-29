@@ -54,3 +54,26 @@ def _vault_open():
     secret_vault.unlock(TEST_PASSPHRASE)
     yield
     secret_vault.lock()
+
+
+def pytest_collection_modifyitems(config, items):
+    """On Windows, skip what cannot exist there, each with its reason.
+
+    * the files and tests of tests/windows_skips.py;
+    * every test marked ``posix_perms`` (asserts POSIX permission bits).
+    """
+    import sys
+
+    if sys.platform != "win32":
+        return
+    from posix_perms import REASON as PERMS_REASON
+    from windows_skips import SKIPPED_ON_WINDOWS
+
+    for item in items:
+        name = Path(str(item.fspath)).name
+        test = getattr(item, "originalname", None) or item.name
+        reason = SKIPPED_ON_WINDOWS.get(name) or SKIPPED_ON_WINDOWS.get(f"{name}::{test}")
+        if reason:
+            item.add_marker(pytest.mark.skip(reason=f"not on Windows: {reason}"))
+        elif item.get_closest_marker("posix_perms"):
+            item.add_marker(pytest.mark.skip(reason=f"not on Windows: {PERMS_REASON}"))
