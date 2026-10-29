@@ -209,10 +209,18 @@ def test_help_works_anywhere_and_prints_the_header():
     (["-SidecarOnly", "-SkipSidecar"], "exclude each other"),
 ])
 def test_bad_options_are_refused_before_anything_is_built(args, message):
+    # A checkout where the script has already built the sidecar is fine: a refusal
+    # must leave that file exactly as it was (present or absent), not require absence.
+    sidecar = TAURI / "binaries" / f"conductloop-server-{TRIPLE}.exe"
+
+    def state():
+        return (sidecar.stat().st_mtime_ns, sidecar.stat().st_size) if sidecar.exists() else None
+
+    before = state()
     r = _run(*args)
     assert r.returncode == 1
     assert message in r.stderr
-    assert not (TAURI / "binaries" / f"conductloop-server-{TRIPLE}.exe").exists()
+    assert state() == before
 
 
 @needs_powershell
