@@ -29,7 +29,9 @@ class FakeKeyring:
         self.items: dict[tuple[str, str], str] = {}
         self.calls: list[tuple] = []
         self.priority_error = priority_error
-        self.mode = mode                      # "", "hang-get", "hang-set", "lie", "fail-set"
+        # "", "hang-get", "hang-set", "slow-set" (commits after release), "lie", "fail-set", "fail-get"
+        self.mode = mode
+        self.finished = threading.Event()     # set when a slow-set worker is done
         self.release = threading.Event()
 
     # keyring exposes ``priority`` as a class property that raises when unusable
@@ -43,12 +45,18 @@ class FakeKeyring:
         self.calls.append(("get", service, username))
         if self.mode == "hang-get" and not username.startswith("__conductloop-probe"):
             self.release.wait(30)
+        if self.mode == "fail-get" and not username.startswith("__conductloop-probe"):
+            raise OSError("locked")
         if self.mode == "lie":
             return "something else"
         return self.items.get((service, username))
 
     def set_password(self, service, username, password):
         self.calls.append(("set", service, username))
+        if self.mode == "slow-set" and not username.startswith("__conductloop-probe"):
+            self.release.wait(30)               # the call outlives the caller's timeout...
+            self.items[(service, username)] = password   # ...and then commits
+            return
         if self.mode == "hang-set" or (self.mode == "fail-set" and not username.startswith("__conductloop-probe")):
             if self.mode == "hang-set":
                 self.release.wait(30)
@@ -404,3 +412,118 @@ def test_bwrap_hides_the_keyring_files_and_macos_profile_is_unchanged(tmp_path, 
     assert str((home / ".local/share/kwalletd").resolve()) in hidden
     assert "keyrings" not in sandbox.seatbelt_profile(worktree=wt, tmp=tmp)
     assert ".local/share/keyrings" not in "".join(sandbox.SENSITIVE_HOME_PATHS)
+
+
+# ── review findings (PR 72) ──────────────────────────────────────────────────
+
+def test_a_failed_read_never_creates_a_replacement_secret(ss):
+    """A read that errors is not "no such item": the Fernet key must not be
+    regenerated (and overwrite the real one) because the keychain hiccuped."""
+    s, kr = ss
+    s.set_secret("fernet-key", SECRET)
+    kr.mode = "fail-get"
+    made = []
+    with pytest.raises(s.SecretUnavailable):
+        s.get_or_create_secret("fernet-key", lambda: made.append(1) or "NEW")
+    assert made == [] and kr.items == {("com.conductloop", "fernet-key"): SECRET}
+    kr.mode = "hang-get"
+    with pytest.raises(s.SecretUnavailable):
+        s.get_or_create_secret("fernet-key", lambda: made.append(1) or "NEW")
+    assert made == [] and kr.items == {("com.conductloop", "fernet-key"): SECRET}
+    kr.mode = ""
+    assert s.get_or_create_secret("fernet-key", lambda: "NEW") == SECRET     # recovers
+
+
+def test_a_missing_secret_is_still_created_when_the_keychain_answers(ss):
+    s, kr = ss
+    assert s.get_or_create_secret("fernet-key", lambda: SECRET) == SECRET
+    assert kr.items == {("com.conductloop", "fernet-key"): SECRET}
+
+
+def test_plain_readers_still_get_none_on_a_failed_read(ss):
+    s, kr = ss
+    s.set_secret("k", SECRET)
+    kr.mode = "fail-get"
+    assert s.get_secret("k") is None and s.keychain_get("k") is None
+
+
+def test_a_flaky_service_at_startup_does_not_create_the_secret(ss, monkeypatch):
+    """The probe timed out (a service is there but not answering): the secret may
+    live in it, so do not create one. With no service at all, the file path stays."""
+    s, kr = ss
+    kr.mode = "hang-get"
+    monkeypatch.setattr(s, "_SS_PROBE_TIMEOUT", 0.2)
+    # the probe's own read hangs only for non-probe names, so make the probe time out
+    kr.priority_error = None
+    s._ss_state.update(kr=None, reason="timeout", at=s.time.monotonic())
+    with pytest.raises(s.SecretUnavailable):
+        s.get_or_create_secret("fernet-key", lambda: "NEW")
+    s._ss_state.update(kr=None, reason="no_secret_service", at=s.time.monotonic())
+    assert s.get_or_create_secret("fernet-key", lambda: "NEW") == "NEW"
+    assert (Path(s._secrets_dir()) / ".fernet-key.secret").read_text() == "NEW"
+
+
+def test_a_file_copy_is_used_even_when_the_keychain_cannot_be_read(ss):
+    s, kr = ss
+    s.set_secret("k", SECRET)
+    s._file("k").parent.mkdir(parents=True, exist_ok=True)
+    s._file("k").write_text("from-file")
+    kr.mode = "fail-get"
+    assert s.get_or_create_secret("k", lambda: "NEW") == "from-file"
+
+
+def test_db_connections_fail_loudly_instead_of_replacing_the_key(ss):
+    from ops_dashboard import db_connections
+    s, kr = ss
+    s.set_secret("fernet-key", "dummy")
+    kr.mode = "fail-get"
+    with pytest.raises(s.SecretUnavailable):
+        db_connections._fernet_key()
+    assert kr.items[("com.conductloop", "fernet-key")] == "dummy"
+    assert db_connections._decrypt_credentials("enc:AAAA") == {}      # no crash, no new key
+
+
+def _wait(pred, timeout=3.0):
+    import time
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if pred():
+            return True
+        time.sleep(0.01)
+    return False
+
+
+def test_a_timed_out_write_cannot_reappear_after_the_failure(ss):
+    s, kr = ss
+    assert s.keychain_available()
+    kr.mode = "slow-set"
+    assert s.keychain_set("late", SECRET) is False          # timed out, reported as failed
+    assert ("com.conductloop", "late") not in kr.items
+    kr.release.set()                                         # the daemon thread now finishes...
+    assert _wait(lambda: any(c[0] == "delete" and c[2] == "late" for c in kr.calls))
+    assert _wait(lambda: ("com.conductloop", "late") not in kr.items)   # ...and undoes itself
+    assert s.keychain_get("late") is None
+    assert not s._ss_name_lock("late").locked() or _wait(lambda: not s._ss_name_lock("late").locked())
+
+
+def test_a_hung_change_blocks_the_next_one_for_that_name_only(ss):
+    s, kr = ss
+    assert s.keychain_available()
+    kr.mode = "slow-set"
+    assert s.keychain_set("a", SECRET) is False
+    kr.mode = ""
+    assert s._ss_write("a", "second") is False               # still busy: no interleaving
+    assert s._ss_write("b", "other") is True                 # other secrets are not affected
+    kr.release.set()
+    assert _wait(lambda: not s._ss_name_lock("a").locked())
+    assert ("com.conductloop", "a") not in kr.items          # the late write was undone
+    assert s._ss_write("a", "third") is True and s.keychain_get("a") == "third"
+
+
+def test_a_successful_write_is_not_undone(ss):
+    s, kr = ss
+    assert s.keychain_set("ok", SECRET) is True
+    import time
+    time.sleep(0.1)
+    assert kr.items == {("com.conductloop", "ok"): SECRET}
+    assert not any(c[0] == "delete" and c[2] == "ok" for c in kr.calls)

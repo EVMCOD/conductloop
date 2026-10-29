@@ -208,21 +208,60 @@ def _ss_load():
     return kr
 
 
-def _ss_run(fn, timeout: float):
-    """Run ``fn()`` in a daemon thread; ``TimeoutError`` if it does not return."""
+_ss_name_locks: dict[str, threading.Lock] = {}
+_ss_name_locks_guard = threading.Lock()
+
+
+def _ss_name_lock(name: str) -> threading.Lock:
+    with _ss_name_locks_guard:
+        return _ss_name_locks.setdefault(name, threading.Lock())
+
+
+def _ss_run(fn, timeout: float, *, lock: threading.Lock | None = None, late=None):
+    """Run ``fn()`` in a daemon thread; ``TimeoutError`` if it does not return.
+
+    For a *mutation* pass the secret's ``lock`` (and, for a write, ``late``):
+    the worker keeps the lock until its call has really finished, so no other
+    write or delete of that secret can interleave with a call that has already
+    been reported as failed. If the call finishes only after the caller gave up,
+    ``late()`` runs in the worker, still under the lock (a write undoes itself),
+    so a write that was reported as failed cannot reappear later.
+    """
+    if lock is not None and not lock.acquire(timeout=timeout):
+        raise TimeoutError("secret service is still busy with an earlier change")
     box: dict = {}
+    gate = threading.Lock()
 
     def work() -> None:
         try:
-            box["v"] = fn()
-        except BaseException as e:  # handed to the caller
-            box["e"] = e
+            try:
+                box["v"] = fn()
+            except BaseException as e:  # handed to the caller
+                box["e"] = e
+            with gate:
+                box["done"] = True
+                abandoned = box.get("abandoned", False)
+            if abandoned and late is not None:
+                try:
+                    late()
+                except Exception as e:
+                    log.debug("secret service late cleanup failed: %s", type(e).__name__)
+        finally:
+            if lock is not None:
+                lock.release()
 
     t = threading.Thread(target=work, name="secret-service", daemon=True)
-    t.start()
+    try:
+        t.start()
+    except BaseException:
+        if lock is not None:
+            lock.release()
+        raise
     t.join(timeout)
-    if t.is_alive():
-        raise TimeoutError("secret service did not answer")
+    with gate:
+        if not box.get("done"):
+            box["abandoned"] = True
+            raise TimeoutError("secret service did not answer")
     if "e" in box:
         raise box["e"]
     return box.get("v")
@@ -292,15 +331,21 @@ def _ss_name_ok(name: str) -> bool:
     return bool(name) and not any(c in name for c in "\r\n\0")
 
 
-def _ss_get(name: str) -> str | None:
+def _ss_get_checked(name: str) -> tuple[str | None, bool]:
+    """``(value, failed)``: ``failed`` is True when the Secret Service could not
+    answer (error, timeout, locked), as opposed to answering "no such item"."""
     kr = _ss_backend()
     if kr is None or not _ss_name_ok(name):
-        return None
+        return None, False
     try:
-        return _ss_run(lambda: kr.get_password(_SERVICE, name), _SS_OP_TIMEOUT)
+        return _ss_run(lambda: kr.get_password(_SERVICE, name), _SS_OP_TIMEOUT), False
     except Exception as e:  # never log output: it would be the secret
         log.debug("secret service read failed for %s: %s", name, type(e).__name__)
-        return None
+        return None, True
+
+
+def _ss_get(name: str) -> str | None:
+    return _ss_get_checked(name)[0]
 
 
 def _ss_write(name: str, value: str) -> bool:
@@ -309,7 +354,9 @@ def _ss_write(name: str, value: str) -> bool:
         return False
     try:
         value.encode("utf-8")
-        _ss_run(lambda: kr.set_password(_SERVICE, name, value), _SS_OP_TIMEOUT)
+        _ss_run(lambda: kr.set_password(_SERVICE, name, value), _SS_OP_TIMEOUT,
+                lock=_ss_name_lock(name),
+                late=lambda: kr.delete_password(_SERVICE, name))
     except Exception as e:
         log.debug("secret service write failed for %s: %s", name, type(e).__name__)
         return False
@@ -325,7 +372,8 @@ def _ss_delete(name: str) -> bool:
         return False
     try:
         try:
-            _ss_run(lambda: kr.delete_password(_SERVICE, name), _SS_OP_TIMEOUT)
+            _ss_run(lambda: kr.delete_password(_SERVICE, name), _SS_OP_TIMEOUT,
+                    lock=_ss_name_lock(name))
         except TimeoutError:
             raise
         except Exception as e:
@@ -348,18 +396,40 @@ def _warn_file_fallback(name: str) -> None:
                 name, _secrets_dir())
 
 
-def get_secret(name: str) -> str | None:
+class SecretUnavailable(RuntimeError):
+    """The keychain could not be read, so "no secret" cannot be believed."""
+
+
+# Probe failures that mean "a Secret Service is there but not answering" (as
+# opposed to "there is none"): the secret may well be in it.
+_SS_TRANSIENT = ("timeout", "probe_failed")
+
+
+def _lookup(name: str) -> tuple[str | None, bool]:
+    """``(value, keychain_failed)``. ``keychain_failed`` is only ever True on
+    Linux, when no value was found and the keychain may hold one it could not
+    read. Plain readers ignore it; ``get_or_create_secret`` must not."""
+    failed = False
     if _keychain_enabled():
-        v = _kc_get(name)
+        if _is_linux():
+            v, failed = _ss_get_checked(name)
+        else:
+            v = _kc_get(name)
         if v is not None:
-            return v
+            return v, False
+    elif _is_linux() and not _disabled() and _ss_state["reason"] in _SS_TRANSIENT:
+        failed = True
     p = _file(name)
     if p.exists():
         try:
-            return p.read_text(encoding="utf-8").rstrip("\n")
+            return p.read_text(encoding="utf-8").rstrip("\n"), False
         except Exception:
-            return None
-    return None
+            return None, False
+    return None, failed
+
+
+def get_secret(name: str) -> str | None:
+    return _lookup(name)[0]
 
 
 def set_secret(name: str, value: str) -> None:
@@ -442,10 +512,18 @@ def secrets_dir() -> Path:
 
 def get_or_create_secret(name: str, factory) -> str:
     """Return the stored secret, or create+store one via ``factory()`` (a
-    no-arg callable returning str)."""
-    v = get_secret(name)
+    no-arg callable returning str).
+
+    On Linux, raises ``SecretUnavailable`` instead of creating when the keychain
+    could not be read: a new value would overwrite the real one for good (the
+    Fernet key behind saved connection credentials, for one)."""
+    v, failed = _lookup(name)
     if v is not None:
         return v
+    if failed:
+        raise SecretUnavailable(
+            f"the keychain did not answer, so the secret {name!r} was not created "
+            "(it may exist there); unlock or restart the Secret Service and retry")
     v = factory()
     set_secret(name, v)
     return v

@@ -197,6 +197,16 @@ KeePassXC, an AppImage with the bundled `keyring`, a locked keyring prompt):
   a throwaway item, in a worker thread with an 8 s timeout. The answer is cached;
   a failed probe is not repeated for 60 s. Each later read/write/delete has a 15 s
   timeout and a write only counts when it reads back.
+- **A timed-out write cannot come back.** Writes and deletes of one secret are
+  serialised: the worker keeps that secret's lock until its call has really
+  returned, so a later change waits (or times out) instead of interleaving. A write
+  that finishes only after it was reported as failed deletes itself again.
+- **A failed read is not "missing".** `get_or_create_secret` (the DB Fernet key)
+  raises `SecretUnavailable` instead of generating a replacement when the keychain
+  errored, timed out, or the probe found a service that did not answer
+  (`timeout`, `probe_failed`): a new key would overwrite the real one for good.
+  With no Secret Service at all (`no_secret_service`) it still creates the `0600`
+  file. Plain `get_secret` still returns `None` on a failed read.
 - **No Secret Service** (no D-Bus session, no daemon, `keyring` missing, a locked
   keyring nobody unlocks): `keychain_available()` is false and
   `keychain_status()["reason"]` says why (`keyring_missing`, `no_secret_service`,
