@@ -36,7 +36,7 @@ WebView2 runtime on machines that lack it).
 param(
     [switch]$SidecarOnly,
     [switch]$SkipSidecar,
-    [string]$Bundles = "nsis",
+    [string[]]$Bundles = @("nsis"),
     [Alias("h")]
     [switch]$Help
 )
@@ -70,7 +70,13 @@ if ($Help) {
 }
 
 if ($SidecarOnly -and $SkipSidecar) { Fail "-SidecarOnly and -SkipSidecar exclude each other (see -Help)" }
-if ($Bundles -notmatch '^(nsis|msi)(,(nsis|msi))*$') { Fail "-Bundles must be nsis, msi or nsis,msi (got '$Bundles')" }
+# PowerShell turns `-Bundles nsis,msi` into an array, and `-File x.ps1 -Bundles
+# nsis,msi` from another program into one string: accept both.
+$BundleList = @($Bundles | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+if (-not $BundleList -or @($BundleList | Where-Object { $_ -notin @("nsis", "msi") })) {
+    Fail "-Bundles must be nsis, msi or nsis,msi (got '$($Bundles -join ',')')"
+}
+$BundleArg = ($BundleList | Select-Object -Unique) -join ","
 
 if ([System.Environment]::OSVersion.Platform -ne "Win32NT" -or -not [System.Environment]::Is64BitOperatingSystem) {
     Fail "build-windows.ps1 builds $Triple packages and must run on 64-bit Windows"
@@ -122,7 +128,7 @@ if ($rustHost -ne $Triple) {
     Fail "the Rust host is '$rustHost', not $Triple (install the x86_64 MSVC toolchain: rustup default stable-x86_64-pc-windows-msvc)"
 }
 
-Write-Output "> Building the installer ($Bundles) (tauri build)"
+Write-Output "> Building the installer ($BundleArg) (tauri build)"
 # No signing on Windows: make sure a key left in the environment is not used.
 Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD -ErrorAction SilentlyContinue
@@ -139,7 +145,7 @@ if ($env:USERPROFILE -and $env:USERPROFILE -notmatch '\s') {
 Push-Location (Join-Path $Root "desktop")
 try {
     Invoke-Native "npm ci" { & npm ci --no-audit --no-fund }
-    Invoke-Native "tauri build" { & npm run --silent tauri -- build --bundles $Bundles }
+    Invoke-Native "tauri build" { & npm run --silent tauri -- build --bundles $BundleArg }
 } finally {
     Pop-Location
     $env:RUSTFLAGS = $savedRustflags
