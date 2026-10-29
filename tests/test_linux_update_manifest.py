@@ -69,12 +69,16 @@ class Throwaway:
         self.config = tmp_path / "tauri.conf.json"
         self.config.write_text(json.dumps(conf))
 
-    def sign(self, data: bytes, algo: bytes = b"ED") -> str:
+    def sign(self, data: bytes, algo: bytes = b"ED", comment: str = "timestamp:1\tfile:x", global_ok: bool = True,
+             lines: int = 4) -> str:
+        """A full minisign envelope: file signature, trusted comment, global signature."""
         msg = hashlib.blake2b(data, digest_size=64).digest() if algo == b"ED" else data
-        blob = algo + self.keyid + self.sk.sign(msg)
-        text = ("untrusted comment: signature from tauri secret key\n" + _b64(blob) +
-                "\ntrusted comment: timestamp:1\tfile:x\n" + _b64(bytes(64)) + "\n")
-        return _b64(text.encode())
+        file_sig = self.sk.sign(msg)
+        blob = algo + self.keyid + file_sig
+        global_sig = self.sk.sign(file_sig + comment.encode()) if global_ok else bytes(64)
+        parts = ["untrusted comment: signature from tauri secret key", _b64(blob),
+                 "trusted comment: " + comment, _b64(global_sig)]
+        return _b64(("\n".join(parts[:lines]) + "\n").encode())
 
 
 @pytest.fixture()
@@ -328,3 +332,86 @@ def test_the_bundle_workflow_publishes_nothing():
     for banned in ("gh release", "softprops", "create-release", "contents: write", "secrets.", "TAURI_SIGNING",
                    "conductloop-releases", "linux_update_manifest", "update-linux"):
         assert banned not in wf, banned
+
+
+# ── review findings (PR 74) ──────────────────────────────────────────────────
+
+def _signed_appimage(tk, tmp_path, **sign_kw):
+    img = tmp_path / "ConductLoop-1.2.3-x86_64.AppImage"
+    img.write_bytes(b"appimage bytes" * 100)
+    sig = tmp_path / "x.sig"
+    sig.write_text(tk.sign(img.read_bytes(), **sign_kw))
+    return img, sig
+
+
+def test_the_real_release_signature_passes_the_global_signature_check():
+    pub = lum.cup.embedded_pubkey(CONFIG)
+    lum.verify_global_signature(RELEASE_KEY_SIG, pub)          # does not raise
+
+
+def test_a_complete_envelope_with_a_valid_global_signature_is_accepted(tk, tmp_path):
+    img, sig = _signed_appimage(tk, tmp_path)
+    assert _make(sig, config=tk.config, appimage=img, expected_keyid="0123456789ABCDEF")
+
+
+@pytest.mark.parametrize("kw", [
+    {"global_ok": False},                       # right file signature, garbage global signature
+    {"lines": 2},                               # no trusted comment, no global signature
+    {"lines": 3},                               # trusted comment but no global signature
+])
+def test_a_bad_global_signature_is_refused_with_and_without_the_appimage(tk, tmp_path, kw):
+    img, sig = _signed_appimage(tk, tmp_path, **kw)
+    with pytest.raises(lum.ManifestError, match="global signature|trusted comment"):
+        _make(sig, config=tk.config, appimage=img, expected_keyid="0123456789ABCDEF")
+    with pytest.raises(lum.ManifestError, match="global signature|trusted comment"):
+        _make(sig, config=tk.config, expected_keyid="0123456789ABCDEF")      # even without --appimage
+
+
+def test_an_edited_trusted_comment_is_refused(tk, tmp_path):
+    img, sig = _signed_appimage(tk, tmp_path)
+    text = base64.b64decode(sig.read_text()).decode().replace("timestamp:1", "timestamp:2")
+    sig.write_text(_b64(text.encode()))
+    with pytest.raises(lum.ManifestError, match="does not match the trusted comment"):
+        _make(sig, config=tk.config, appimage=img, expected_keyid="0123456789ABCDEF")
+
+
+def test_the_real_signature_with_an_edited_trusted_comment_is_refused(sig_file, tmp_path):
+    text = base64.b64decode(RELEASE_KEY_SIG).decode().replace("timestamp:", "timestamp:9")
+    bad = tmp_path / "bad.sig"
+    bad.write_text(_b64(text.encode()))
+    with pytest.raises(lum.ManifestError, match="trusted comment"):
+        _make(bad)
+
+
+def test_check_manifest_refuses_a_signature_with_a_broken_global_signature(tk, tmp_path):
+    _, sig = _signed_appimage(tk, tmp_path, global_ok=False)
+    good = {"version": "1.2.3", "pub_date": DATE, "platforms": {"linux-x86_64-appimage": {
+        "signature": sig.read_text().strip(),
+        "url": "https://github.com/EVMCOD/conductloop-releases/releases/download/v1.2.3/"
+               "ConductLoop-1.2.3-x86_64.AppImage"}}}
+    with pytest.raises(lum.ManifestError, match="global signature"):
+        lum.check_manifest(good, config=tk.config, expected_keyid="0123456789ABCDEF")
+
+
+@pytest.mark.parametrize("date", ["2026-02-31T03:04:05Z", "2026-02-29T03:04:05Z", "2026-04-31T00:00:00Z",
+                                  "2026-13-01T00:00:00Z", "2026-00-10T00:00:00Z", "2026-01-00T00:00:00Z",
+                                  "2026-01-32T00:00:00Z", "2026-01-01T24:00:00Z", "2026-01-01T23:60:00Z",
+                                  "2026-01-01T23:59:60Z", "0000-01-01T00:00:00Z", "2026-1-1T00:00:00Z",
+                                  "2026-01-01T00:00:00+01:00", "2026-01-01 00:00:00Z", "2026-01-01T00:00:00Z\n"])
+def test_impossible_or_non_utc_dates_are_refused_in_both_paths(sig_file, date):
+    with pytest.raises(lum.ManifestError, match="pub_date"):
+        _make(sig_file, pub_date=date)
+    m = _make(sig_file)
+    m["pub_date"] = date
+    with pytest.raises(lum.ManifestError, match="pub_date"):
+        lum.check_manifest(m)
+
+
+@pytest.mark.parametrize("date", ["2028-02-29T23:59:59Z", "2026-12-31T00:00:00Z", "2026-01-01T00:00:00Z"])
+def test_real_dates_including_a_leap_day_are_accepted(sig_file, date):
+    assert _make(sig_file, pub_date=date)["pub_date"] == date
+
+
+def test_the_cli_rejects_an_impossible_date(sig_file):
+    r = _run("--version", "1.2.3", "--sig-file", str(sig_file), "--pub-date", "2026-02-31T03:04:05Z")
+    assert r.returncode == 1 and "pub_date" in r.stderr and r.stdout == ""

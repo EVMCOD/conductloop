@@ -648,9 +648,12 @@ scripts/linux_update_manifest.py --version 1.3.0 \
   The script takes an existing `.sig` (what `tauri build` writes next to the
   AppImage when `TAURI_SIGNING_PRIVATE_KEY` is set), refuses an empty, malformed
   or other-key signature (key id `770EA4C292DC6BD2`, from `desktop/UPDATER_KEY_ID`
-  and `tauri.conf.json`), and with `--appimage` also verifies the signature
-  cryptographically over the file (prehashed `ED`, the only kind the updater
-  accepts). Without `--appimage` it cannot know the file is the one that was
+  and `tauri.conf.json`), it always verifies the minisign global
+  signature (the one over the trusted comment: the updater rejects a `.sig`
+  without it or with an edited comment), and with `--appimage` also verifies the
+  signature cryptographically over the file (prehashed `ED`, the only kind the
+  updater accepts). `pub_date` must be a real UTC timestamp (the updater parses
+  it as RFC 3339), not just the right shape. Without `--appimage` it cannot know the file is the one that was
   signed: always pass it when the AppImage is at hand.
 - **It publishes nothing.** The output goes to stdout unless `--output` is given;
   it refuses the name `update-macos-aarch64.json`; no network, no `gh`, no

@@ -59,7 +59,7 @@ MACOS_MANIFEST_NAME = "update-macos-aarch64.json"
 _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _ASSET_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.+-]*\.AppImage$")
-_PUB_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+_PUB_DATE_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\dZ$")
 
 
 class ManifestError(ValueError):
@@ -110,6 +110,19 @@ def _check_asset(asset: str) -> str:
     return asset
 
 
+def _check_pub_date(date: str) -> str:
+    """``pub_date`` must be a real UTC timestamp, as the updater parses it as
+    RFC 3339 and rejects the whole manifest otherwise (``2026-02-31T...`` is
+    well-formed text but not a date)."""
+    if not _PUB_DATE_RE.fullmatch(date or ""):
+        raise ManifestError(f"pub_date {date!r} is not YYYY-MM-DDTHH:MM:SSZ")
+    try:
+        dt.datetime.strptime(date, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        raise ManifestError(f"pub_date {date!r} is not a real date and time") from None
+    return date
+
+
 def _check_signature_text(sig_text: str, config: Path, expected_keyid: str | None) -> str:
     """Return the signature as the manifest wants it (one line, no newline);
     raise unless it is a minisign signature made by the key the app embeds."""
@@ -118,8 +131,10 @@ def _check_signature_text(sig_text: str, config: Path, expected_keyid: str | Non
         raise ManifestError("the signature must be the single base64 line Tauri writes in the .sig file")
     try:
         cup.check(config, expected=expected_keyid, sig_text=sig)
+        pubkey_text = cup.embedded_pubkey(config)
     except cup.KeyCheckError as exc:
         raise ManifestError(str(exc)) from exc
+    verify_global_signature(sig, pubkey_text)
     return sig
 
 
@@ -143,6 +158,41 @@ def build_manifest(
 
 def now_utc() -> str:
     return dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def verify_global_signature(sig_text: str, pubkey_text: str) -> None:
+    """Verify the minisign *global* signature, which covers the signature bytes
+    and the trusted comment. The Tauri updater (minisign-verify) rejects a
+    signature whose trusted comment or global signature is missing or altered,
+    even when the signature over the file is fine. Raises ManifestError."""
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    except ImportError as exc:  # pragma: no cover - cryptography is a core dependency
+        raise ManifestError("checking the signature needs the 'cryptography' package") from exc
+    try:
+        sig_lines = cup._minisign_text(sig_text).splitlines()
+        pub = cup._b64decode(cup._minisign_text(pubkey_text).splitlines()[1])
+        sig = cup._b64decode(sig_lines[1])
+    except (cup.KeyCheckError, IndexError) as exc:
+        raise ManifestError(f"cannot read the key or the signature: {exc}") from exc
+    prefix = "trusted comment: "
+    if len(sig_lines) < 4 or not sig_lines[2].startswith(prefix):
+        raise ManifestError("the signature has no trusted comment and global signature (incomplete .sig)")
+    try:
+        global_sig = cup._b64decode(sig_lines[3])
+    except cup.KeyCheckError as exc:
+        raise ManifestError(f"the global signature is not valid base64: {exc}") from exc
+    if len(pub) != 42 or len(sig) != 74 or len(global_sig) != 64:
+        raise ManifestError("not a minisign public key / signature / global signature")
+    message = sig[10:] + sig_lines[2][len(prefix):].encode("utf-8")
+    try:
+        Ed25519PublicKey.from_public_bytes(pub[10:]).verify(global_sig, message)
+    except InvalidSignature:
+        raise ManifestError(
+            "the global signature does not match the trusted comment: the .sig is corrupted or edited "
+            "and the updater would reject it"
+        ) from None
 
 
 def verify_file_signature(appimage: Path, sig_text: str, pubkey_text: str) -> str:
@@ -180,6 +230,7 @@ def verify_file_signature(appimage: Path, sig_text: str, pubkey_text: str) -> st
         Ed25519PublicKey.from_public_bytes(pub[10:]).verify(sig[10:], digest.digest())
     except InvalidSignature as exc:
         raise ManifestError(f"the signature does not match {appimage.name}") from exc
+    verify_global_signature(sig_text, pubkey_text)
     return algo.decode()
 
 
@@ -213,9 +264,7 @@ def make_manifest(
             verify_file_signature(appimage, signature, cup.embedded_pubkey(config))
         except (OSError, cup.KeyCheckError) as exc:
             raise ManifestError(str(exc)) from exc
-    date = pub_date or now_utc()
-    if not _PUB_DATE_RE.fullmatch(date):
-        raise ManifestError(f"pub_date {date!r} is not YYYY-MM-DDTHH:MM:SSZ")
+    date = _check_pub_date(pub_date or now_utc())
     return build_manifest(
         version=version, signature=signature, url=release_url(repo, version, asset),
         pub_date=date, notes=notes,
@@ -229,8 +278,7 @@ def check_manifest(
     if not isinstance(manifest, dict):
         raise ManifestError("the manifest is not a JSON object")
     version = _check_version(str(manifest.get("version", "")))
-    if not _PUB_DATE_RE.fullmatch(str(manifest.get("pub_date", ""))):
-        raise ManifestError("pub_date is missing or not YYYY-MM-DDTHH:MM:SSZ")
+    _check_pub_date(str(manifest.get("pub_date", "")))
     platforms = manifest.get("platforms")
     if not isinstance(platforms, dict) or set(platforms) != {PLATFORM_KEY}:
         raise ManifestError(f"platforms must hold exactly {PLATFORM_KEY!r} (AppImage only)")
