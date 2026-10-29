@@ -54,3 +54,17 @@ def _vault_open():
     secret_vault.unlock(TEST_PASSPHRASE)
     yield
     secret_vault.lock()
+
+
+def pytest_collection_modifyitems(config, items):
+    """On Windows, skip the files of tests/windows_skips.py, with their reason."""
+    import sys
+
+    if sys.platform != "win32":
+        return
+    from windows_skips import SKIPPED_ON_WINDOWS
+
+    for item in items:
+        reason = SKIPPED_ON_WINDOWS.get(Path(str(item.fspath)).name)
+        if reason:
+            item.add_marker(pytest.mark.skip(reason=f"not on Windows: {reason}"))

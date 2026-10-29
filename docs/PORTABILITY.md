@@ -773,6 +773,14 @@ byte-for-byte (see "Invariantes de macOS"). "Tests" are what that PR must add.
 9. **`windows-latest` compile-only job** (Rust check and the Windows-safe Python
    subset, which also runs the real Windows tests of PR 8). *Tests:* the job
    itself; `test_workflows_guard.py`.
+   **Done in PR 9** (`.github/workflows/windows.yml`, stacked on PR 8): two
+   `windows-latest` jobs. `windows-rust` runs `cargo check --locked
+   --all-targets` of `desktop/src-tauri` (with a placeholder sidecar) and the
+   `desktop/url-policy` tests. `windows-python` runs the pytest suite
+   (`-m "not live"`, with `PYTHONUTF8=1`) minus the files listed with a reason in
+   `tests/windows_skips.py` (sandbox, bash scripts, AF_UNIX bridge), applied by
+   `tests/conftest.py` on `win32` only. It builds, signs and publishes nothing,
+   uses no secret and is not a required check.
 10. **Windows Credential Manager backend** (with the blob-size handling).
     *Tests:* selector and size-limit tests with a fake backend.
 11. **Windows packaging (NSIS), Help menu entry and release-manifest design:** a
