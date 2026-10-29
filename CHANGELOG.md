@@ -4,6 +4,8 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- **Linux: a script to build an AppImage and a .deb.** `scripts/build-linux.sh` freezes the server with PyInstaller and runs `tauri build --bundles appimage,deb`; the Linux settings live in `desktop/src-tauri/tauri.linux.conf.json`, so the macOS build does not change. No signing and no updates on Linux (the app does not look for updates at start-up there). Experimental: the packages have not been installed or run on a Linux desktop yet.
+
 ## 1.2.2 — 2026-10-29 — Updates that work, a signed DMG and the folder picker in Setup
 
 **Install this one from the DMG** (1.2.1 cannot update itself, see below). From

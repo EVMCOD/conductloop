@@ -291,7 +291,9 @@ pub fn run() {
         })
         .setup(|app| {
             // Release builds look for an update once, quietly, after start-up.
-            if !cfg!(debug_assertions) {
+            // Not on Linux: the AppImage and .deb have no signed updates (and
+            // the feed in tauri.conf.json is the macOS one).
+            if !cfg!(debug_assertions) && !cfg!(target_os = "linux") {
                 updates::check_after_startup(app.handle());
             }
             // 0. In-app browser state + filtering proxy (browser design PR 4/5).
