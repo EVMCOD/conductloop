@@ -2,7 +2,19 @@
 
 On macOS, secrets are stored in the login Keychain via the ``security`` CLI
 (values go over stdin, never argv — see ``_kc_set``).
-Everywhere else — and if Keychain access fails, or OPS_DISABLE_KEYCHAIN=1 — they
+
+On Linux (experimental), they go to the freedesktop Secret Service (GNOME
+Keyring, KWallet's bridge, KeePassXC) through the ``keyring`` library, pinned to
+its ``SecretService`` backend: no other ``keyring`` backend is ever accepted
+(see ``_ss_load``). The backend is probed once, with a timeout, and the answer
+is cached. Without a Secret Service (no D-Bus session, a headless box, a locked
+keyring nobody answers) the keychain is simply *unavailable*: ``keychain_*``
+say so, the BYOK keys go to the encrypted vault and connector tokens are
+refused. The generic ``set_secret`` file fallback (generated keys such as the
+DB Fernet key) is the pre-existing behaviour; on Linux it now logs a warning,
+once per secret, so it is never silent.
+
+Everywhere else — and if keychain access fails, or OPS_DISABLE_KEYCHAIN=1 — they
 fall back to 0600 files under the data dir (the pre-existing behavior). Use for
 the Fernet DB-encryption key, license key, and other at-rest secrets.
 
@@ -15,6 +27,9 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
+import time
+import uuid
 from pathlib import Path
 
 log = logging.getLogger("conductloop.secrets")
@@ -22,10 +37,22 @@ log = logging.getLogger("conductloop.secrets")
 _SERVICE = "com.conductloop"
 
 
+def _disabled() -> bool:
+    return os.environ.get("OPS_DISABLE_KEYCHAIN") == "1"
+
+
+def _is_linux() -> bool:
+    return sys.platform.startswith("linux")
+
+
 def _keychain_enabled() -> bool:
-    if os.environ.get("OPS_DISABLE_KEYCHAIN") == "1":
+    if _disabled():
         return False
-    return sys.platform == "darwin" and shutil.which("security") is not None
+    if sys.platform == "darwin":
+        return shutil.which("security") is not None
+    if _is_linux():
+        return _ss_backend() is not None
+    return False
 
 
 def _secrets_dir() -> Path:
@@ -63,6 +90,8 @@ def _quote_arg(text: str) -> str:
 
 
 def _kc_get(name: str) -> str | None:
+    if _is_linux():
+        return _ss_get(name)
     try:
         out = subprocess.run(
             [_security_bin(), "find-generic-password", "-a", name, "-s", _SERVICE, "-w"],
@@ -78,6 +107,9 @@ def _kc_get(name: str) -> str | None:
 def _kc_delete(name: str) -> None:
     """Remove ``name``'s item (argv carries only the name). Used when a write is
     refused so a stale or undecodable keychain value can't shadow the file."""
+    if _is_linux():
+        _ss_delete(name)
+        return
     try:
         subprocess.run([_security_bin(), "delete-generic-password", "-a", name, "-s", _SERVICE],
                        capture_output=True, text=True, timeout=5)
@@ -86,6 +118,8 @@ def _kc_delete(name: str) -> None:
 
 
 def _kc_write(name: str, value: str) -> bool:
+    if _is_linux():
+        return _ss_write(name, value)
     try:
         data = value.encode("utf-8")
     except Exception:
@@ -124,6 +158,196 @@ def _kc_set(name: str, value: str) -> bool:
     return False
 
 
+# ── Linux: freedesktop Secret Service through ``keyring`` ────────────────────
+# The Rust shell never reads secrets, and the PyInstaller sidecar cannot assume
+# ``secret-tool`` exists, so the Python side talks to the Secret Service itself.
+# Same names as macOS: service ``com.conductloop``, account = the secret name,
+# so ``secret-tool lookup service com.conductloop username <name>`` finds them.
+#
+# The agents' command sandbox hides the D-Bus session bus, and this module is
+# never imported by a sandboxed process: only the app's own server talks to the
+# Secret Service. (``sessions/sandbox.py`` builds a fresh environment, too.)
+#
+# Every call runs in a worker thread with a timeout: a locked collection can
+# block on an unlock prompt nobody sees, and a half-dead bus can hang.
+
+_SS_MODULE = "keyring.backends.SecretService"
+_SS_PROBE_TIMEOUT = 8.0     # seconds for the whole probe (connect + set/get/delete)
+_SS_OP_TIMEOUT = 15.0       # seconds for one read/write/delete
+_SS_RETRY_AFTER = 60.0      # a failed probe is not repeated for this long
+
+_ss_lock = threading.Lock()
+_ss_state: dict = {"kr": None, "reason": None, "at": 0.0, "warned": False}
+_fallback_warned: set[str] = set()
+
+
+class _SSUnavailable(Exception):
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _ss_load():
+    """The ``keyring`` SecretService backend, and nothing else.
+
+    ``keyring`` can resolve to a ``fail``, chainer or null backend, and
+    ``keyrings.alt`` ships plaintext/obfuscated file backends. We never ask
+    ``keyring`` to choose: we build the one class we allow and check it.
+    """
+    try:
+        from keyring.backends import SecretService as mod
+    except Exception:
+        raise _SSUnavailable("keyring_missing") from None
+    try:
+        kr = mod.Keyring()
+    except Exception:
+        raise _SSUnavailable("backend_init_failed") from None
+    cls = type(kr)
+    if f"{cls.__module__}.{cls.__qualname__}" != f"{_SS_MODULE}.Keyring":
+        raise _SSUnavailable("backend_not_allowed")
+    return kr
+
+
+def _ss_run(fn, timeout: float):
+    """Run ``fn()`` in a daemon thread; ``TimeoutError`` if it does not return."""
+    box: dict = {}
+
+    def work() -> None:
+        try:
+            box["v"] = fn()
+        except BaseException as e:  # handed to the caller
+            box["e"] = e
+
+    t = threading.Thread(target=work, name="secret-service", daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        raise TimeoutError("secret service did not answer")
+    if "e" in box:
+        raise box["e"]
+    return box.get("v")
+
+
+def _ss_probe(kr) -> None:
+    """Prove the Secret Service works: a D-Bus connection, then a write, a read
+    and a delete of a throwaway item. Raises ``_SSUnavailable``."""
+    account = f"__conductloop-probe-{uuid.uuid4().hex}"
+    probe_value = uuid.uuid4().hex
+
+    def go() -> None:
+        try:
+            _ = kr.priority  # raises RuntimeError without a usable Secret Service
+        except Exception:
+            raise _SSUnavailable("no_secret_service") from None
+        try:
+            kr.set_password(_SERVICE, account, probe_value)
+            ok = kr.get_password(_SERVICE, account) == probe_value
+        except Exception:
+            raise _SSUnavailable("probe_failed") from None
+        finally:
+            try:
+                kr.delete_password(_SERVICE, account)
+            except Exception:
+                pass
+        if not ok:
+            raise _SSUnavailable("probe_failed")
+
+    try:
+        _ss_run(go, _SS_PROBE_TIMEOUT)
+    except TimeoutError:
+        raise _SSUnavailable("timeout") from None
+
+
+def _ss_backend():
+    """The probed backend, or ``None`` (cached; a failure is retried later)."""
+    if _disabled() or not _is_linux():
+        return None
+    with _ss_lock:
+        if _ss_state["kr"] is not None:
+            return _ss_state["kr"]
+        if _ss_state["reason"] and time.monotonic() - _ss_state["at"] < _SS_RETRY_AFTER:
+            return None
+        try:
+            kr = _ss_load()
+            _ss_probe(kr)
+        except _SSUnavailable as e:
+            _ss_state.update(kr=None, reason=e.reason, at=time.monotonic())
+            if not _ss_state["warned"]:
+                _ss_state["warned"] = True
+                log.warning("Secret Service keychain unavailable (%s); secrets that need a keychain "
+                            "will not be stored in it (see docs/PORTABILITY.md)", e.reason)
+            return None
+        _ss_state.update(kr=kr, reason=None, at=0.0)
+        return kr
+
+
+def _ss_reset() -> None:
+    """Forget the cached probe (tests; also what a retry after a fix would use)."""
+    with _ss_lock:
+        _ss_state.update(kr=None, reason=None, at=0.0, warned=False)
+    _fallback_warned.clear()
+
+
+def _ss_name_ok(name: str) -> bool:
+    return bool(name) and not any(c in name for c in "\r\n\0")
+
+
+def _ss_get(name: str) -> str | None:
+    kr = _ss_backend()
+    if kr is None or not _ss_name_ok(name):
+        return None
+    try:
+        return _ss_run(lambda: kr.get_password(_SERVICE, name), _SS_OP_TIMEOUT)
+    except Exception as e:  # never log output: it would be the secret
+        log.debug("secret service read failed for %s: %s", name, type(e).__name__)
+        return None
+
+
+def _ss_write(name: str, value: str) -> bool:
+    kr = _ss_backend()
+    if kr is None or not _ss_name_ok(name) or not isinstance(value, str):
+        return False
+    try:
+        value.encode("utf-8")
+        _ss_run(lambda: kr.set_password(_SERVICE, name, value), _SS_OP_TIMEOUT)
+    except Exception as e:
+        log.debug("secret service write failed for %s: %s", name, type(e).__name__)
+        return False
+    # Like the macOS path: only report success when the value round-trips.
+    return _ss_get(name) == value
+
+
+def _ss_delete(name: str) -> bool:
+    """Remove ``name``. True when the item is gone afterwards (also when it was
+    never there); False when the Secret Service could not confirm that."""
+    kr = _ss_backend()
+    if kr is None or not _ss_name_ok(name):
+        return False
+    try:
+        try:
+            _ss_run(lambda: kr.delete_password(_SERVICE, name), _SS_OP_TIMEOUT)
+        except TimeoutError:
+            raise
+        except Exception as e:
+            # keyring raises PasswordDeleteError when there is nothing to delete.
+            log.debug("secret service delete for %s: %s", name, type(e).__name__)
+        return _ss_run(lambda: kr.get_password(_SERVICE, name), _SS_OP_TIMEOUT) is None
+    except Exception as e:
+        log.debug("secret service delete failed for %s: %s", name, type(e).__name__)
+        return False
+
+
+def _warn_file_fallback(name: str) -> None:
+    """On Linux, say (once per secret) that a secret went to a 0600 file because
+    no Secret Service took it. Never prints the value."""
+    if not _is_linux() or _disabled() or name in _fallback_warned:
+        return
+    _fallback_warned.add(name)
+    log.warning("secret %r is kept in a 0600 file under %s: no Secret Service keychain took it. "
+                "Install and unlock GNOME Keyring, KWallet or KeePassXC to use the system keychain.",
+                name, _secrets_dir())
+
+
 def get_secret(name: str) -> str | None:
     if _keychain_enabled():
         v = _kc_get(name)
@@ -142,6 +366,7 @@ def set_secret(name: str, value: str) -> None:
     kc = _keychain_enabled() and bool(name) and not any(c in name for c in "\r\n\0")
     if kc and _kc_write(name, value):
         return
+    _warn_file_fallback(name)
     p = _file(name)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_name(p.name + ".tmp")
@@ -164,6 +389,27 @@ def keychain_available() -> bool:
     return _keychain_enabled()
 
 
+def keychain_status() -> dict:
+    """Which keychain backs this machine and, if none, why not.
+
+    ``{"backend": "macos-security" | "secret-service" | None, "available": bool,
+    "reason": None | "disabled" | "unsupported_platform" | "no_security_tool" |
+    "keyring_missing" | "backend_init_failed" | "backend_not_allowed" |
+    "no_secret_service" | "probe_failed" | "timeout"}``. Never carries a value.
+    """
+    if _disabled():
+        return {"backend": None, "available": False, "reason": "disabled"}
+    if sys.platform == "darwin":
+        ok = shutil.which("security") is not None
+        return {"backend": "macos-security" if ok else None, "available": ok,
+                "reason": None if ok else "no_security_tool"}
+    if _is_linux():
+        ok = _ss_backend() is not None
+        return {"backend": "secret-service" if ok else None, "available": ok,
+                "reason": None if ok else _ss_state["reason"]}
+    return {"backend": None, "available": False, "reason": "unsupported_platform"}
+
+
 def keychain_get(name: str) -> str | None:
     return _kc_get(name) if _keychain_enabled() else None
 
@@ -183,6 +429,8 @@ def keychain_delete(name: str) -> bool:
     """
     if not _keychain_enabled():
         return False
+    if _is_linux():
+        return _ss_delete(name)
     _kc_delete(name)
     return _kc_get(name) is None
 

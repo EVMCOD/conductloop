@@ -176,9 +176,43 @@ _backend():
 
 | | macOS | Linux | Windows |
 |---|---|---|---|
-| Status | done (`security` CLI) | missing; falls to file/vault | missing; falls to file/vault |
+| Status | done (`security` CLI) | Secret Service via `keyring` (PR 3, **untested** on a real desktop; see 1.5) | missing; falls to file/vault |
 | Risk | - | Medium: D-Bus probe hangs, weak `keyring` backend | Medium: blob size limit, **untested** |
 | PR | - | PR 3 | PR 10 |
+
+### 1.5 Linux as implemented (PR 3)
+
+`secrets_store` now has the Linux backend of 1.2. What the code does, and what
+nobody has run on a real Linux desktop (**untested**: GNOME Keyring, KWallet,
+KeePassXC, an AppImage with the bundled `keyring`, a locked keyring prompt):
+
+- **Backend.** `keyring.backends.SecretService.Keyring` is built directly; the
+  code never lets `keyring` choose. Anything else (`fail`, chainer, null,
+  `keyrings.alt`) is refused with the reason `backend_not_allowed`. `keyring` is a
+  Linux-only dependency (`sys_platform == "linux"` in `requirements-core.txt` and
+  `pyproject.toml`); macOS installs do not get it.
+- **Names.** Service `com.conductloop`, account = the secret name, like macOS, so
+  `secret-tool lookup service com.conductloop username <name>` finds an item.
+- **Probe.** The first use connects to the session bus and writes, reads and deletes
+  a throwaway item, in a worker thread with an 8 s timeout. The answer is cached;
+  a failed probe is not repeated for 60 s. Each later read/write/delete has a 15 s
+  timeout and a write only counts when it reads back.
+- **No Secret Service** (no D-Bus session, no daemon, `keyring` missing, a locked
+  keyring nobody unlocks): `keychain_available()` is false and
+  `keychain_status()["reason"]` says why (`keyring_missing`, `no_secret_service`,
+  `timeout`, `probe_failed`, `backend_not_allowed`). `GET /api/platform` carries the
+  reason and a message. Then: BYOK provider keys go to the encrypted vault (never
+  to plaintext unless the existing last-resort flow is accepted), connector
+  tokens are refused (`keychain_unavailable`), and `set_secret` (generated keys
+  such as the DB Fernet key) still uses its `0600` file, as before, but on Linux
+  it now logs a warning once per secret.
+- **Sandbox.** Only the app's own server process talks to the Secret Service. Sandboxed
+  commands get a fresh environment without `DBUS_*`, the session bus socket is
+  hidden (PR #67), and `bwrap` now also hides `~/.local/share/keyrings` and the
+  KWallet directories. The macOS `sandbox-exec` profile is unchanged.
+- **Not done.** Moving entries from `.vault` into a keychain that appears later
+  (the consent-based action of 1.4), a vault-backed connector-token store and
+  the Windows backend (PR 10).
 
 ---
 
