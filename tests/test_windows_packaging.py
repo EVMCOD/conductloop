@@ -152,8 +152,8 @@ def test_the_script_puts_the_sidecar_where_tauri_expects_it():
     assert MERGED["bundle"]["externalBin"] == ["binaries/conductloop-server"]
     assert 'binaries\\conductloop-server-$Triple.exe' in code
     assert 'dist\\conductloop-server.exe' in code
-    assert "--bundles $Bundles" in code
-    assert '[string]$Bundles = "nsis"' in code
+    assert "--bundles $BundleArg" in code
+    assert '[string[]]$Bundles = @("nsis")' in code
 
 
 def test_the_script_signs_and_publishes_nothing():
@@ -217,10 +217,35 @@ def test_bad_options_are_refused_before_anything_is_built(args, message):
 
 @needs_powershell
 @pytest.mark.skipif(sys.platform == "win32", reason="on Windows the script would start building")
-def test_it_refuses_to_run_off_windows():
-    r = _run()
+@pytest.mark.parametrize("args", [[], ["-Bundles", "nsis,msi"], ["-Bundles", "msi"]])
+def test_it_refuses_to_run_off_windows(args):
+    # (The options are valid, so the refusal is the OS check, not the option check.)
+    r = _run(*args)
     assert r.returncode == 1
     assert "must run on 64-bit Windows" in r.stderr
+
+
+def _in_powershell(bundles: str):
+    command = f"& '{SCRIPT}' -Bundles {bundles}; exit $LASTEXITCODE"
+    return subprocess.run([POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", command],
+                          capture_output=True, text=True, encoding="utf-8", cwd=ROOT, timeout=120)
+
+
+@needs_powershell
+def test_bundles_given_as_a_powershell_list_are_understood():
+    # `-Bundles nsis,msi` typed in PowerShell is an array, not a string: this is
+    # how the workflow calls the script (it failed to bind as a string). An
+    # invalid list is used so that nothing is built on Windows.
+    r = _in_powershell("nsis,dmg")
+    assert "Cannot process argument" not in r.stderr, r.stderr
+    assert r.returncode == 1 and "got 'nsis,dmg'" in r.stderr
+
+
+@needs_powershell
+@pytest.mark.skipif(sys.platform == "win32", reason="on Windows the script would start building")
+def test_a_valid_powershell_list_gets_past_the_option_check():
+    r = _in_powershell("nsis,msi")
+    assert r.returncode == 1 and "must run on 64-bit Windows" in r.stderr
 
 
 # -- the docs --------------------------------------------------------------------------
