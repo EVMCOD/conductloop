@@ -197,7 +197,21 @@ echo ""
 echo "▸ Signing updater tar.gz"
 cd "$RELEASE_BUNDLE/macos"
 rm -f ConductLoop.app.tar.gz ConductLoop.app.tar.gz.sig
-tar -czf ConductLoop.app.tar.gz -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
+# COPYFILE_DISABLE / --no-mac-metadata: macOS tar otherwise adds an AppleDouble
+# "._" entry for every file with extended attributes (11 in 1.2.1, starting
+# with ._ConductLoop.app), and the updater fails on them: "failed to unpack
+# `._ConductLoop.app`". `tar -t` on macOS hides those entries, so check with
+# Python that the archive holds ConductLoop.app and nothing else.
+COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -czf ConductLoop.app.tar.gz \
+  -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
+python3 - ConductLoop.app.tar.gz <<'PY'
+import sys, tarfile
+names = tarfile.open(sys.argv[1]).getnames()
+bad = [n for n in names if n.split("/")[-1].startswith("._") or n.split("/")[0] != "ConductLoop.app"]
+if bad:
+    sys.exit(f"✗ updater archive has entries the updater cannot unpack: {bad[:5]}")
+print(f"  ✓ updater archive: {len(names)} entries, all under ConductLoop.app/, no AppleDouble files")
+PY
 TAURI_SIGNING_PRIVATE_KEY="$(cat "$UPDATER_KEY")" \
 TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
 cargo tauri signer sign ConductLoop.app.tar.gz 2>&1 | tail -2
