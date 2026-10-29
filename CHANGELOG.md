@@ -4,6 +4,8 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- **Honest about what each system can do.** The in-app browser is now off on Linux and Windows (it only exists on macOS 14+), and the Browser page says why instead of offering to enable it. On Windows, code sessions are turned off with an explanation: there is no OS sandbox there yet and ConductLoop never runs commands without one. Where the sandbox is missing on Linux, the Sessions page says that commands are off. macOS is unchanged.
+
 ## 1.2.2 — 2026-10-29 — Updates that work, a signed DMG and the folder picker in Setup
 
 **Install this one from the DMG** (1.2.1 cannot update itself, see below). From
