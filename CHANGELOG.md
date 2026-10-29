@@ -4,6 +4,8 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- **Linux: the command sandbox no longer lets commands reach local sockets.** Tests and linters run by agent sessions on Linux could still connect to the desktop's D-Bus session bus, the X11 server, ssh-agent/gpg-agent and the Docker socket from inside bubblewrap; those are now hidden. Without bubblewrap, commands stay off. macOS is unchanged. Sockets nested deeper than three levels under /tmp or /run, or in other directories, can still be reached (a seccomp filter would close that).
+
 ## 1.2.2 — 2026-10-29 — Updates that work, a signed DMG and the folder picker in Setup
 
 **Install this one from the DMG** (1.2.1 cannot update itself, see below). From
