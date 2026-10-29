@@ -41,6 +41,7 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlsplit
 
+from .. import platform_caps
 from . import browser_effects as fx
 from . import limits
 from .limits import SessionLimitError, SessionValidationError
@@ -98,6 +99,8 @@ class BrowserBridge:
 
     def call(self, op: str, session: int, **args: Any) -> dict:
         if not self.available:
+            if not platform_caps.browser_supported():
+                raise BrowserUnavailable(platform_caps.browser_message())
             raise BrowserUnavailable("the in-app browser is only available in the ConductLoop "
                                      "desktop app (macOS 14+)")
         req = json.dumps({"token": self.token, "op": op, "session": int(session), **args})
