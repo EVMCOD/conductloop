@@ -462,18 +462,34 @@ except through the Linux CI tests.** Notes:
    **untested** on Windows. Linux and macOS are unaffected, and the same
    mechanism is what cleans up the PyInstaller one-file child when Tauri kills
    only the bootloader.
+   **Fixed in PR 8** (`parent_watch._alive_windows`): `OpenProcess` with
+   `SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION` plus a 0 ms
+   `WaitForSingleObject`, never a signal. Only "no such process" (error 87) means
+   gone; any other failure counts as alive. POSIX keeps `os.kill(pid, 0)`
+   unchanged. Unit-tested with a fake `kernel32`; the real-process test runs only
+   on Windows. **untested** on a real Windows machine until the `windows-latest`
+   job (PR 9) runs it.
 2. **Windows: the "port already in use" guard is defeated.**
    `server.py` `_bind_server()` relies on a second bind failing (a local process
    that grabs port 7777 first would receive the boot nonce). `ThreadingHTTPServer`
    sets `SO_REUSEADDR`; on Windows that option **allows** two processes to bind
    the same port, so no error is raised. Windows needs `SO_EXCLUSIVEADDRUSE`
    (and no `SO_REUSEADDR`). **untested.**
+   **Fixed in PR 8** (`server._LocalHTTPServer`, used by `_bind_server`): on
+   `win32` only, `allow_reuse_address` is switched off and `SO_EXCLUSIVEADDRUSE`
+   is set before binding; elsewhere it is exactly `ThreadingHTTPServer`. Servers
+   created directly (tests) are not affected. **untested** on real Windows.
 3. **Windows: no app token, boot nonce or instance id.**
    `lib.rs` `random_hex32()` reads `/dev/urandom` under `#[cfg(unix)]` and
    returns `None` elsewhere, so the sidecar environment variables
    `CONDUCTLOOP_APP_TOKEN`, `CONDUCTLOOP_APP_BOOT` and `CONDUCTLOOP_INSTANCE_ID`
    are simply not set and the server "keeps its previous behaviour". Use the
    `getrandom` crate (or `BCryptGenRandom`). Do not ship Windows without it.
+   **Fixed in PR 8:** a `#[cfg(windows)]` branch calls `getrandom::fill`;
+   `getrandom 0.3` is a direct dependency on Windows only
+   (`[target.'cfg(windows)'.dependencies]`) and was already in `Cargo.lock`
+   through `tauri`. The macOS/Linux branch is unchanged. This box cannot compile
+   Rust, so it is **untested** until CI compiles it for Windows (PR 9).
 4. **Windows: file permissions.** `chmod(0o600)` and `os.open(..., 0o600)` are
    no-ops (only the read-only bit is honoured). Call sites: `secrets_store.py`,
    `secret_vault.py`, `connectors_token/base.py`, `brain.py`, `sync_bundle.py`,
@@ -481,6 +497,12 @@ except through the Linux CI tests.** Notes:
    the user, SYSTEM and Administrators, which is acceptable for non-secret
    files. For anything secret, use the vault (encrypted) rather than relying on
    ACLs; an optional `icacls` tightening can come later. **untested.**
+   **PR 8:** the `chmod` calls were already wrapped in `try/except OSError`, so
+   nothing failed on Windows; they now go through one helper,
+   `ops_dashboard/fileperms.restrict_to_owner()`, which applies the mode on
+   macOS/Linux exactly as before and does nothing on Windows (returns `False`,
+   never raises). The `os.open(..., 0o600)` calls are left as they are (the mode
+   is ignored on Windows). Nothing secret may depend on this protection there.
 5. **Signals and process groups.** The server installs no signal handlers; it
    ends when Tauri kills the sidecar (`ServerProcess` in `lib.rs`, on window
    destroy) or when `parent_watch` fires and `server_entry.py` calls
@@ -499,7 +521,7 @@ except through the Linux CI tests.** Notes:
 
 | | macOS | Linux | Windows |
 |---|---|---|---|
-| Status | done | works in CI for Python paths; app untested | five bugs above |
+| Status | done | works in CI for Python paths; app untested | items 1-4 fixed in PR 8 (untested on real Windows); 5-7 open |
 | Risk | - | Low | High (items 1-3) |
 | PR | - | PR 1 | PR 8 |
 

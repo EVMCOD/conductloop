@@ -33,6 +33,7 @@ from pathlib import Path
 
 from . import app_paths as _app_paths
 from . import byok_keys, db, embeddings, projects
+from .fileperms import restrict_to_owner
 
 log = logging.getLogger(__name__)
 
@@ -928,10 +929,7 @@ def _save_config(cfg: dict) -> None:
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = CONFIG_PATH.with_name(CONFIG_PATH.name + ".tmp")
     tmp.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
-    try:
-        tmp.chmod(0o600)
-    except OSError:
-        pass
+    restrict_to_owner(tmp)
     os.replace(tmp, CONFIG_PATH)
 
 

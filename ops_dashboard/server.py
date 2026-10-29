@@ -9,6 +9,8 @@ import json
 import os
 import re
 import secrets
+import socket
+import sys
 import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -5531,6 +5533,30 @@ def _resolve_bind(host: str, port: int) -> str:
     return host
 
 
+def _exclusive_bind() -> bool:
+    """True where ``SO_REUSEADDR`` would let a second process share our port."""
+    return sys.platform == "win32"
+
+
+class _LocalHTTPServer(ThreadingHTTPServer):
+    """``ThreadingHTTPServer`` with the right "port already in use" semantics.
+
+    On POSIX ``SO_REUSEADDR`` only allows re-binding a port in TIME_WAIT, and a
+    second bind to a port in use still fails. On Windows it allows two processes
+    to bind the very same port, so the "refuse to start" guard of
+    ``_bind_server`` would never fire. There the server must not set it and must
+    set ``SO_EXCLUSIVEADDRUSE`` instead. Everywhere else this is exactly
+    ``ThreadingHTTPServer``. UNTESTED on real Windows.
+    """
+
+    def server_bind(self) -> None:
+        if _exclusive_bind():
+            self.allow_reuse_address = False
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def _bind_server(host: str, port: int) -> ThreadingHTTPServer:
     """Bind the HTTP server, failing loudly if the port is taken.
 
@@ -5540,7 +5566,7 @@ def _bind_server(host: str, port: int) -> ThreadingHTTPServer:
     else, and say so. 2026-10-23.
     """
     try:
-        return ThreadingHTTPServer((host, port), DashboardHandler)
+        return _LocalHTTPServer((host, port), DashboardHandler)
     except OSError as e:
         raise SystemExit(
             f"Cannot bind {host}:{port} — {e}.\n"
