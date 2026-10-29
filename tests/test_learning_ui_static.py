@@ -35,7 +35,8 @@ def test_page_named_aprendizaje_and_linked():
     assert "<script src=\"/learning.js\" defer></script>" in html
     assert not re.search(r"<script>(?!</script>)|\son[a-z]+=", html)  # CSP: no inline JS
     index = (WEB / "index.html").read_text()
-    assert 'href="/learning"' in index and "Aprendizaje" in index
+    # The dashboard is English-only (i18n.js): the link says Learning; the page translates itself.
+    assert 'href="/learning"' in index and "🎓 Learning<" in index
     assert '<script src="feedback-buttons.js" defer></script>' in index
 
 

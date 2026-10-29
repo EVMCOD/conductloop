@@ -5,6 +5,23 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 ## Unreleased
 
 - CI only: a "Windows (compile and tests)" workflow checks on every relevant pull request that the desktop wrapper still compiles for Windows and that the Windows-safe part of the Python tests passes there. It builds no installer, signs nothing, publishes nothing and is not a required check. Windows is still not supported.
+- **A home for your notes.** Without projects (a fresh install has none), the
+  dashboard opened on an empty project canvas and search hid behind ⌘P. It now
+  opens on "Your notes": how many are indexed, a box to ask a question (it goes
+  to the Brain in Chat, filled in, not sent), a search box and the recent notes,
+  each opening in the note view. With projects the canvas is unchanged.
+- **The Brain is useful without an AI key.** With no provider it answered with a
+  placeholder, even when it had found the right note. It now quotes the lines of
+  the notes it found that share the most words with the question, with their
+  [N] sources, and says how to get written answers. Same in Chat, team mode
+  included.
+- **Setup marks what is optional.** Semantic search, projects and the memory
+  export to Obsidian are extras: shown with "–" and "optional", and no longer
+  counted against "ready". Their hints no longer ask for a terminal (`pip
+  install`, `OPS_PROJECTS_FILE`, `ops obsidian-sync`), which the desktop app does
+  not have, and the checklist shows folder names as text.
+- The dashboard's "Aprendizaje" link and "Yo creo — segundo cerebro" node are in
+  English, like the rest of the dashboard.
 - **Windows groundwork: four fixes that cannot be tested on a real Windows machine yet.** The check that the desktop app is still running no longer ends the app on Windows (it used a signal that Windows treats as "terminate"); the local server refuses to start when its port is already taken, instead of sharing it with another program; the app token and server nonce are generated on Windows as well; and setting private file permissions is a documented no-op there instead of an error. macOS and Linux behave exactly as before. Windows itself is still not supported: there is no installer and no secure key storage yet.
 - Linux: `scripts/linux_update_manifest.py` builds and checks the update manifest for the AppImage (the same format as the macOS one, `linux-x86_64-appimage` only). It signs nothing and publishes nothing, and the Linux app still does not check for updates; this is only the groundwork for it. macOS is unchanged.
 - **Linux: secrets go to the system keychain (Secret Service).** On Linux, API keys and the other stored secrets now use the desktop keyring (GNOME Keyring, KWallet or KeePassXC), under the same names as on macOS. If there is no keyring (no D-Bus session, a headless machine, a locked keyring nobody unlocks), ConductLoop says so on the platform status, keeps provider keys in the encrypted vault and refuses connector tokens; it never stores them in plain text without telling you. If the keyring exists but cannot be read, ConductLoop stops with an error instead of creating a new key that would make saved connection credentials unreadable. macOS is unchanged. Experimental: not tested on a real Linux desktop yet.
