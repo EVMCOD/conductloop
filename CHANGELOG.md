@@ -4,6 +4,7 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+- Linux: `scripts/linux_update_manifest.py` builds and checks the update manifest for the AppImage (the same format as the macOS one, `linux-x86_64-appimage` only). It signs nothing and publishes nothing, and the Linux app still does not check for updates; this is only the groundwork for it. macOS is unchanged.
 - Linux: a CI workflow, "Linux bundles", builds the AppImage and the .deb on every pull request that touches the desktop app and keeps them for 3 days as downloadable artifacts. It builds on `ubuntu-22.04` instead of `ubuntu-latest` so the AppImage works with an older glibc; it is the only job pinned to a runner image. CI only: the app does not change.
 - **Linux: a script to build an AppImage and a .deb.** `scripts/build-linux.sh` freezes the server with PyInstaller and runs `tauri build --bundles appimage,deb`; the Linux settings live in `desktop/src-tauri/tauri.linux.conf.json`, so the macOS build does not change. No signing and no updates on Linux (the app does not look for updates at start-up there). Experimental: the packages have not been installed or run on a Linux desktop yet.
 - **Linux: a File menu with Close Tab (Ctrl+W) and Close Window (Ctrl+Shift+W).** The default Linux menu has no File menu, so the two shortcuts did nothing there. The macOS menu does not change. Not tested on a real Linux desktop yet.

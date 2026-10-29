@@ -628,11 +628,49 @@ Never mark a non-macOS-only release as latest. Add a check for this to
 `scripts/release_check.py` in a later PR (it is not part of this audit; the
 macOS release script is not touched).
 
+### 7.4 Linux manifest generator (PR 7, the unsigned half)
+
+`scripts/linux_update_manifest.py` builds (and with `--check` validates) the
+manifest for the Linux AppImage, the same JSON shape as the macOS one:
+
+```
+scripts/linux_update_manifest.py --version 1.3.0 \
+    --sig-file ConductLoop-1.3.0-x86_64.AppImage.sig \
+    [--appimage ConductLoop-1.3.0-x86_64.AppImage] [--output update-linux-x86_64.json]
+```
+
+- **Only `linux-x86_64-appimage`.** No `.deb` entry, no bare `linux-x86_64`
+  fallback; `--check` rejects both. The URL is
+  `https://github.com/EVMCOD/conductloop-releases/releases/download/v<version>/<asset>`
+  (a tag-pinned asset, never `latest`).
+- **It signs nothing.** A manifest the updater accepts needs a minisign signature
+  made with the release private key, which this repository neither has nor reads.
+  The script takes an existing `.sig` (what `tauri build` writes next to the
+  AppImage when `TAURI_SIGNING_PRIVATE_KEY` is set), refuses an empty, malformed
+  or other-key signature (key id `770EA4C292DC6BD2`, from `desktop/UPDATER_KEY_ID`
+  and `tauri.conf.json`), and with `--appimage` also verifies the signature
+  cryptographically over the file (prehashed `ED`, the only kind the updater
+  accepts). Without `--appimage` it cannot know the file is the one that was
+  signed: always pass it when the AppImage is at hand.
+- **It publishes nothing.** The output goes to stdout unless `--output` is given;
+  it refuses the name `update-macos-aarch64.json`; no network, no `gh`, no
+  environment secrets. Uploading it next to the AppImage is a maintainer step, in
+  the same tag as the macOS assets (7.3).
+- **The updater stays off on Linux.** `tauri.linux.conf.json` still has
+  `createUpdaterArtifacts: false` and no `plugins` block, `build-linux.sh` still
+  unsets the signing variables, and the app does not check for updates at
+  start-up on Linux. So no installed Linux build reads this file yet. Turning it
+  on needs, in later PRs: the endpoint override for Linux builds (7.2), a signed
+  AppImage built with the key, and the `TargetsNotFound` / `.deb` message in the
+  UI (Rust; not done here). **untested** on a real AppImage: the manifest and the
+  signature check are exercised only with the repository's published v1.2.0
+  signature and throwaway keys.
+
 | | macOS | Linux | Windows |
 |---|---|---|---|
-| Status | done | not built | not built |
+| Status | done | manifest generator only (unsigned, off) | not built |
 | Risk | - | Medium: TargetsNotFound UX; AppImage-only | Medium: no Authenticode |
-| PR | - | PR 7 | PR 11 |
+| PR | - | PR 7 (generator), later: signing + UI | PR 11 |
 
 ---
 
@@ -739,6 +777,8 @@ byte-for-byte (see "Invariantes de macOS"). "Tests" are what that PR must add.
 7. **Linux updater manifest** (AppImage only, `.deb` gets the "use your package
    manager" message, `TargetsNotFound` handled in the UI). Never published as
    "latest" alone (7.3). *Tests:* manifest generator test; UI message test.
+   *Done so far:* the generator and its tests (7.4); the signing, the endpoint
+   override and the UI message are still open.
 
 **Windows base**
 
