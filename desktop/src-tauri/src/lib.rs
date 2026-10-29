@@ -123,8 +123,10 @@ fn http_get(url: &str, timeout: std::time::Duration) -> Option<String> {
 }
 
 /// 32 random bytes as hex from the OS CSPRNG, or None if unavailable.
-/// (No extra crate: /dev/urandom on macOS/Linux. Elsewhere the app token is
-/// simply not used and the server keeps its previous behaviour.)
+/// (macOS/Linux: /dev/urandom, unchanged. Windows: the `getrandom` crate, which
+/// calls the system RNG; it is already in the dependency tree and is only a
+/// direct dependency on Windows. Other targets: None, and the server keeps its
+/// previous behaviour without an app token.)
 fn random_hex32() -> Option<String> {
     #[cfg(unix)]
     {
@@ -134,7 +136,13 @@ fn random_hex32() -> Option<String> {
         f.read_exact(&mut buf).ok()?;
         Some(buf.iter().map(|b| format!("{b:02x}")).collect())
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        let mut buf = [0u8; 32];
+        getrandom::fill(&mut buf).ok()?;
+        Some(buf.iter().map(|b| format!("{b:02x}")).collect())
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         None
     }

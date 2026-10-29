@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from . import secrets_store
+from .fileperms import restrict_to_owner
 
 log = logging.getLogger("conductloop.vault")
 
@@ -144,10 +145,7 @@ def _write_raw(data: dict[str, str], passphrase: str) -> None:
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(json.dumps(blob))
     os.replace(tmp, path)
-    try:
-        path.chmod(0o600)
-    except OSError:
-        pass
+    restrict_to_owner(path)
 
 
 # ── the session passphrase ─────────────────────────────────────────────────

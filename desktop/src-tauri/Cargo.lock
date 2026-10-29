@@ -352,6 +352,7 @@ name = "conductloop-desktop"
 version = "1.2.2"
 dependencies = [
  "conductloop-url-policy",
+ "getrandom 0.3.4",
  "objc2-app-kit",
  "objc2-foundation",
  "serde",

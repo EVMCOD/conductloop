@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 
 from . import db
+from .fileperms import restrict_to_owner
 
 log = logging.getLogger("conductloop.sync")
 
@@ -57,10 +58,7 @@ def export_bundle(passphrase: str, out_path: str | Path) -> dict:
     blob = _MAGIC + b"\n" + base64.b64encode(salt) + b":" + token
     out = Path(out_path).expanduser()
     out.write_bytes(blob)
-    try:
-        out.chmod(0o600)
-    except OSError:
-        pass
+    restrict_to_owner(out)
     log.info("wrote encrypted bundle %s", out)
     return {"path": str(out), "bytes": len(blob)}
 
