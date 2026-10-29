@@ -83,6 +83,8 @@ def test_and_again_on_ubuntu_latest_from_the_uploaded_artifacts():
     assert downloads == ["conductloop-linux-appimage", "conductloop-linux-deb"]
     runs = "\n".join(_runs(SMOKE_JOB))
     assert "linux-smoke.sh appimage bundles/appimage/" in runs and "linux-smoke.sh deb bundles/deb/" in runs
+    # A desktop has libEGL/libGL; the AppImage relies on them like every AppImage.
+    assert "libegl1" in runs and "libgl1" in runs
 
 
 def test_a_failed_check_still_runs_the_other_and_keeps_the_screenshots():
