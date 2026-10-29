@@ -22,6 +22,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 TESTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TESTS))
 
@@ -136,3 +138,21 @@ def test_the_accepted_ways_are_accepted():
     assert problems(Path("test_fake.py"), BAD)  # unmarked: flagged
     # A comment or a string that merely mentions st_mode is not an inspection.
     assert problems(Path("test_fake.py"), 'def test_a():\n    # st_mode\n    assert "st_mode"\n') == []
+
+
+def test_the_helpers_follow_the_real_os_not_a_monkeypatched_sys_platform(tmp_path, monkeypatch):
+    """windows-latest run 40926549010: a test patched sys.platform to "linux" and the helper
+    then asserted 0o600 on a real Windows file. The OS is decided once, at import."""
+    import sys
+
+    import posix_perms
+
+    f = tmp_path / "f"
+    f.write_text("x")
+    f.chmod(0o644)
+    monkeypatch.setattr(sys, "platform", "win32" if sys.platform != "win32" else "linux")
+    if posix_perms.on_windows():
+        posix_perms.assert_mode(f, 0o600)          # no-op on the real Windows
+    else:
+        with pytest.raises(AssertionError):
+            posix_perms.assert_mode(f, 0o600)

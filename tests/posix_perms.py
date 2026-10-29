@@ -25,8 +25,13 @@ REASON = ("POSIX permission bits (st_mode, chmod, the executable bit) do not exi
           "(docs/PORTABILITY.md 4.3)")
 
 
+# Decided once at import: some tests monkeypatch sys.platform to exercise another OS's
+# code path, but the file system underneath is still the real one.
+_WINDOWS = sys.platform == "win32"
+
+
 def on_windows() -> bool:
-    return sys.platform == "win32"
+    return _WINDOWS
 
 
 def assert_mode(path: str | os.PathLike[str], expected: int) -> None:
