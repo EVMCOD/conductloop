@@ -99,13 +99,19 @@ Steps (see script for details):
 4b. Notarize the `.app` on its own (zipped with `ditto`) and staple it —
    stapling only the DMG leaves the copied-out app without a local ticket,
    so a first launch with no network gets blocked by Gatekeeper
-5. Re-bundle DMG via `bundle_dmg.sh` (now around an already-stapled app)
+5. Re-bundle DMG via `bundle_dmg.sh` (now around an already-stapled app, with
+   the window background), then sign the DMG itself with the Developer ID
+   (releases up to 1.2.1 shipped an unsigned DMG)
 6. Notarize via `xcrun notarytool submit` (App Store Connect API key)
 7. Staple ticket via `xcrun stapler staple` — both the `.app` and the `.dmg`
-   should pass `xcrun stapler validate`
+   should pass `xcrun stapler validate`, and `spctl -a -t open --context
+   context:primary-signature` must accept the DMG (what Gatekeeper checks
+   when a downloaded DMG is opened)
 8. Sign updater `.tar.gz` with the ed25519 key, then check the `.sig` key id
 9. Generate `update-macos-aarch64.json` manifest
-10. Smoke-test the .app (sidecar must bind 127.0.0.1:7777)
+10. Smoke-test the .app with a throwaway data folder: its server must answer
+    `/api/health` on 127.0.0.1:7777 as this version within 90 s (nothing else
+    may be listening there first)
 11. Upload to GitHub release `v{VERSION}`
 
 ## Why not Mac App Store?
