@@ -1,0 +1,124 @@
+name: Windows bundles
+
+# Builds the Windows installers of the desktop app (an NSIS setup.exe and an
+# .msi, x64) with scripts/build-windows.ps1 and keeps them as workflow artifacts
+# for 3 days, so someone with a Windows machine can try a build of a branch. It
+# runs ONLY when started by hand (Actions tab, or `gh workflow run
+# windows-bundles.yml --ref <branch>`): never on push or pull_request, and it is
+# not a required check. It publishes nothing: no release, no tag, no secret, no
+# signing (the installers are NOT signed, so SmartScreen warns; there is no
+# updater on Windows). Runs only on GitHub-hosted runners (this repo is public);
+# never a self-hosted one (tests/test_workflows_guard.py).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-bundles-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-bundles:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Keep line endings as they are in the repository
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The sidecar is frozen with Python 3.14, the version the macOS release uses.
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Build the NSIS installer and the .msi
+        run: scripts\build-windows.ps1 -Bundles nsis,msi
+
+      - name: Bundle sizes and checksums
+        run: |
+          $bundle = "desktop/src-tauri/target/release/bundle"
+          $files = Get-ChildItem "$bundle/nsis/*.exe", "$bundle/msi/*.msi"
+          $lines = @("### Windows bundles", "", "| file | bytes | sha256 |", "|---|---|---|")
+          foreach ($f in $files) {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $f.FullName).Hash.ToLower()
+            $lines += "| $($f.Name) | $($f.Length) | ``$hash`` |"
+          }
+          $lines | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+
+      # Does the frozen server start on its own? It must answer /api/health.
+      - name: Smoke test, the frozen server
+        run: |
+          $env:PORT = "17777"
+          $proc = Start-Process -FilePath "$PWD\dist\conductloop-server.exe" -PassThru -WindowStyle Hidden
+          try {
+            $ok = $false
+            for ($i = 0; $i -lt 60 -and -not $ok; $i++) {
+              Start-Sleep -Seconds 2
+              try { $ok = (Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:17777/api/health" -TimeoutSec 3).StatusCode -eq 200 } catch { }
+            }
+            if (-not $ok) { throw "the frozen server did not answer /api/health on :17777" }
+            "the frozen server answered /api/health" | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+          } finally {
+            # Only the process tree started above.
+            taskkill /T /F /PID $proc.Id | Out-Null
+            $global:LASTEXITCODE = 0
+          }
+
+      # Install the NSIS setup silently (per user) and start the installed app:
+      # the window needs WebView2, which the runner image has. Informational: a
+      # runner has no real desktop session, so a failure here is a warning, not
+      # a red build.
+      - name: Smoke test, install and start the app
+        continue-on-error: true
+        run: |
+          $setup = Get-ChildItem "desktop/src-tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          Start-Process -FilePath $setup.FullName -ArgumentList "/S" -Wait
+          $app = Get-ChildItem "$env:LOCALAPPDATA\ConductLoop" -Recurse -Filter *.exe | Where-Object { $_.Name -notmatch "unins" }
+          $app | ForEach-Object { "{0}  {1} bytes" -f $_.FullName, $_.Length }
+          $main = $app | Where-Object { $_.Name -ne "conductloop-server.exe" } | Select-Object -First 1
+          if (-not $main -or -not ($app | Where-Object { $_.Name -eq "conductloop-server.exe" })) {
+            throw "the installed app has no main executable or no conductloop-server.exe"
+          }
+          $proc = Start-Process -FilePath $main.FullName -PassThru
+          try {
+            $ok = $false
+            for ($i = 0; $i -lt 60 -and -not $ok; $i++) {
+              Start-Sleep -Seconds 2
+              try { $ok = (Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:7777/api/health" -TimeoutSec 3).StatusCode -eq 200 } catch { }
+            }
+            if (-not $ok) { throw "the installed app did not start its server on :7777" }
+            "the installed app started its server" | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+          } finally {
+            taskkill /T /F /PID $proc.Id | Out-Null
+            $global:LASTEXITCODE = 0
+          }
+
+      - name: Upload the NSIS installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: conductloop-windows-nsis
+          path: desktop/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Upload the .msi
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: conductloop-windows-msi
+          path: desktop/src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+          retention-days: 3

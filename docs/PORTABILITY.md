@@ -623,6 +623,15 @@ in-app browser, code sessions (no sandbox) and any release.
   software can also flag a PyInstaller one-file executable, which unpacks itself
   to a temporary folder on every start (slower start, false positives are
   common). Both go away only with a signed build, which is not planned yet.
+- **CI bundle job.** `.github/workflows/windows-bundles.yml` runs
+  `scripts\build-windows.ps1 -Bundles nsis,msi` on `windows-latest` and keeps the
+  installers as artifacts for 3 days (`conductloop-windows-nsis`,
+  `conductloop-windows-msi`). It runs only by hand (`workflow_dispatch`: the
+  Actions tab, or `gh workflow run windows-bundles.yml --ref <branch>`), is not a
+  required check and publishes nothing. It also starts the frozen server and
+  checks that it answers `/api/health`, and tries to install and start the
+  installed app (informational: a CI runner has no real desktop). Nobody has
+  installed or run these installers on a real Windows machine yet.
 - **Known limits on Windows today:** the in-app browser is off, code sessions
   are off, API keys go to the encrypted vault (no Credential Manager yet) and the
   automated checks that exist run on `windows-latest` (see 8): compile and the
