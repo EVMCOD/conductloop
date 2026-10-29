@@ -56,6 +56,12 @@
     "shortDescription": "Local-first second-brain for macOS",
     "longDescription": "ConductLoop — index, search, and connect everything across your Obsidian vault, code repos, memory files, and live URLs. Local-first, no cloud, no telemetry.",
     "macOS": {
+      "dmg": {
+        "background": "dmg/background.png",
+        "windowSize": { "width": 600, "height": 400 },
+        "appPosition": { "x": 175, "y": 190 },
+        "applicationFolderPosition": { "x": 425, "y": 190 }
+      },
       "entitlements": "entitlements.plist",
       "minimumSystemVersion": "13.0"
     }

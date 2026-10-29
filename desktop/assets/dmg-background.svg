@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+  <!-- DMG window background, drawn at 2x for a 600x400 pt window. The app icon
+       sits at (175,190) pt and the Applications link at (425,190) pt
+       (scripts/release-desktop.sh, tauri.conf.json bundle.macOS.dmg). Light on
+       purpose: Finder draws the icon names in black. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f5ff"/>
+      <stop offset="1" stop-color="#eef9fc"/>
+    </linearGradient>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="arrow" gradientUnits="userSpaceOnUse" x1="492" y1="0" x2="712" y2="0">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#bg)"/>
+  <rect y="0" width="1200" height="8" fill="url(#brand)"/>
+  <!-- wordmark -->
+  <g transform="translate(452 76)">
+    <rect width="56" height="56" rx="13" fill="url(#mark)"/>
+    <circle cx="28" cy="28" r="22" fill="#0a0a0c"/>
+    <circle cx="28" cy="28" r="15.5" fill="none" stroke="#a78bfa" stroke-width="3" stroke-dasharray="4 2.1" stroke-linecap="round"/>
+  </g>
+  <text x="526" y="118" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="40" font-weight="500" fill="#14121f">ConductLoop</text>
+  <!-- arrow from the app to Applications -->
+  <path d="M 492 380 L 696 380" stroke="url(#arrow)" stroke-width="10" stroke-linecap="round" fill="none"/>
+  <path d="M 670 350 L 712 380 L 670 410" stroke="#06b6d4" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <text x="600" y="648" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="30" fill="#4b4763">Drag ConductLoop into Applications</text>
+  <text x="600" y="694" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="24" fill="#8a86a3">Free and open source · conductloop.com</text>
+</svg>

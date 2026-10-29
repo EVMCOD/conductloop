@@ -149,9 +149,13 @@ echo ""
 echo "▸ Re-bundling DMG"
 cd "$RELEASE_BUNDLE/dmg"
 rm -f "ConductLoop_${VERSION}_aarch64.dmg"
+# The window background (desktop/src-tauri/dmg/background.png, drawn at 2x
+# from desktop/assets/dmg-background.svg) has its arrow between these two
+# icon positions: keep them in sync, and with bundle.macOS.dmg in tauri.conf.json.
 ./bundle_dmg.sh \
   --volname "ConductLoop" \
   --volicon "$APP_PATH/Contents/Resources/icon.icns" \
+  --background "$TAURI_DIR/dmg/background.png" \
   --window-pos 200 120 \
   --window-size 600 400 \
   --icon-size 100 \
