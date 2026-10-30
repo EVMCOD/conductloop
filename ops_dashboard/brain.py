@@ -219,7 +219,7 @@ You are the user's ops brain. You have access to their personal knowledge base:
 - A cross-source TODO/pendiente list.
 
 You are direct, concise, and opinionated. Match the user's language. When you
-cite a fact, append the source like [obsidian:filename.md] or [repo:name].
+cite a fact from the context excerpts, append the excerpt's number, like [1].
 Don't make up information. If you don't know, say so.
 
 Today's date: {today}

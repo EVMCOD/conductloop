@@ -58,7 +58,42 @@
       return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
     });
     s = s.replace(/\[(\d{1,2})\]/g, '<span class="cite">$1</span>');
+    // Some models cite by source ("[obsidian:Pricing.md]") instead of [N]: show the name as a chip.
+    s = s.replace(/\[(obsidian|repo|memory|web|voice|mcp):([^\]\n]{1,120})\]/g, function (_m, kind, name) {
+      var label = name.split('/').pop().replace(/\.md$/i, '');
+      return '<span class="cite" title="' + kind + ':' + name + '">' + label + '</span>';
+    });
     return s;
+  }
+  var LIST = /^(\s*)([-*•]|\d+[.)])\s+(.*)$/;
+  // One list starting at lines[i]. Deeper-indented items nest inside the item
+  // above, and an ordered list keeps its first number, so "1. … - note … 2. …"
+  // doesn't restart at 1.
+  function list(lines, i, indent) {
+    var first = LIST.exec(lines[i]), ordered = /\d/.test(first[2]), items = [];
+    while (i < lines.length) {
+      if (!lines[i].trim() && i + 1 < lines.length) {
+        var next = LIST.exec(lines[i + 1]);
+        if (next && next[1].length >= indent) { i++; continue; }
+        break;
+      }
+      var m = LIST.exec(lines[i]);
+      if (!m || m[1].length < indent) break;
+      if (m[1].length > indent && items.length) {
+        var sub = list(lines, i, m[1].length);
+        items[items.length - 1] += sub.html;
+        i = sub.i;
+        continue;
+      }
+      if (/\d/.test(m[2]) !== ordered) break;
+      items.push('<li>' + inline(m[3]));
+      i++;
+    }
+    var tag = ordered ? 'ol' : 'ul', n = ordered ? parseInt(first[2], 10) : 1;
+    return {
+      html: '<' + tag + (n > 1 ? ' start="' + n + '"' : '') + '>' + items.join('</li>') + '</li></' + tag + '>',
+      i: i
+    };
   }
   function md(src) {
     var out = [], lines = String(src || '').replace(/\r/g, '').split('\n'), i = 0, para = [];
@@ -76,14 +111,12 @@
       }
       var h = /^(#{1,3})\s+(.*)$/.exec(line);
       if (h) { flush(); out.push('<h' + h[1].length + '>' + inline(h[2]) + '</h' + h[1].length + '>'); i++; continue; }
-      if (/^\s*([-*•])\s+/.test(line) || /^\s*\d+[.)]\s+/.test(line)) {
+      var item = LIST.exec(line);
+      if (item) {
         flush();
-        var ordered = /^\s*\d+[.)]\s+/.test(line), items = [];
-        while (i < lines.length && (ordered ? /^\s*\d+[.)]\s+/ : /^\s*[-*•]\s+/).test(lines[i])) {
-          items.push('<li>' + inline(lines[i].replace(/^\s*([-*•]|\d+[.)])\s+/, '')) + '</li>');
-          i++;
-        }
-        out.push((ordered ? '<ol>' : '<ul>') + items.join('') + (ordered ? '</ol>' : '</ul>'));
+        var r = list(lines, i, item[1].length);
+        out.push(r.html);
+        i = r.i;
         continue;
       }
       if (/^>\s?/.test(line)) { flush(); out.push('<blockquote>' + inline(line.replace(/^>\s?/, '')) + '</blockquote>'); i++; continue; }
