@@ -579,9 +579,63 @@ except through the Linux CI tests.** Notes:
 
 | | macOS | Linux | Windows |
 |---|---|---|---|
-| Status | done | not built | not built |
+| Status | done | script and CI bundle job, untested on a desktop | script (NSIS), untested on a real machine |
 | Risk | - | Medium (glibc, onnxruntime size) | Medium (AV, long paths) |
 | PR | - | PR 4 | PR 11 |
+
+### Windows status
+
+**Experimental and unsigned. Nothing here has been run on a real Windows machine.**
+What exists: `scripts/build-windows.ps1` (the Windows twin of
+`scripts/build-linux.sh`) and `desktop/src-tauri/tauri.windows.conf.json`. What
+does not: code signing, an updater, a Windows keychain backend (PR 10), the
+in-app browser, code sessions (no sandbox) and any release.
+
+- **Build.** On 64-bit Windows with Python >= 3.13, Node, Rust (MSVC toolchain)
+  and the Visual Studio Build Tools, `scripts\build-windows.ps1` freezes the
+  server with `desktop/conductloop_server.spec` into
+  `desktop/src-tauri/binaries/`, named `conductloop-server-x86_64-pc-windows-msvc.exe`
+  (what Tauri expects: `externalBin` + `-<triple>.exe`), and runs
+  `tauri build --bundles nsis`. `-Bundles nsis,msi` also builds an `.msi`;
+  `-SidecarOnly` and `-SkipSidecar` split the two steps. Output:
+  `desktop/src-tauri/target/release/bundle/nsis/ConductLoop_<version>_x64-setup.exe`.
+  macOS (`scripts/release-desktop.sh`, `tauri.conf.json`) is not touched: the
+  Windows settings live only in `tauri.windows.conf.json`, which Tauri reads on
+  Windows only.
+- **No updater.** `createUpdaterArtifacts` is `false` for Windows (no `.sig`, no
+  signing key needed, `TAURI_SIGNING_*` is dropped by the script), and the app
+  does not look for updates at start-up there: the check runs on macOS only
+  (`lib.rs`). The updater endpoint in `tauri.conf.json` is the macOS manifest and
+  stays so. To update, download and run the new installer.
+- **UTF-8.** The frozen server runs in UTF-8 mode on Windows (a PyInstaller
+  option in the spec, Windows only), so files are read and written as UTF-8
+  instead of the ANSI code page. macOS and Linux builds are unchanged.
+- **Installer.** NSIS, per user (`installMode: currentUser`): no administrator
+  prompt, installed under the user's profile.
+- **WebView2 (requirement).** The app window is a Microsoft Edge WebView2.
+  Windows 11 and current Windows 10 already have the runtime; if it is missing
+  the installer downloads it (`downloadBootstrapper`), so that machine needs an
+  internet connection during the install. Windows 10 or 11 on x86_64 only (no
+  Windows on ARM build).
+- **SmartScreen warning (unsigned binary).** There is no code-signing
+  certificate, so Windows Defender SmartScreen shows "Windows protected your PC"
+  when the installer is run. Click **More info**, then **Run anyway**. Antivirus
+  software can also flag a PyInstaller one-file executable, which unpacks itself
+  to a temporary folder on every start (slower start, false positives are
+  common). Both go away only with a signed build, which is not planned yet.
+- **CI bundle job.** `.github/workflows/windows-bundles.yml` runs
+  `scripts\build-windows.ps1 -Bundles nsis,msi` on `windows-latest` and keeps the
+  installers as artifacts for 3 days (`conductloop-windows-nsis`,
+  `conductloop-windows-msi`). It runs only by hand (`workflow_dispatch`: the
+  Actions tab, or `gh workflow run windows-bundles.yml --ref <branch>`), is not a
+  required check and publishes nothing. It also starts the frozen server and
+  checks that it answers `/api/health`, and tries to install and start the
+  installed app (informational: a CI runner has no real desktop). Nobody has
+  installed or run these installers on a real Windows machine yet.
+- **Known limits on Windows today:** the in-app browser is off, code sessions
+  are off, API keys go to the encrypted vault (no Credential Manager yet) and the
+  automated checks that exist run on `windows-latest` (see 8): compile and the
+  Windows-safe tests, not the installer.
 
 ---
 
@@ -886,6 +940,9 @@ byte-for-byte (see "Invariantes de macOS"). "Tests" are what that PR must add.
     new script, the `update-windows-x86_64.json` flow, and the "never publish a
     non-macOS release as latest" check in `scripts/release_check.py` (a check
     only). *Tests:* `release_check` tests.
+    *Done so far:* the NSIS packaging script and config, unsigned and without an
+    updater (see "Windows status" in section 5). The updater manifest, the Help
+    menu entry and the `release_check` rule are still open.
 
 Optional later: re-enable the in-app browser on Linux/Windows once the upstream
 issues are resolved and the proxy is verified on real machines. A Windows

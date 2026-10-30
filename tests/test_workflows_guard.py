@@ -22,6 +22,10 @@ WORKFLOWS = sorted((Path(__file__).resolve().parent.parent / ".github" / "workfl
 # builds on ubuntu-22.04 so the AppImage works with an older glibc.
 HOSTED_LABELS = frozenset({"ubuntu-latest", "macos-latest", "windows-latest"})
 PINNED_IMAGE_EXCEPTIONS = {("linux-bundles.yml", "linux-bundles"): "ubuntu-22.04"}
+# The only workflows that may build installers and keep them as artifacts. Both
+# publish nothing and keep what they build for 3 days at most: a new workflow
+# that uploads an artifact has to be added here on purpose, in review.
+BUNDLE_WORKFLOWS = frozenset({"linux-bundles.yml", "windows-bundles.yml"})
 FORBIDDEN = ("self-hosted", "vars.runs_on", "runs_on")
 USES = re.compile(r"^\s*-?\s*uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
 PINNED = re.compile(r"^[\w.\-]+/[\w.\-]+(/[\w.\-/]+)?@[0-9a-f]{40}$")
@@ -126,3 +130,21 @@ def test_only_the_linux_bundles_job_runs_on_a_pinned_image():
             if job.get("runs-on") not in HOSTED_LABELS:
                 pinned[(path.name, name)] = job.get("runs-on")
     assert pinned == PINNED_IMAGE_EXCEPTIONS
+
+
+def test_only_the_bundle_workflows_upload_artifacts_and_only_for_three_days():
+    uploaders = set()
+    for path in WORKFLOWS:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for name, job in (doc.get("jobs") or {}).items():
+            for step in job.get("steps") or []:
+                if str(step.get("uses", "")).startswith("actions/upload-artifact@"):
+                    uploaders.add(path.name)
+                    assert step["with"]["retention-days"] <= 3, f"{path.name}:{name}: keep artifacts 3 days at most"
+    assert uploaders == BUNDLE_WORKFLOWS
+
+
+def test_windows_latest_is_the_runner_of_the_windows_bundles_job_and_no_pinned_image_is_allowed_there():
+    assert runner_problem("windows-bundles.yml", "windows-bundles", "windows-latest") is None
+    for label in ("windows-2022", "windows-2019", "windows-11-arm", "self-hosted", "ubuntu-22.04"):
+        assert runner_problem("windows-bundles.yml", "windows-bundles", label)

@@ -8,6 +8,7 @@ Build from the repo root:
 Output: dist/conductloop-server/  (onedir) with the launcher binary +
 the ops_dashboard package and its web/ assets bundled.
 """
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import (  # noqa: F821
@@ -65,10 +66,17 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 
+# Windows only: run the frozen interpreter in UTF-8 mode (the same as
+# python -X utf8; PyInstaller bakes it into the executable).
+# Without it open() without an encoding uses the ANSI code page (cp1252) there.
+# The macOS and Linux builds get no options, as before.
+options = [("X utf8", None, "OPTION")] if sys.platform == "win32" else []
+
 # onefile: a single executable, so Tauri can ship it as an externalBin sidecar.
 exe = EXE(
     pyz,
     a.scripts,
+    options,
     a.binaries,
     a.datas,
     [],
