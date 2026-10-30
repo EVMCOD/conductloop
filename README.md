@@ -36,7 +36,11 @@ All releases, with checksums: [conductloop-releases](https://github.com/EVMCOD/c
 - **Backups** of the local database, daily and before every upgrade, restorable from Setup.
 - **It learns from your 👍/👎**: proposed rules that you approve, all stored on your computer.
 
-The screenshots use a fictional vault. Dark theme: ◐ in the corner.
+| Ask the team | The CEO's answer |
+|---|---|
+| ![Team mode: the CEO hands the question to the Head of Product, CTO, CMO and CFO; each card shows its answer and time](docs/screenshots/09-team-cards.png) | ![The CEO's final answer: a numbered plan with sources](docs/screenshots/08-team-answer.png) |
+
+The screenshots use a fictional vault; the team ones ran on a real model (MiniMax-M3). Dark theme: ◐ in the corner.
 
 ---
 
