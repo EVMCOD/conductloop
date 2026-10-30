@@ -84,3 +84,33 @@ def test_team_chat_context_block_is_read_too():
     system = team_chat.agent_system({"name": "CFO", "title": "Chief Financial Officer"}, context, "")
     out = _ask(system, "mortgage bank answer")
     assert "[1]\n> Called the bank" in out
+
+
+PRICING = {
+    "source": "obsidian", "path": "/v/Projects/Pricing experiment.md", "title": "Pricing experiment",
+    "content": "# Pricing experiment\nQuestion: does a yearly plan beat monthly?\n\n## Decision (2026-10-21)\n"
+               "Keep both plans and make yearly the default. Revisit the price after the launch.\n"
+               "Discussed in [[Design review]].",
+}
+SUNDAY = {
+    "source": "obsidian", "path": "/v/Daily/2026-10-26.md", "title": "2026-10-26",
+    "content": "# 2026-10-26\nSketched the launch post: problem, idea, what's new, pricing.",
+}
+
+
+def test_words_of_one_family_match():
+    from ops_dashboard.brain import _terms
+    assert _terms("decide") == _terms("decision") == _terms("decided") == {"deci"}
+    assert _terms("pricing") == _terms("price") == _terms("prices") == {"pric"}
+
+
+def test_a_line_takes_the_words_of_its_heading_and_says_so():
+    out = _ask(_system([SUNDAY, PRICING]), "What did we decide about pricing?")
+    assert "> Decision (2026-10-21) — Keep both plans and make yearly the default." in out
+    assert "Discussed in" not in out  # the heading counts less for the lines after the first
+    assert "> Question:" not in out   # the title alone does not make a line an answer
+
+
+def test_the_note_with_the_best_line_comes_first():
+    out = _ask(_system([SUNDAY, PRICING]), "What did we decide about pricing?")
+    assert out.index("**Pricing experiment** [2]") < out.index("**2026-10-26** [1]")

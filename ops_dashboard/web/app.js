@@ -538,7 +538,8 @@ function renderNotesHome() {
       var li = el('li');
       var a = link('/note/' + encodeURIComponent(r.id), r.title || String(r.path || '').split('/').pop());
       li.appendChild(a);
-      var excerpt = String(r.excerpt || '').replace(/\s+/g, ' ').trim();
+      // content_snip has the words around the match; excerpt is a few words only.
+      var excerpt = String(r.content_snip || r.excerpt || '').replace(/\s+/g, ' ').trim();
       if (excerpt) li.appendChild(el('span', 'nh-excerpt', excerpt.slice(0, 160)));
       list.appendChild(li);
     });
