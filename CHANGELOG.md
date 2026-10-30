@@ -2,7 +2,15 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
-## Unreleased
+## 1.2.4 — 2026-10-30 — A dark theme that works, better answers without a key, Linux and Windows betas
+
+On the Mac it installs from the app ("Check for Updates…", or the quiet check
+a little after start-up, from 1.2.2 on). What changes there: the dark theme,
+the answers without an AI key, the note actions in your language and wording
+that is true on every system. Linux (AppImage, .deb) and Windows (setup.exe)
+get their 1.2.4 builds as betas: pre-releases, unsigned on Windows, without
+automatic updates; both now start and pass their checks in CI (Ubuntu 22.04
+and 24.04; Windows install, start, close and uninstall).
 
 - **The dark theme works on the dashboard.** The ◐ toggle added the `dark` class but the dashboard stayed white: its colour aliases were resolved on `:root` with the light palette. They are now declared on `body` too.
 - **Better answers without an AI key.** Words of one family match ("decide" and "decision", "pricing" and "price"), a line under a matching heading counts it and shows it ("Decision (2026-10-21) — Keep both plans…"), a note's title adds a little, and the note with the best line comes first. Asked "What did we decide about pricing?", it now quotes the decision instead of a daily note that mentions pricing.

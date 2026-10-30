@@ -13,8 +13,8 @@ It never writes into your notes folder: its own notes (daily briefing, agent not
 | System | Download | Notes |
 |---|---|---|
 | macOS 13 or later, Apple Silicon | [ConductLoop.dmg](https://github.com/EVMCOD/conductloop-releases/releases/latest/download/ConductLoop-macos-aarch64.dmg) | Signed and notarized. Updates itself (ConductLoop → Check for Updates…). The in-app browser needs macOS 14 or later. |
-| **Linux** x86_64 · beta | [AppImage](https://github.com/EVMCOD/conductloop-releases/releases/download/v1.2.3-linux-experimental.1/ConductLoop_1.2.3_amd64.AppImage) · [.deb](https://github.com/EVMCOD/conductloop-releases/releases/download/v1.2.3-linux-experimental.1/ConductLoop_1.2.3_amd64.deb) | Tested on Ubuntu 22.04 and 24.04. No in-app browser; no automatic updates yet. |
-| **Windows** 10/11 x64 · beta | [setup.exe](https://github.com/EVMCOD/conductloop-releases/releases/download/v1.2.3-windows-experimental.1/ConductLoop_1.2.3_x64-setup.exe) | Not code-signed, so SmartScreen says "Windows protected your PC": click **More info**, then **Run anyway**. No in-app browser; no automatic updates yet. |
+| **Linux** x86_64 · beta | [AppImage](https://github.com/EVMCOD/conductloop-releases/releases/download/v1.2.4-linux-experimental.1/ConductLoop_1.2.4_amd64.AppImage) · [.deb](https://github.com/EVMCOD/conductloop-releases/releases/download/v1.2.4-linux-experimental.1/ConductLoop_1.2.4_amd64.deb) | Tested on Ubuntu 22.04 and 24.04. No in-app browser; no automatic updates yet. |
+| **Windows** 10/11 x64 · beta | [setup.exe](https://github.com/EVMCOD/conductloop-releases/releases/download/v1.2.4-windows-experimental.1/ConductLoop_1.2.4_x64-setup.exe) | Not code-signed, so SmartScreen says "Windows protected your PC": click **More info**, then **Run anyway**. No in-app browser; no automatic updates yet. |
 
 All releases, with checksums: [conductloop-releases](https://github.com/EVMCOD/conductloop-releases/releases).
 
