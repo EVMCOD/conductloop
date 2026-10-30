@@ -13,13 +13,13 @@
 
   var ES = /^es\b/i.test((navigator && navigator.language) || '');
   var T = ES ? {
-    up: 'Útil', down: 'No útil', why: '¿Qué falló?', comment: 'Comentario (opcional, se queda en este Mac)',
-    send: 'Enviar', thanks: 'Gracias, guardado en este Mac.', lessons: 'Lecciones usadas: ', err: 'No se pudo guardar: ',
+    up: 'Útil', down: 'No útil', why: '¿Qué falló?', comment: 'Comentario (opcional, se queda en este ordenador)',
+    send: 'Enviar', thanks: 'Gracias, guardado en este ordenador.', lessons: 'Lecciones usadas: ', err: 'No se pudo guardar: ',
     r_wrong: 'Incorrecta', r_missing_citation: 'Falta cita', r_bad_citation: 'Cita errónea',
     r_outdated: 'Desactualizada', r_style: 'Estilo', r_unsafe: 'Insegura', r_other: 'Otro'
   } : {
-    up: 'Helpful', down: 'Not helpful', why: 'What went wrong?', comment: 'Comment (optional, stays on this Mac)',
-    send: 'Send', thanks: 'Thanks, saved on this Mac.', lessons: 'Lessons used: ', err: 'Could not save: ',
+    up: 'Helpful', down: 'Not helpful', why: 'What went wrong?', comment: 'Comment (optional, stays on this computer)',
+    send: 'Send', thanks: 'Thanks, saved on this computer.', lessons: 'Lessons used: ', err: 'Could not save: ',
     r_wrong: 'Wrong', r_missing_citation: 'Missing citation', r_bad_citation: 'Bad citation',
     r_outdated: 'Outdated', r_style: 'Style', r_unsafe: 'Unsafe', r_other: 'Other'
   };

@@ -26,7 +26,7 @@
   var UI = {
     es: {
       title: 'Guía: crea tu propia app OAuth (BYOK)',
-      intro: 'En esta versión cada conector usa el client ID de una app OAuth que creas tú en tu propia cuenta del proveedor. ConductLoop no tiene servidor ni app compartida: el token va del proveedor a este Mac y se guarda en el llavero.',
+      intro: 'En esta versión cada conector usa el client ID de una app OAuth que creas tú en tu propia cuenta del proveedor. ConductLoop no tiene servidor ni app compartida: el token va del proveedor a este ordenador y se guarda en el llavero.',
       legend: '⚠️ = paso que no se ha podido confirmar en la documentación oficial del proveedor. Compruébalo en su consola antes de fiarte.',
       steps: 'Pasos', redirect: 'Redirect (URI de redirección)', scopes: 'Permisos mínimos (scopes)',
       read: 'lectura', write: 'escritura (más adelante, siempre con confirmación)', warnings: 'Advertencias',
@@ -34,7 +34,7 @@
     },
     en: {
       title: 'Guide: create your own OAuth app (BYOK)',
-      intro: 'In this version every connector uses the client ID of an OAuth app you create in your own provider account. ConductLoop has no server and no shared app: the token goes from the provider to this Mac and is stored in the keychain.',
+      intro: 'In this version every connector uses the client ID of an OAuth app you create in your own provider account. ConductLoop has no server and no shared app: the token goes from the provider to this computer and is stored in the keychain.',
       legend: '⚠️ = step that could not be confirmed in the provider\u2019s official documentation. Check it in their console before relying on it.',
       steps: 'Steps', redirect: 'Redirect URI', scopes: 'Minimal permissions (scopes)',
       read: 'read', write: 'write (later, always with confirmation)', warnings: 'Warnings',
@@ -84,8 +84,8 @@
       warnings: [
         { es: 'Gmail: gmail.readonly (igual que gmail.compose, gmail.modify y gmail.metadata) es un scope RESTRINGIDO. Para publicar una app con él Google exige la verificación de scopes restringidos y, si los datos se guardan o transmiten en servidores, una evaluación de seguridad. Con tu propia app en «Testing» no hace falta verificarla, pero verás la pantalla de «app no verificada».',
           en: 'Gmail: gmail.readonly (like gmail.compose, gmail.modify and gmail.metadata) is a RESTRICTED scope. Publishing an app with it requires restricted-scope verification and, if data is stored or transmitted on servers, a security assessment. Your own app in "Testing" needs no verification, but you will see the "unverified app" screen.' },
-        { es: 'ConductLoop no envía tus correos a ningún servidor (todo se queda en este Mac). Si eso basta para que Google no exija la evaluación de seguridad a una app 100 % local no está documentado.',
-          en: 'ConductLoop does not send your email to any server (everything stays on this Mac). Whether that exempts a 100 % local app from the security assessment is not documented.', unverified: true },
+        { es: 'ConductLoop no envía tus correos a ningún servidor (todo se queda en este ordenador). Si eso basta para que Google no exija la evaluación de seguridad a una app 100 % local no está documentado.',
+          en: 'ConductLoop does not send your email to any server (everything stays on this computer). Whether that exempts a 100 % local app from the security assessment is not documented.', unverified: true },
         { es: 'Tope de usuarios: en «Testing» caben como máximo 100 usuarios de prueba. Una app sin verificar que muestra la pantalla de «app no verificada» admite 100 usuarios nuevos en total durante toda la vida del proyecto, y ese tope no se puede reiniciar. Por eso cada usuario crea su propia app.',
           en: 'User cap: "Testing" allows at most 100 test users. An unverified app that shows the "unverified app" screen accepts 100 new users in total over the whole life of the project, and the cap cannot be reset. That is why every user creates their own app.' },
         { es: 'En «Testing», la autorización (y el refresh token) caduca a los 7 días del consentimiento: tendrás que volver a pulsar «Conectar» cada semana.',

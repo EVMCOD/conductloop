@@ -24,7 +24,7 @@
       create_label: 'Crearla si no existe',
       save_folders: 'Guardar e indexar mis notas',
       key_title: '2 · Clave de IA (opcional)',
-      key_hint: 'La búsqueda y las notas funcionan sin ella. Para chatear y resumir, pega una clave de tu proveedor de IA. Se guarda en el Llavero de este Mac, o en un archivo cifrado si no hay, y no se vuelve a mostrar.',
+      key_hint: 'La búsqueda y las notas funcionan sin ella. Para chatear y resumir, pega una clave de tu proveedor de IA. Se guarda en el llavero del sistema (el Llavero en un Mac) o, si no hay, en un archivo cifrado, y no se vuelve a mostrar.',
       provider_label: 'Proveedor',
       key_label: 'Clave de API',
       save_key: 'Guardar clave',
