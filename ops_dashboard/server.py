@@ -4873,7 +4873,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         try: data = self._read_json()
         except Exception: data = {}
         action = data.get("action") or ""
-        target_lang = data.get("lang") or data.get("target_lang") or "es"
+        target_lang = data.get("lang") or data.get("target_lang") or "en"
         provider = data.get("provider") or None
         from .indexers import note_ai
         result = note_ai.run_action(doc_id, action, target_lang=target_lang, provider_name=provider)

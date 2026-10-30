@@ -45,3 +45,18 @@ def test_a_question_from_the_url_is_put_in_the_box_never_sent():
     block = src[i:src.index("\n", src.index("if (ask", i))]
     assert "$('input').value = ask" in block
     assert "send(" not in block
+
+
+def test_note_ai_actions_answer_in_the_browsers_language_not_always_spanish():
+    html = (WEB / "note.html").read_text()
+    for action in ("key_points", "summarize", "action_items", "expand"):
+        assert f'data-action="{action}" data-lang="auto"' in html, action
+    assert "const UI_LANG = /^es\\b/i.test(navigator.language || '') ? 'es' : 'en';" in html
+    assert "b.dataset.lang || UI_LANG" in html
+    # The Translate buttons keep their own target.
+    assert 'data-action="translate" data-lang="es"' in html and 'data-action="translate" data-lang="en"' in html
+
+
+def test_search_results_show_the_words_around_the_match():
+    body = _function((WEB / "app.js").read_text(), "renderNotesHome")
+    assert "r.content_snip || r.excerpt" in body

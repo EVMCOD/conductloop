@@ -73,20 +73,20 @@
     <div class="sidebar-content">
       <div id="ai-pane">
         <div id="ai-actions">
-          <button class="ai-action" data-action="key_points" data-lang="es">
-            <div class="title">🔑 Key points <span class="lang-pill">ES</span></div>
+          <button class="ai-action" data-action="key_points" data-lang="auto">
+            <div class="title">🔑 Key points <span class="lang-pill"></span></div>
             <div class="desc">Extract 3-7 main takeaways</div>
           </button>
-          <button class="ai-action" data-action="summarize" data-lang="es">
-            <div class="title">📝 Summarize <span class="lang-pill">ES</span></div>
+          <button class="ai-action" data-action="summarize" data-lang="auto">
+            <div class="title">📝 Summarize <span class="lang-pill"></span></div>
             <div class="desc">3-5 bullet summary</div>
           </button>
-          <button class="ai-action" data-action="action_items" data-lang="es">
-            <div class="title">☑️ Action items <span class="lang-pill">ES</span></div>
+          <button class="ai-action" data-action="action_items" data-lang="auto">
+            <div class="title">☑️ Action items <span class="lang-pill"></span></div>
             <div class="desc">Extract TODOs / next steps</div>
           </button>
-          <button class="ai-action" data-action="expand" data-lang="es">
-            <div class="title">✍️ Expand <span class="lang-pill">ES</span></div>
+          <button class="ai-action" data-action="expand" data-lang="auto">
+            <div class="title">✍️ Expand <span class="lang-pill"></span></div>
             <div class="desc">More detail + structure</div>
           </button>
           <button class="ai-action" data-action="translate" data-lang="es">
@@ -236,11 +236,19 @@ function renderBacklink(r) {
     '</div>';
 }
 
-// AI actions
+// AI actions. Key points, Summarize, Action items and Expand answer in the
+// language of this browser (Spanish for es-*, English otherwise); the
+// Translate buttons name their own. They were all fixed to Spanish.
+const UI_LANG = /^es\b/i.test(navigator.language || '') ? 'es' : 'en';
+document.querySelectorAll('.ai-action[data-lang="auto"]').forEach(b => {
+  b.dataset.lang = UI_LANG;
+  const pill = b.querySelector('.lang-pill');
+  if (pill) pill.textContent = UI_LANG.toUpperCase();
+});
 document.querySelectorAll('.ai-action').forEach(b => {
   b.addEventListener('click', async () => {
     const action = b.dataset.action;
-    const lang = b.dataset.lang || 'es';
+    const lang = b.dataset.lang || UI_LANG;
     $('ai-actions').style.display = 'block';
     document.querySelectorAll('.ai-action').forEach(x => x.disabled = true);
     $('ai-result').innerHTML = '<div class="ai-empty">Thinking (' + action + ', ' + lang + ')…</div>';

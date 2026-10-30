@@ -7,7 +7,7 @@ Endpoints:
   POST /api/notes/<id>/ai-action {action: 'summarize'|'expand'|'translate'|'key_points'|'action_items',
                                    target_lang?: 'es'|'en'|...}
 
-For 'translate', target_lang defaults to 'es'.
+For 'translate', target_lang defaults to 'en'.
 The result is returned as JSON and can be applied to a new note or
 appended to the existing one (caller's choice).
 
@@ -54,7 +54,7 @@ ACTION_PROMPTS = {
     ),
 }
 
-DEFAULT_LANG = "es"
+DEFAULT_LANG = "en"
 
 
 def get_note_content(doc_id: int) -> tuple[dict | None, str | None]:

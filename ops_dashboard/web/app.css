@@ -8,8 +8,11 @@
 
 /* Design system (2026-10-23). The legacy token names below are aliases of
      the shared system in /theme.css, so this page adopts one palette without
-     touching the component CSS. New code should use the --cl-* names. */
-  :root {
+     touching the component CSS. New code should use the --cl-* names.
+     Declared on body too: an alias is resolved where it is declared, so on
+     :root alone it kept the light palette when body.dark changed --cl-*
+     (the dark toggle did nothing on the dashboard). */
+  :root, body {
     --bg: var(--cl-bg);
     --bg-soft: var(--cl-bg-soft);
     --bg-2: var(--cl-bg-3);
@@ -27,9 +30,8 @@
     --red: var(--cl-danger);
     --yellow: var(--cl-warn);
   }
-  /* Dark mode now comes from the shared system (/theme.css -> body.dark),
-     so there is one palette instead of two that drift apart. */
-  body.dark { }
+  /* Dark mode comes from the shared system (/theme.css -> body.dark), so
+     there is one palette instead of two that drift apart. */
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; }
   body {

@@ -423,9 +423,21 @@ _STOPWORDS = frozenset(
 )
 
 
+_SUFFIXES = ("ations", "ation", "ings", "ing", "ions", "ion", "ers", "er", "ed", "es", "s", "e")
+
+
+def _key(word: str) -> str:
+    """A rough stem to match words of one family: "decide", "decided" and
+    "decision" give "deci"; "pricing", "price" and "prices" give "pric"."""
+    for suffix in _SUFFIXES:
+        if word.endswith(suffix) and len(word) - len(suffix) >= 4:
+            word = word[: -len(suffix)]
+            break
+    return word[:4]
+
+
 def _terms(text: str) -> set[str]:
-    words = re.findall(r"[^\W_]{3,}", text.lower())
-    return {w[:-1] if len(w) > 4 and w.endswith("s") else w for w in words if w not in _STOPWORDS}
+    return {_key(w) for w in re.findall(r"[^\W_]{3,}", text.lower()) if w not in _STOPWORDS}
 
 
 def _matching_lines(system: str, question: str, *, docs: int = 3, per_doc: int = 2) -> list[str]:
@@ -461,30 +473,46 @@ def _matching_lines(system: str, question: str, *, docs: int = 3, per_doc: int =
         if body and body[0].strip() == "---":
             end = next((k for k in range(1, len(body)) if body[k].strip() == "---"), None)
             body = body[end + 1:] if end is not None else body
+        # Each line counts the question's words it has, plus those of the
+        # heading it sits under ("## Decision" then "Keep both plans…"; half for
+        # the lines after the first), plus a quarter point for each one in the
+        # note's title. Headings are context, not answers: a line is only a
+        # candidate if it or its heading matches.
         scored = []
+        heading, heading_terms, under = "", set(), 0
         for k, raw in enumerate(body):
-            text = re.sub(r"^#+\s*", "", raw.strip())
+            stripped = raw.strip()
+            text = re.sub(r"^#+\s*", "", stripped)
             if not text or text.startswith(("<<<", "url: ")):
                 continue
             if text.startswith("title: "):
                 b["title"] = text[7:].strip() or b["title"]
                 continue
-            if text.lower() == b["title"].lower():  # the note's own heading
+            if stripped.startswith("#"):
+                same = text.lower() == b["title"].lower()  # the note's own heading
+                heading, heading_terms = ("", set()) if same else (text, _terms(text) & terms)
+                under = 0
                 continue
-            score = sum(1 for t in terms if t in text.lower())
-            if score:
-                scored.append((score, k, text if len(text) <= 240 else text[:239] + "…"))
+            under += 1
+            own = _terms(text) & terms
+            context = heading_terms - own
+            if not own and not context:
+                continue
+            title = (_terms(b["title"]) & terms) - own - context
+            shown = f"{heading} — {text}" if context else text
+            score = len(own) + len(context) * (1 if under == 1 else 0.5) + 0.25 * len(title)
+            scored.append((score, k, shown if len(shown) <= 240 else shown[:239] + "…"))
         b["scored"] = scored
-    # A line has to share at least half as many words with the question as the
-    # best line does: one common word ("need") is not a match next to four.
-    top = max((s[0] for b in blocks for s in b["scored"]), default=0)
-    floor = max(1, (top + 1) // 2)
-    for b in blocks:
-        scored = [s for s in b["scored"] if s[0] >= floor]
+        b["best"] = max((x[0] for x in scored), default=0)
+    # A line has to score at least half as much as the best line: one common
+    # word ("need") is not a match next to four. Notes go best line first.
+    top = max((b["best"] for b in blocks), default=0)
+    for b in sorted(blocks, key=lambda b: (-b["best"], int(b["n"]))):
+        scored = [x for x in b["scored"] if x[0] >= top / 2]
         if not scored:
             continue
-        best = sorted(sorted(scored, key=lambda s: (-s[0], s[1]))[:per_doc], key=lambda s: s[1])
-        out.append(f"**{b['title']}** [{b['n']}]\n" + "\n".join(f"> {s[2]}" for s in best))
+        best = sorted(sorted(scored, key=lambda x: (-x[0], x[1]))[:per_doc], key=lambda x: x[1])
+        out.append(f"**{b['title']}** [{b['n']}]\n" + "\n".join(f"> {x[2]}" for x in best))
         if len(out) >= docs:
             break
     return out
