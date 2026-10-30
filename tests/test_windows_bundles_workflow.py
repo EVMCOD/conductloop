@@ -48,14 +48,19 @@ def test_it_builds_with_the_script_on_windows():
         assert action in uses
 
 
+def _uploads():
+    return [s for s in JOB["steps"] if str(s.get("uses", "")).startswith("actions/upload-artifact@")]
+
+
 def test_both_installers_are_uploaded_for_three_days():
-    uploads = [s for s in JOB["steps"] if str(s.get("uses", "")).startswith("actions/upload-artifact@")]
-    assert len(uploads) == 2
-    for step in uploads:
-        assert step["with"]["retention-days"] == 3
+    installers = [s for s in _uploads() if s["with"]["name"] in ("conductloop-windows-nsis", "conductloop-windows-msi")]
+    assert len(installers) == 2
+    for step in installers:
         assert step["with"]["if-no-files-found"] == "error"
-    paths = " ".join(s["with"]["path"] for s in uploads)
+    paths = " ".join(s["with"]["path"] for s in installers)
     assert "bundle/nsis/*.exe" in paths and "bundle/msi/*.msi" in paths
+    for step in _uploads():
+        assert step["with"]["retention-days"] == 3
 
 
 def test_it_publishes_nothing_and_takes_no_secret():
@@ -76,6 +81,33 @@ def test_the_installed_app_smoke_test_cannot_turn_the_build_red():
     # The frozen-server check is not optional: it needs no desktop session.
     server = [s for s in JOB["steps"] if "frozen server" in s.get("name", "")]
     assert len(server) == 1 and not server[0].get("continue-on-error")
+
+
+def test_the_installed_app_is_checked_by_the_smoke_script_and_its_output_kept():
+    smoke = next(s for s in JOB["steps"] if "install and start" in s.get("name", ""))
+    assert "scripts\\windows-smoke.ps1 -Setup" in smoke["run"]
+    shots = [s for s in _uploads() if s["with"]["name"] == "conductloop-windows-smoke"]
+    assert len(shots) == 1 and shots[0].get("if") == "${{ !cancelled() }}"
+    assert shots[0]["with"]["path"] == "smoke/"
+
+
+SMOKE = ROOT / "scripts" / "windows-smoke.ps1"
+
+
+def test_the_smoke_script_only_reads_the_local_server():
+    code = "\n".join(line for line in SMOKE.read_text(encoding="utf-8").splitlines()
+                     if not line.lstrip().startswith("#"))
+    assert set(re.findall(r"https?://([^/\s\"'`]+)", code)) == {"127.0.0.1:7777"}
+    assert "-Method" not in code and "-Body" not in code  # GETs only
+    for word in ("gh ", "git ", "Invoke-Expression", "iex "):
+        assert word not in code, word
+
+
+def test_the_smoke_script_checks_what_matters_on_windows():
+    code = SMOKE.read_text(encoding="utf-8")
+    for needle in ('"windows"', "code_execution.available -eq $false", "CloseMainWindow",
+                   "Start-Sleep -Seconds 20", "uninstall", "ops.db", '"/S"'):
+        assert needle in code, needle
 
 
 def test_the_script_it_calls_exists():
