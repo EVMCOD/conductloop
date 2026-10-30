@@ -38,7 +38,7 @@
 <body>
   <div class="wrap">
     <h1>🛰️ Servers</h1>
-    <p class="sub">What this app can talk to, and what is going to answer. The product asks for capabilities — chat, image, video, speech, search — never for a company: a server on this Mac, a service in the cloud or any OpenAI-compatible endpoint will do.</p>
+    <p class="sub">What this app can talk to, and what is going to answer. The product asks for capabilities — chat, image, video, speech, search — never for a company: a server on this computer, a service in the cloud or any OpenAI-compatible endpoint will do.</p>
     <div style="display:flex;gap:14px;margin-bottom:18px;font-size:13px"><a href="/ai">Connect AI</a><a href="/media">Media</a><a href="/setup">Setup</a></div>
 
     <div style="display:flex;gap:10px;margin-bottom:18px">
@@ -92,7 +92,7 @@
           const left = el('div');
           const who = el('div', 'who');
           who.appendChild(document.createTextNode(active.label || active.name));
-          if(active.local) who.appendChild(el('span', 'tag local', 'on this Mac'));
+          if(active.local) who.appendChild(el('span', 'tag local', 'on this computer'));
           if(active.key && active.needs_key) who.appendChild(el('span', 'tag', 'key: ' + active.key));
           left.appendChild(who);
           const where = active.where || active.model || '';
