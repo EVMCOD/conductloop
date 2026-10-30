@@ -2622,7 +2622,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             today = time.strftime("%Y-%m-%d")
             prefs = db.memory_list()
             pref_str = "\n".join(f"- {p['key']}: {p['value']}" for p in prefs) or "(none yet)"
-            system = brain.SYSTEM_PROMPT_BASE.format(today=today, preferences=pref_str)
+            system = brain.SYSTEM_PROMPT_BASE.format(today=today, preferences=pref_str) + (
+                "\n\nThere are no numbered excerpts here: cite facts from tool results by "
+                "source, like [obsidian:filename.md] or [repo:name].")
             messages = [{"role": "user", "content": q}]
             tool_log = []
             def on_call(name, args, result):
