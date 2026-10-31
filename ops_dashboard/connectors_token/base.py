@@ -546,10 +546,19 @@ def view(connector_id: str) -> dict:
         stored = bool(linked_name)
     else:
         stored = True
+    # Count the documents, but only report them when they can be attributed
+    # to a sync. A sync writes the documents FIRST and the state file SECOND,
+    # so a view request landing between the two reads finds the documents in
+    # the table and no last_sync in the state file. Reporting both would make
+    # the card claim "2 documents in the vault" next to "never synced".
+    # With no sync on record there is nothing to attribute them to, so the
+    # honest answer is no documents.
+    last_sync = state.get("last_sync")
+    documents = doc_count(nc.id) if last_sync else 0
     return {
         "id": nc.id, "token_mode": nc.token_mode, "credential_stored": stored,
         "connections": connections_for(nc), "linked_connection": linked_name,
-        "config": config_of(nc), "last_sync": state.get("last_sync"), "documents": doc_count(nc.id),
+        "config": config_of(nc), "last_sync": last_sync, "documents": documents,
         "config_fields": [{"key": f.key, "kind": f.kind, "label_es": f.label_es, "label_en": f.label_en}
                           for f in nc.config_fields],
         "token_help": {"es": nc.token_help_es, "en": nc.token_help_en},
