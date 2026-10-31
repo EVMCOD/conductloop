@@ -55,7 +55,16 @@ class SkillError(ValueError):
 # ---------- directories & settings ----------
 
 def vault_dir() -> Path:
-    return Path(os.environ.get("OPS_SKILLS_DIR", str(db.vault_root() / "skills"))).expanduser()
+    """Where the user's own skills live.
+
+    ``OPS_SKILLS_DIR`` set to the empty string (or only whitespace) means
+    "unset", not "the current directory": ``Path("")`` is ``.`` and the app
+    would read and write skills inside whatever folder it was launched from.
+    """
+    raw = (os.environ.get("OPS_SKILLS_DIR") or "").strip()
+    if not raw:
+        return db.vault_root() / "skills"
+    return Path(raw).expanduser()
 
 
 def agents_dir() -> Path:

@@ -140,8 +140,13 @@ def test_gap_fill_applies_26_when_25_was_missing(dbmod):
         conn.execute("DELETE FROM schema_migrations WHERE version = 25")
         conn.commit()
         applied = [v for v, _ in migrations.run_migrations(conn)]
-        assert applied in ([25], [])  # 25 exists only once the live-evals change is in
+        # The intent is "the missing 25 is gap-filled", not a particular list:
+        # a hardcoded list breaks on every new migration, because migrations
+        # above the DB's user_version legitimately run in the same pass.
+        if any(v == 25 for v, *_ in migrations.MIGRATIONS):
+            assert 25 in applied, applied
         assert migrations.current_version(conn) >= 26
+        assert migrations.current_version(conn) == max(v for v, *_ in migrations.MIGRATIONS)
 
 
 def test_signup_and_me_work_without_entitlements(dbmod, monkeypatch):

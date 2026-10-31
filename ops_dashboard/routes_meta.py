@@ -9,8 +9,9 @@ import json
 import os
 import time
 
-from . import (  # noqa: F401  (importing a routes_* module registers its routes)
+from . import (  # noqa: F401  (importing this module registers the routes)
     db,
+    routes_agent_skills,  # per-agent skill packs for the Boardroom (L7)
     routes_backups,  # Setup → Backups: take one, list, restore
     routes_chat,  # the /chat page and its API
     routes_credentials,  # what the app holds the keys to, and where (2026-10-24)

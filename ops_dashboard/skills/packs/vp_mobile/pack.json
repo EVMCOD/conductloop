@@ -1,0 +1,7 @@
+{
+  "id": "vp_mobile",
+  "title": "VP Mobile — iOS, Android & App Stores",
+  "role": "vp_mobile",
+  "description": "Store submission readiness, safe release rollout and native-web-hybrid integration checks for iOS, Android and Capacitor builds.",
+  "skills": ["app-store-submission", "mobile-release-safety", "native-integration-review"]
+}

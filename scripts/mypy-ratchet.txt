@@ -49,6 +49,8 @@ ops_dashboard/skills/__init__.py
 ops_dashboard/skills/parse.py
 ops_dashboard/skills/validate.py
 ops_dashboard/skills/catalog.py
+ops_dashboard/skills/packs.py
+ops_dashboard/routes_agent_skills.py
 ops_dashboard/indexers/skills.py
 ops_dashboard/brain_analytics.py
 ops_dashboard/voice_autofile.py

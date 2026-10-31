@@ -1,0 +1,11 @@
+{
+  "id": "general_counsel",
+  "title": "General Counsel — Contracts, Privacy, Policies",
+  "role": "general_counsel",
+  "description": "Legal triage for a small company: a clause-by-clause contract pass with a fixed escalation list, a privacy reconciliation of real data collection against disclosure, and plain-language terms and policies.",
+  "skills": [
+    "contract-review",
+    "privacy-compliance-check",
+    "terms-and-policy-drafting"
+  ]
+}
