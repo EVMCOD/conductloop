@@ -393,7 +393,9 @@ def test_skipped_suites_and_no_live_suite(env):
     assert ei.value.code == "no_live_suites"
     keep, skipped = live.live_suites(runner.discover(runner.default_evals_dir()))
     assert {s.name for s in keep} == {"brain-rag", "web-injection"}
-    assert {s["suite"] for s in skipped} == {"search", "browser-agent"}
+    # The skills suite replays a cassette: it has no live model, so it is
+    # skipped by the live runner along with the offline ones.
+    assert {s["suite"] for s in skipped} == {"search", "browser-agent", "skills"}
 
 
 def test_repo_web_injection_case_runs_live_with_fake(env):

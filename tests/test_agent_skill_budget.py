@@ -61,7 +61,7 @@ def _bind(db, agent_id: int, key: str) -> None:
 
 def test_a_skill_that_does_not_fit_is_still_listed(env):
     """The agent must be able to see that a skill exists and did not fit."""
-    big = "\n".join(f"line {i}" for i in range(6000))
+    big = "\n".join(f"line {i}" for i in range(1900))
     for i in range(6):
         _install(env["vault"], f"skill-{i}", f"# Skill {i}\n\n{big}")
         _bind(env["db"], env["agent_id"], f"skill-{i}")
@@ -74,7 +74,7 @@ def test_a_skill_that_does_not_fit_is_still_listed(env):
 
 
 def test_the_block_stays_within_the_budget(env):
-    big = "\n".join(f"line {i}" for i in range(6000))
+    big = "\n".join(f"line {i}" for i in range(1900))
     for i in range(6):
         _install(env["vault"], f"skill-{i}", f"# Skill {i}\n\n{big}")
         _bind(env["db"], env["agent_id"], f"skill-{i}")
@@ -94,7 +94,7 @@ def test_every_skill_fits_when_the_set_is_small(env):
 
 def test_the_skills_that_did_not_fit_are_named(env):
     """Not just a count: the agent must know WHICH ones, by name."""
-    big = "\n".join(f"line {i}" for i in range(6000))
+    big = "\n".join(f"line {i}" for i in range(1900))
     for i in range(6):
         _install(env["vault"], f"skill-{i}", f"# Skill {i}\n\n{big}")
         _bind(env["db"], env["agent_id"], f"skill-{i}")
@@ -109,7 +109,7 @@ def test_the_skills_that_did_not_fit_are_named(env):
 def test_the_task_decides_which_skill_keeps_its_full_text(env):
     """With the budget tight, the skill that matches the task is the one that
     gets the full body."""
-    big = "\n".join(f"line {i}" for i in range(6000))
+    big = "\n".join(f"line {i}" for i in range(1900))
     _install(env["vault"], "pricing-review", f"# Pricing\n\n{big}")
     _install(env["vault"], "unrelated-thing", f"# Unrelated\n\n{big}")
     for k in ("pricing-review", "unrelated-thing"):
@@ -125,7 +125,7 @@ def test_the_task_decides_which_skill_keeps_its_full_text(env):
 def test_the_reported_set_matches_what_was_actually_dropped(env):
     """The report must be true: a skill named as left out is really absent
     from the block, and one present in the block is not named as left out."""
-    big = "\n".join(f"line {i}" for i in range(6000))
+    big = "\n".join(f"line {i}" for i in range(1900))
     for i in range(6):
         _install(env["vault"], f"skill-{i}", f"# Skill {i}\n\n{big}")
         _bind(env["db"], env["agent_id"], f"skill-{i}")

@@ -168,6 +168,7 @@
       <div class="channels-head">
         <strong>🧠 Skills</strong>
         <div>
+          <button class="ch-btn ghost sm" id="previewSkillsBtn" title="What this agent will read">👁 Preview</button>
           <select id="skillPackSelect" class="ch-btn ghost sm" title="Skill pack to install"></select>
           <button class="ch-btn ghost" id="installPackBtn">+ Install pack</button>
         </div>
@@ -175,6 +176,7 @@
       <div class="channels-list" id="skillsList">
         <div class="ch-empty">No skills installed for this CEO yet. Install a pack so it works to its own playbook.</div>
       </div>
+      <div class="channels-list" id="skillsPreview" hidden></div>
     </div>
 
     <div class="messages" id="messages"></div>
@@ -361,6 +363,24 @@
         </div>`).join('')
         + (byPack.length ? `<div class="ch-empty" style="padding-top:10px">Packs: ${byPack.map(p => escapeHtml(p.title)).join(', ')}</div>` : '');
     }
+    async function showSkillsPreview() {
+      const box = $('skillsPreview');
+      box.hidden = false;
+      box.innerHTML = '<div class="ch-empty">Loading…</div>';
+      try {
+        const r = await fetch(`/api/agents/${ceoId}/skills/preview`, { credentials: 'include' });
+        const d = await r.json();
+        if (!r.ok) { box.innerHTML = `<div class="ch-empty">${escapeHtml(d.message || 'Failed')}</div>`; return; }
+        const inc = (d.included || []).map(s => `<div class="ch-row"><div class="ch-meta"><div class="ch-name">${escapeHtml(s.name)}</div><div class="ch-sub">${escapeHtml(s.description || '')}</div></div></div>`).join('');
+        const om = (d.omitted || []).map(s => `<div class="ch-row"><div class="ch-meta"><div class="ch-name">${escapeHtml(s.name)}</div><div class="ch-sub">${escapeHtml(s.description || '')} — ${escapeHtml(s.reason === 'too_large' ? 'too large to read whole' : 'did not fit the prompt')}</div></div></div>`).join('');
+        box.innerHTML =
+          `<div class="ch-name">What this agent reads (${(d.included||[]).length} in full, ${(d.omitted||[]).length} listed only)</div>` +
+          (inc || '<div class="ch-empty">None in full.</div>') +
+          (om ? `<div class="ch-empty" style="padding-top:10px">Listed only:</div>${om}` : '');
+      } catch (e) {
+        box.innerHTML = '<div class="ch-empty">Failed to load the preview.</div>';
+      }
+    }
     async function skillAction(path, body) {
       const r = await fetch(`/api/agents/${ceoId}/skills/${path}`, {
         method: 'POST', credentials: 'include',
@@ -408,6 +428,10 @@
         const key = t.dataset.skill;
         const enabled = !!parseInt(t.dataset.en, 10);
         await skillAction('toggle', { skill: key, enabled });
+        return;
+      }
+      if (t.id === 'previewSkillsBtn') {
+        await showSkillsPreview();
         return;
       }
       if (t.id === 'installPackBtn') {

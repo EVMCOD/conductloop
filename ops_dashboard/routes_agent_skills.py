@@ -107,6 +107,36 @@ def agent_skills(handler: Any, agent_id: str) -> None:
     })
 
 
+@router.get("/api/agents/<agent_id>/skills/preview")
+@_local_only
+def agent_skills_preview(handler: Any, agent_id: str) -> None:
+    """What this agent will read for a given task.
+
+    The panel lists skill names; this answers the question that actually
+    matters when a pack has more skills than the prompt has room for: which
+    ones keep their full body, which are listed by name only, and what the
+    prompt block looks like.
+    """
+    mid = _agent_id(agent_id)
+    if mid is None:
+        _err(handler, 400, "bad_id", "agent id must be a positive integer")
+        return
+    task = ""
+    try:
+        from urllib.parse import parse_qs, urlparse
+        q = parse_qs(urlparse(handler.path).query)
+        task = (q.get("task") or [""])[0][:2000]
+    except Exception:
+        task = ""
+
+    try:
+        preview = packs.preview_skills_block(mid, task=task)
+    except Exception as e:
+        _err(handler, 500, "preview_failed", str(e)[:200])
+        return
+    _send_json(handler, 200, {"ok": True, "agent_id": mid, "task": task, **preview})
+
+
 @router.post("/api/agents/<agent_id>/skills/install")
 @_local_only
 def agent_skills_install(handler: Any, agent_id: str) -> None:

@@ -850,3 +850,32 @@ def _mig_27_agent_skills(conn: sqlite3.Connection) -> None:
 
 MIGRATIONS.append((27, "agent_skills: per-agent skill bindings for the Boardroom C-Suite (L7)",
                    _mig_27_agent_skills))
+
+
+# ── L7c: bind the role's pack to the agents that already exist (2026-11-01) ──
+# The auto-bind on creation only covers agents created from now on. The agents
+# already in the database were created before the packs existed, and the seed
+# skips them ("already exists by name"), so the feature would ship inert for
+# exactly the people who already use the product: fourteen CEOs on disk, zero
+# skills between them, and nothing that would ever change that.
+#
+# A migration is the right place: it runs once, it is idempotent, and it does
+# not depend on the user pressing anything. It obeys the same rules as the
+# creation path, so the two cannot disagree.
+def bind_role_packs_to_existing_agents() -> dict:
+    """Bind each existing agent its role's pack.
+
+    Exposed here because this is where a schema-shaped change lives; the
+    implementation sits with the packs, next to the rules it obeys.
+    """
+    from .skills import packs
+
+    return packs.bind_role_packs_to_existing_agents()
+
+
+def _mig_28_bind_role_packs(conn: sqlite3.Connection) -> None:
+    bind_role_packs_to_existing_agents()
+
+
+MIGRATIONS.append((28, "bind each existing agent its role's skill pack (L7c)",
+                   _mig_28_bind_role_packs))

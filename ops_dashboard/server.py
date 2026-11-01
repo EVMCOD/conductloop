@@ -5355,6 +5355,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 new_id = int(cur.lastrowid or 0)
         except Exception as e:
             self._send(500, _json({"ok": False, "error": str(e)}).encode(), "application/json"); return
+        # The new agent's role playbook (L7): a CFO added from this page
+        # arrives already knowing the finance procedures. The row has to be
+        # committed first — the binding checks the agent on its own connection.
+        try:
+            with db.db() as conn:
+                conn.commit()
+        except Exception:
+            pass
+        try:
+            from .skills import packs
+            packs.install_pack_for_role(role or "", agent_id=new_id)
+        except Exception:
+            pass
         # Get the full row
         with db.db() as conn:
             row = conn.execute("SELECT * FROM team_members WHERE id = ?", (new_id,)).fetchone()

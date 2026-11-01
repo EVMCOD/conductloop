@@ -249,6 +249,8 @@ def seed_starter_pack(conn: sqlite3.Connection, *, chairman_user_id: int, dry_ru
 
     now = conn.execute("SELECT strftime('%s','now')").fetchone()[0]
 
+    newly_created: list[tuple[str, int]] = []
+
     for agent in STARTER_PACK:
         # Avoid duplicates by name
         already = conn.execute(
@@ -280,7 +282,7 @@ def seed_starter_pack(conn: sqlite3.Connection, *, chairman_user_id: int, dry_ru
              capabilities_json, agent["model"], agent["title"],
              agent["level"], now, now),
         )
-        ceo_id = cur.lastrowid
+        ceo_id = int(cur.lastrowid or 0)
         # Mark as CEO (boardroom uses this flag)
         try:
             conn.execute(
@@ -303,9 +305,39 @@ def seed_starter_pack(conn: sqlite3.Connection, *, chairman_user_id: int, dry_ru
         )
 
         summary["created"].append({"name": agent["name"], "id": ceo_id})
+        newly_created.append((agent["role"], ceo_id))
+
+    # The agent's role playbook (L7): a CFO arrives knowing how this
+    # business does unit economics, without the founder installing twelve
+    # packs by hand. Only agents whose role has a pack get one, and only
+    # newly created ones: an agent that already existed was curated on
+    # purpose.
+    #
+    # The binding checks that the agent exists on its OWN connection, so the
+    # new rows have to be committed first — inside the caller's open
+    # transaction they are not visible to another connection yet.
+    try:
+        conn.commit()
+    except Exception:
+        pass
+    for role, agent_id in newly_created:
+        _bind_role_pack(role, agent_id)
 
     summary["action"] = "seeded" if not dry_run else "dry_run"
     return summary
+
+
+def _bind_role_pack(role: str, agent_id: int) -> None:
+    """Give a newly created agent the pack that matches its role.
+
+    Failures here must not stop the seeding: an agent without its playbook
+    is still an agent, and the founder can install the pack from the UI.
+    """
+    try:
+        from .skills import packs
+        packs.install_pack_for_role(role, agent_id=agent_id)
+    except Exception:
+        pass
 
 
 def is_boardroom_empty(conn: sqlite3.Connection) -> bool:

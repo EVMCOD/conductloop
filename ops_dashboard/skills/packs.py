@@ -200,6 +200,111 @@ def install_pack(pack_id: str, *, agent_id: int) -> dict[str, Any]:
             "installed": installed, "kept": kept, "skills": [s["name"] for s in pack["skills"]]}
 
 
+def pack_for_role(role: str) -> dict[str, Any] | None:
+    """The shipped pack whose role matches, or None.
+
+    The mapping is by role, so an agent whose role has no pack gets nothing:
+    guessing would install the wrong playbook.
+    """
+    role = (role or "").strip().lower()
+    if not role:
+        return None
+    for pack in discover_packs():
+        if str(pack.get("role", "")).strip().lower() == role:
+            return pack
+    return None
+
+
+def bind_role_packs_to_existing_agents() -> dict[str, Any]:
+    """Give the agents that already exist their role's pack.
+
+    The auto-bind on creation only covers agents created from now on. The
+    agents already in the database were created before the packs existed, and
+    the seed skips them ("already exists by name"), so the feature would ship
+    inert for exactly the people who already use the product.
+
+    This is the migration path. It obeys the same rules as the creation path,
+    so the two cannot disagree:
+
+    - Only an agent whose role has a pack gets one.
+    - An agent that already has skills bound is left alone: it was curated.
+    - A skill the user disabled stays disabled. The current ``enabled`` state
+      is read BEFORE the install (which re-enables everything) and written
+      back after.
+    - One agent failing does not stop the others.
+    """
+    summary: dict[str, Any] = {"bound": [], "skipped": [], "failed": []}
+    try:
+        from .. import db as _db
+    except Exception:
+        return summary
+
+    try:
+        with _db.db() as conn:
+            rows = conn.execute(
+                "SELECT id, role FROM team_members WHERE type = 'ai_agent'").fetchall()
+    except Exception:
+        return summary
+
+    for row in rows:
+        try:
+            agent_id = int(row["id"])
+            role = str(row["role"] or "").strip()
+        except (TypeError, IndexError, KeyError):
+            continue
+        if not role:
+            continue
+        try:
+            if pack_for_role(role) is None:
+                # A custom role gets no playbook: guessing would install the
+                # wrong procedure.
+                continue
+        except Exception:
+            summary["failed"].append(agent_id)
+            continue
+        # Curated agents are left alone.
+        try:
+            if all_bound_skills(agent_id):
+                summary["skipped"].append(agent_id)
+                continue
+        except Exception:
+            summary["failed"].append(agent_id)
+            continue
+        try:
+            install_pack_for_role(role, agent_id=agent_id)
+            summary["bound"].append(agent_id)
+        except Exception:
+            summary["failed"].append(agent_id)
+    return summary
+
+
+def install_pack_for_role(role: str, *, agent_id: int) -> dict[str, Any] | None:
+    """Give an agent the pack that matches its role, if there is one.
+
+    Returns the install result, or None when the role has no pack (not an
+    error: a custom role simply gets no playbook).
+
+    Never re-enables a skill the user disabled: a binding the user turned off
+    stays off. A binding that does not exist yet is created.
+    """
+    pack = pack_for_role(role)
+    if pack is None:
+        return None
+    # What the user had turned OFF, read BEFORE the install: install_pack
+    # re-enables every skill it finds, so the disabled ones have to be
+    # remembered first.
+    with db.db() as conn:
+        rows = conn.execute(
+            "SELECT skill_key, enabled FROM agent_skills WHERE agent_id = ?", (agent_id,)).fetchall()
+    was_disabled = {r["skill_key"] for r in rows if not r["enabled"]}
+
+    result = install_pack(pack["id"], agent_id=agent_id)
+
+    for key in was_disabled:
+        set_skill_enabled(agent_id, key, False)
+    return result
+
+
 def uninstall_pack(pack_id: str, *, agent_id: int) -> dict[str, Any]:
     """Unbind a pack's skills from an agent. The skill files stay in the vault:
     they may be the user's own, or bound to another agent."""
@@ -262,12 +367,17 @@ MAX_PROMPT_CHARS = 30_000
 MAX_SKILLS_PER_AGENT = 12
 
 
-def _skill_meta(skill_key: str) -> tuple[str, str] | None:
-    """(description, body) of one installed skill, or None when unusable.
+def _skill_meta(skill_key: str) -> tuple[str, str, bool] | None:
+    """(description, body, truncated) of one installed skill, or None.
 
     The file is re-read and re-validated on every use: the user may have
     edited it since it was installed, and an invalid file must never reach
     the model as an instruction block.
+
+    ``truncated`` says the body did not fit the per-skill cap. A body that
+    had to be cut is NOT handed to the model: half a procedure is worse than
+    none, because the agent cannot tell it is missing the rest. Such a skill
+    is only listed by name.
     """
     path = catalog.vault_dir() / skill_key / "SKILL.md"
     if not path.is_file():
@@ -284,10 +394,11 @@ def _skill_meta(skill_key: str) -> tuple[str, str] | None:
     if key != skill_key or has_errors(diags):
         return None
     body = parsed.body.strip()
-    if len(body) > MAX_SKILL_BODY_CHARS:
-        body = body[:MAX_SKILL_BODY_CHARS] + "\n[… truncated]"
+    truncated = len(body) > MAX_SKILL_BODY_CHARS
+    if truncated:
+        body = body[:MAX_SKILL_BODY_CHARS]
     desc = str((parsed.frontmatter or {}).get("description") or "").strip()
-    return desc, body
+    return desc, body, truncated
 
 
 def _relevance(task: str, description: str, key: str) -> int:
@@ -305,6 +416,51 @@ def _relevance(task: str, description: str, key: str) -> int:
     haystack = f"{description} {key}".lower()
     hits = sum(1 for w in words if w in haystack)
     return hits
+
+
+def preview_skills_block(agent_id: int | None, *, task: str = "") -> dict[str, Any]:
+    """What this agent will read for a task, broken down.
+
+    Returns the prompt block plus two lists: the skills that keep their full
+    body, and the ones that are only named (because they did not fit the
+    budget). The founder can then act on it: disable one, or read it by hand.
+    """
+    empty = {"prompt": "", "included": [], "omitted": [], "budget_chars": MAX_PROMPT_CHARS}
+    if not agent_id:
+        return empty
+    try:
+        keys = [s["key"] for s in bound_skills(agent_id)]
+    except Exception:
+        return empty
+    meta: dict[str, tuple[str, str, bool]] = {}
+    for key in keys[:MAX_SKILLS_PER_AGENT]:
+        m = _skill_meta(key)
+        if m:
+            meta[key] = m
+    if not meta:
+        return empty
+
+    ranked = sorted(meta.items(), key=lambda kv: (-_relevance(task, kv[1][0], kv[0]), kv[0]))
+    included: list[dict[str, Any]] = []
+    omitted: list[dict[str, Any]] = []
+    used = 0
+    for key, (desc, body, truncated) in ranked:
+        if truncated:
+            # Too big to be read whole: listed, never handed over in pieces.
+            omitted.append({"name": key, "description": desc, "reason": "too_large"})
+            continue
+        chunk = f'<skill_content name="{key}">\n{body}\n</skill_content>'
+        if used + len(chunk) > MAX_PROMPT_CHARS:
+            omitted.append({"name": key, "description": desc, "reason": "over_budget"})
+            continue
+        included.append({"name": key, "description": desc, "chars": len(chunk)})
+        used += len(chunk)
+    return {
+        "prompt": agent_skills_block(agent_id, task=task),
+        "included": included,
+        "omitted": omitted,
+        "budget_chars": MAX_PROMPT_CHARS,
+    }
 
 
 def agent_skills_block(agent_id: int | None, *, task: str = "") -> str:
@@ -335,7 +491,7 @@ def agent_skills_block(agent_id: int | None, *, task: str = "") -> str:
     if not keys:
         return ""
 
-    meta: dict[str, tuple[str, str]] = {}
+    meta: dict[str, tuple[str, str, bool]] = {}
     for key in keys[:MAX_SKILLS_PER_AGENT]:
         m = _skill_meta(key)
         if m:
@@ -347,7 +503,11 @@ def agent_skills_block(agent_id: int | None, *, task: str = "") -> str:
     ranked = sorted(meta.items(), key=lambda kv: (-_relevance(task, kv[1][0], kv[0]), kv[0]))
     included: list[tuple[str, str]] = []
     used = 0
-    for key, (_desc, body) in ranked:
+    for key, (_desc, body, truncated) in ranked:
+        if truncated:
+            # A body cut in half is worse than none: the agent cannot tell
+            # it is missing the rest. It stays in the discovery index.
+            continue
         chunk = f'<skill_content name="{key}">\n{body}\n</skill_content>'
         if used + len(chunk) > MAX_PROMPT_CHARS:
             continue

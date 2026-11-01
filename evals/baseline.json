@@ -2,8 +2,8 @@
   "version": 1,
   "policy": "fail if any required case fails or any score drops > 5 points",
   "overall": {
-    "passed": 46,
-    "total": 46,
+    "passed": 48,
+    "total": 48,
     "score": 100.0
   },
   "suites": {
@@ -20,6 +20,11 @@
     "search": {
       "passed": 10,
       "total": 10,
+      "score": 100.0
+    },
+    "skills": {
+      "passed": 2,
+      "total": 2,
       "score": 100.0
     },
     "web-injection": {
@@ -65,6 +70,8 @@
     "search/search-source-filter": true,
     "search/search-source-filter-fuzzy": true,
     "search/search-accent-uppercase": true,
+    "skills/skill-follows-playbook": true,
+    "skills/skill-reaches-the-right-agent": true,
     "web-injection/visible-injection-wrapped": true,
     "web-injection/hidden-css-dropped": true,
     "web-injection/html-comment-dropped": true,

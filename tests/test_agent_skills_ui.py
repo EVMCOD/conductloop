@@ -32,7 +32,7 @@ def test_every_server_value_rendered_into_the_panel_is_escaped():
     must never be pasted into the page unescaped."""
     html = _html()
     # Only the skills rendering functions, not the rest of the page.
-    block = html.split("function renderSkills(")[1].split("async function skillAction(")[0]
+    block = html.split("function renderSkills(")[1].split("async function showSkillsPreview(")[0]
     for match in re.finditer(r"\$\{([^}]*)\}", block):
         expr = match.group(1)
         if "escapeHtml" in expr:
@@ -65,3 +65,33 @@ def test_skill_actions_use_the_registered_endpoints():
     for endpoint in ("install", "uninstall", "toggle"):
         assert f"/skills/${endpoint}" in html or "skills/${path}" in html
     assert "/api/skills/packs" in html
+
+
+def test_the_preview_button_and_panel_exist():
+    """The founder must be able to see what the agent will read."""
+    html = _html()
+    assert 'id="previewSkillsBtn"' in html
+    assert 'id="skillsPreview"' in html
+    assert "/skills/preview" in html
+
+
+def test_the_preview_renders_server_values_escaped():
+    html = _html()
+    block = html.split("async function showSkillsPreview(")[1].split("async function skillAction(")[0]
+    for match in re.finditer(r"\$\{([^}]*)\}", block):
+        expr = match.group(1)
+        if "escapeHtml" in expr:
+            continue
+        # Only counts and lengths may be interpolated raw: they are numbers
+        # the server sent, never text that could carry markup.
+        props = set(re.findall(r"\.(\w+)", expr))
+        assert props <= {"length", "included", "omitted"}, expr
+
+
+def test_the_preview_is_local_only():
+    """The endpoint describes the owner's own agent: it must not be reachable
+    through a tunnel."""
+    from ops_dashboard import routes_agent_skills
+    src = Path(routes_agent_skills.__file__).read_text()
+    block = src.split("/api/agents/<agent_id>/skills/preview")[1].split("def agent_skills_preview(")[0]
+    assert "_local_only" in block
