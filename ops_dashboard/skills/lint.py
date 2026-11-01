@@ -99,6 +99,43 @@ def redact(text: str) -> str:
     return text
 
 
+# A fenced code block is documentation: its contents are read, never rendered.
+# The rules about markup that EXECUTES when rendered must not fire inside one,
+# or every skill that shows a React form or an HTML snippet gets rejected.
+# The rules about what the MODEL READS (injection, exfiltration, secrets) still
+# apply everywhere — a fenced block is still read by the model, so it can
+# still carry an instruction.
+_FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})", re.M)
+
+
+def strip_fenced_code(text: str) -> str:
+    """The text with the contents of fenced code blocks removed.
+
+    An unclosed fence is NOT trusted: its contents stay in the prose, because
+    a malformed file must not become a way to smuggle markup past the
+    rendering rules.
+    """
+    lines = text.splitlines(keepends=True)
+    # Pass 1: find the fenced regions. A fence that is never closed does not
+    # close a region.
+    inside: list[bool] = [False] * len(lines)
+    fence: str | None = None
+    start = 0
+    for i, line in enumerate(lines):
+        m = _FENCE_RE.match(line)
+        if fence is None:
+            if m:
+                fence = m.group(1)[0] * 3
+                start = i
+        elif m and line.strip().startswith(fence):
+            for j in range(start, i + 1):
+                inside[j] = True
+            fence = None
+    # An unclosed fence leaves its region unmarked: that content stays.
+    out = ["\n" if inside[i] else line for i, line in enumerate(lines)]
+    return "".join(out)
+
+
 def scan_text(text: str, where: str) -> list[Finding]:
     """Security checks shared by SKILL.md and reference files."""
     out: list[Finding] = []
@@ -112,7 +149,10 @@ def scan_text(text: str, where: str) -> list[Finding]:
         out.append(_b("email", f"{where}: contains an email address; use a placeholder"))
     if any(rx.search(text) for rx in _INJECTION_RES):
         out.append(_b("injection", f"{where}: looks like an instruction to override other instructions"))
-    if any(rx.search(text) for rx in _HIDDEN_RES):
+    # The rendering rules see only the prose: markup inside a fenced code
+    # block is documentation and never executes.
+    prose = strip_fenced_code(text)
+    if any(rx.search(prose) for rx in _HIDDEN_RES):
         out.append(_b("hidden_text", f"{where}: hidden text (HTML comment, invisible unicode or hidden style)"))
     if any(rx.search(text) for rx in _EXFIL_RES):
         out.append(_b("exfiltration", f"{where}: pipes a download into a shell or sends data to a URL"))
