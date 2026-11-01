@@ -50,6 +50,10 @@ def oauth_kwargs() -> dict[str, Any]:
         # the 1-hour access token expires.
         "extra_authorize_params": {"access_type": "offline", "prompt": "consent"},
         "docs_url": DOCS_URL,
+        # Google expires the refresh token of an app left in *Testing* mode
+        # after 7 days. The app cannot change that, so it says when the
+        # credential will stop working instead of failing at the first sync.
+        "credential_lifetime_days": 7,
     }
 
 

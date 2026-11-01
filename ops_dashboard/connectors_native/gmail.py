@@ -318,6 +318,43 @@ def send_message(client: Any, payload: dict[str, Any]) -> dict[str, Any]:
     return {"id": sent.get("id"), "thread_id": sent.get("threadId"), "to": f["to"], "cc": f["cc"]}
 
 
+# The input schemas of the actions, so the model knows what to pass.
+_SCHEMA_LIST_MESSAGES = {
+    "type": "object",
+    "properties": {
+        "q": {"type": "string", "description": "Gmail search query, e.g. 'from:ana subject:invoice'."},
+        "max": {"type": "integer", "description": "How many messages to return (1-50, default 20)."},
+    },
+    "required": ["q"],
+}
+_SCHEMA_GET_MESSAGE = {
+    "type": "object",
+    "properties": {
+        "id": {"type": "string", "description": "The message id, as returned by list_messages."},
+    },
+    "required": ["id"],
+}
+_SCHEMA_SYNC = {
+    "type": "object",
+    "properties": {
+        "days": {"type": "integer", "description": "How many days back to import (1-30, default 3)."},
+        "max": {"type": "integer", "description": "How many messages to import (1-200, default 50)."},
+        "q": {"type": "string", "description": "Extra Gmail search query to narrow the import."},
+    },
+    "required": [],
+}
+_SCHEMA_SEND = {
+    "type": "object",
+    "properties": {
+        "to": {"type": "string", "description": "Recipient address(es), comma separated."},
+        "cc": {"type": "string", "description": "Cc address(es), comma separated."},
+        "subject": {"type": "string", "description": "One line, up to 300 characters."},
+        "body": {"type": "string", "description": "Plain text body. No HTML, no attachments."},
+        "reply_to_id": {"type": "string", "description": "Message id this one replies to."},
+    },
+    "required": ["to", "body"],
+}
+
 SPEC = registry.register(registry.ConnectorSpec(
     id=ID, name="Gmail",
     allowed_hosts=(*_google.AUTH_HOSTS, "gmail.googleapis.com"),
@@ -325,11 +362,14 @@ SPEC = registry.register(registry.ConnectorSpec(
     write_scopes=WRITE_SCOPES,
     actions={
         "list_messages": registry.ActionSpec("list_messages", "read", "Search your mail (headers + snippet)",
-                                             list_messages),
-        "get_message": registry.ActionSpec("get_message", "read", "Read one message as text", get_message),
-        "sync": registry.ActionSpec("sync", "read", "Import recent mail into the vault", sync),
+                                             list_messages,
+                                             input_schema=_SCHEMA_LIST_MESSAGES),
+        "get_message": registry.ActionSpec("get_message", "read", "Read one message as text", get_message,
+                                            input_schema=_SCHEMA_GET_MESSAGE),
+        "sync": registry.ActionSpec("sync", "read", "Import recent mail into the vault", sync,
+                                     input_schema=_SCHEMA_SYNC),
         "send_message": registry.ActionSpec("send_message", "write", "Send a plain-text email",
-                                            send_message, _summary_send),
+                                            send_message, _summary_send, input_schema=_SCHEMA_SEND),
     },
     **_google.oauth_kwargs(),
 ))

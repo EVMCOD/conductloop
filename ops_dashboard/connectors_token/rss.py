@@ -204,7 +204,9 @@ CONNECTOR = base.register_connector(base.TokenConnector(
         # Placeholder: RSS never uses ConnectorClient; TokenClient only talks to
         # the feed hosts the user configured (hosts_from_config, public IPs only).
         allowed_hosts=("feeds.user-configured.invalid",),
-        actions={"sync": registry.ActionSpec("sync", "read", "Import feed entries into the vault", base.sync_action("rss"))}),
+        actions={"sync": registry.ActionSpec("sync", "read", "Import feed entries into the vault",
+                                             base.sync_action("rss"),
+                                             input_schema={"type": "object", "properties": {}, "required": []})}),
     token_mode="none", whoami=whoami, sync=sync, hosts_from_config=feed_hosts,
     config_fields=(base.ConfigField("feeds", "list", "Feeds (URL https, uno por línea)", "Feeds (https URL, one per line)",
                                     pattern=FEED_RE, max_items=MAX_FEEDS),),

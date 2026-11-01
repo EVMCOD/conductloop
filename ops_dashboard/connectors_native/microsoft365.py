@@ -420,8 +420,86 @@ def delete_event(client: Any, payload: dict[str, Any]) -> dict[str, Any]:
     return {"id": eid, "status": "deleted", "note": "desaparecerá de la agenda en la próxima sincronización"}
 
 
+# The input schemas of the actions, so the model knows what to pass.
+_SCHEMA_MS = {
+    "list_messages": {
+        "type": "object",
+        "properties": {
+            "max": {"type": "integer", "description": "How many messages to return (1-50, default 20)."},
+        },
+        "required": [],
+    },
+    "get_message": {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "The message id, as returned by list_messages."},
+        },
+        "required": ["id"],
+    },
+    "list_events": {
+        "type": "object",
+        "properties": {
+            "days_back": {"type": "integer", "description": "How many days back to include (0-90, default 0)."},
+            "days_ahead": {"type": "integer", "description": "How many days ahead to include (1-365, default 7)."},
+        },
+        "required": [],
+    },
+    "sync": {
+        "type": "object",
+        "properties": {
+            "mail": {"type": "boolean", "description": "Set to false to skip the inbox."},
+            "calendar": {"type": "boolean", "description": "Set to false to skip the calendar."},
+            "days": {"type": "integer", "description": "How many days back to import mail (1-30, default 3)."},
+            "max": {"type": "integer", "description": "How many messages to import."},
+        },
+        "required": [],
+    },
+    "send_mail": {
+        "type": "object",
+        "properties": {
+            "to": {"type": "string", "description": "Recipient address(es), comma separated."},
+            "cc": {"type": "string", "description": "Cc address(es), comma separated."},
+            "subject": {"type": "string", "description": "One line, up to 300 characters."},
+            "body": {"type": "string", "description": "Plain text body. No HTML, no attachments."},
+        },
+        "required": ["to", "body"],
+    },
+    "create_event": {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "Event title (up to 300 characters)."},
+            "start": {"type": "string", "description": "Start time, e.g. '2026-11-03 10:00'."},
+            "end": {"type": "string", "description": "End time, e.g. '2026-11-03 11:00'."},
+            "description": {"type": "string", "description": "Event description."},
+            "location": {"type": "string", "description": "Where the event happens."},
+        },
+        "required": ["title", "start", "end"],
+    },
+    "update_event": {
+        "type": "object",
+        "properties": {
+            "event_id": {"type": "string", "description": "The event id to change."},
+            "title": {"type": "string", "description": "New title (up to 300 characters)."},
+            "start": {"type": "string", "description": "New start time."},
+            "end": {"type": "string", "description": "New end time."},
+            "description": {"type": "string", "description": "New description."},
+            "location": {"type": "string", "description": "New location."},
+        },
+        "required": ["event_id"],
+    },
+    "delete_event": {
+        "type": "object",
+        "properties": {
+            "event_id": {"type": "string", "description": "The event id to delete."},
+        },
+        "required": ["event_id"],
+    },
+}
+
 SPEC = registry.register(registry.ConnectorSpec(
     id=ID, name="Microsoft 365 (Outlook)", auth="oauth_pkce",
+    # Microsoft expires a PKCE refresh token after 30 days of inactivity.
+    credential_lifetime_days=30,
     # A personal token does not expire on Microsoft's schedule, so the user
     # can connect once instead of every 30 days.
     token_auth=True,
@@ -432,16 +510,24 @@ SPEC = registry.register(registry.ConnectorSpec(
     docs_url="https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow",
     redirect_host="localhost",
     actions={
-        "list_messages": registry.ActionSpec("list_messages", "read", "List Inbox messages", list_messages),
-        "get_message": registry.ActionSpec("get_message", "read", "Read one message as text", get_message),
-        "list_events": registry.ActionSpec("list_events", "read", "List calendar events", list_events),
-        "sync": registry.ActionSpec("sync", "read", "Import Inbox mail and calendar into the vault and agenda", sync),
-        "send_mail": registry.ActionSpec("send_mail", "write", "Send a plain-text email", send_mail, _summary_mail),
+        "list_messages": registry.ActionSpec("list_messages", "read", "List Inbox messages", list_messages,
+                                              input_schema=_SCHEMA_MS["list_messages"]),
+        "get_message": registry.ActionSpec("get_message", "read", "Read one message as text", get_message,
+                                            input_schema=_SCHEMA_MS["get_message"]),
+        "list_events": registry.ActionSpec("list_events", "read", "List calendar events", list_events,
+                                            input_schema=_SCHEMA_MS["list_events"]),
+        "sync": registry.ActionSpec("sync", "read", "Import Inbox mail and calendar into the vault and agenda", sync,
+                                    input_schema=_SCHEMA_MS["sync"]),
+        "send_mail": registry.ActionSpec("send_mail", "write", "Send a plain-text email", send_mail, _summary_mail,
+                                         input_schema=_SCHEMA_MS["send_mail"]),
         "create_event": registry.ActionSpec("create_event", "write", "Create an event (no invitations)",
-                                            create_event, _summary_create),
+                                            create_event, _summary_create,
+                                            input_schema=_SCHEMA_MS["create_event"]),
         "update_event": registry.ActionSpec("update_event", "write", "Change an event without attendees",
-                                            update_event, _summary_update),
+                                            update_event, _summary_update,
+                                            input_schema=_SCHEMA_MS["update_event"]),
         "delete_event": registry.ActionSpec("delete_event", "write", "Delete an event without attendees",
-                                            delete_event, _summary_delete),
+                                            delete_event, _summary_delete,
+                                            input_schema=_SCHEMA_MS["delete_event"]),
     },
 ))

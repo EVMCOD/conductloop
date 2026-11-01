@@ -315,21 +315,60 @@ def delete_event(client: Any, payload: dict[str, Any]) -> dict[str, Any]:
             "note": "desaparecerá de la agenda y el vault en la próxima sincronización"}
 
 
+_SCHEMA_CAL = {
+    "list_calendars": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+    "list_events": {
+        "type": "object",
+        "properties": {"calendar_id": {"type": "string", "description": "Which calendar to read. 'primary' (default) or a calendar id."}, "days_back": {"type": "integer", "description": "How many days back to include (0-90, default 0)."}, "days_ahead": {"type": "integer", "description": "How many days ahead to include (1-365, default 7)."}},
+        "required": [],
+    },
+    "sync": {
+        "type": "object",
+        "properties": {"days_back": {"type": "integer", "description": "How many days back to import (0-90, default 7)."}, "days_ahead": {"type": "integer", "description": "How many days ahead to import (1-365, default 30)."}, "calendar_ids": {"type": "string", "description": "Which calendars to import. Empty means all of them."}},
+        "required": [],
+    },
+    "create_event": {
+        "type": "object",
+        "properties": {"title": {"type": "string", "description": "Event title (up to 300 characters)."}, "start": {"type": "string", "description": "Start time, e.g. '2026-11-03 10:00'."}, "end": {"type": "string", "description": "End time, e.g. '2026-11-03 11:00'."}, "description": {"type": "string", "description": "Event description."}, "location": {"type": "string", "description": "Where the event happens."}, "calendar_id": {"type": "string", "description": "Which calendar to create it in (default 'primary')."}},
+        "required": ["title", "start", "end"],
+    },
+    "update_event": {
+        "type": "object",
+        "properties": {"event_id": {"type": "string", "description": "The event id to change."}, "title": {"type": "string", "description": "New title (up to 300 characters)."}, "start": {"type": "string", "description": "New start time."}, "end": {"type": "string", "description": "New end time."}, "description": {"type": "string", "description": "New description."}, "location": {"type": "string", "description": "New location."}},
+        "required": ["event_id"],
+    },
+    "delete_event": {
+        "type": "object",
+        "properties": {"event_id": {"type": "string", "description": "The event id to delete."}},
+        "required": ["event_id"],
+    },
+}
+
 SPEC = registry.register(registry.ConnectorSpec(
     id=ID, name="Google Calendar",
     allowed_hosts=(*_google.AUTH_HOSTS, "www.googleapis.com"),
     read_scopes=READ_SCOPES,
     write_scopes=WRITE_SCOPES,
     actions={
-        "list_calendars": registry.ActionSpec("list_calendars", "read", "List your calendars", list_calendars),
-        "list_events": registry.ActionSpec("list_events", "read", "List events of a calendar", list_events),
-        "sync": registry.ActionSpec("sync", "read", "Import events into the agenda and the vault", sync),
+        "list_calendars": registry.ActionSpec("list_calendars", "read", "List your calendars", list_calendars,
+                                               input_schema=_SCHEMA_CAL["list_calendars"]),
+        "list_events": registry.ActionSpec("list_events", "read", "List events of a calendar", list_events,
+                                            input_schema=_SCHEMA_CAL["list_events"]),
+        "sync": registry.ActionSpec("sync", "read", "Import events into the agenda and the vault", sync,
+                                    input_schema=_SCHEMA_CAL["sync"]),
         "create_event": registry.ActionSpec("create_event", "write", "Create an event (no invitations)",
-                                            create_event, _summary_create),
+                                            create_event, _summary_create,
+                                            input_schema=_SCHEMA_CAL["create_event"]),
         "update_event": registry.ActionSpec("update_event", "write", "Change an event (attendees not notified)",
-                                            update_event, _summary_update),
+                                            update_event, _summary_update,
+                                            input_schema=_SCHEMA_CAL["update_event"]),
         "delete_event": registry.ActionSpec("delete_event", "write", "Delete an event (attendees not notified)",
-                                            delete_event, _summary_delete),
+                                            delete_event, _summary_delete,
+                                            input_schema=_SCHEMA_CAL["delete_event"]),
     },
     **_google.oauth_kwargs(),
 ))
