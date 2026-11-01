@@ -109,7 +109,11 @@ def env(tmp_path, monkeypatch):
                 "search_issues", "read", "Search issues",
                 token_base.token_action("faketok", _read),
                 input_schema={"type": "object",
-                              "properties": {"query": {"type": "string"}},
+                              "properties": {
+                                  "query": {"type": "string",
+                                            "description": "the text to look for"},
+                                  "project": {"type": "string",
+                                              "description": "the project NAME, not its id"}},
                               "required": ["query"]}),
             "comment_issue": registry.ActionSpec(
                 "comment_issue", "write", "Comment on an issue",
@@ -184,6 +188,23 @@ def test_the_agent_is_told_which_apps_it_can_reach(env):
     system = prov.systems[0]
     assert "connector_faketok_search_issues" in system, system[-800:]
     assert "query" in system, "the tool's arguments are not in the prompt"
+
+
+def test_the_prompt_says_the_arguments_in_full(env):
+    """The prompt is the only place the schema exists.
+
+    This loop does not pass native tool definitions, so a model that cannot
+    see that "project" is a project NAME (and not its id) will make calls
+    that fail — and a write that fails after the user confirmed it is the
+    worst kind of failure.
+    """
+    prov = Scripted([J(final="done")])
+    _run(env, prov)
+    system = prov.systems[0]
+    assert '"query": string, required' in system, system[-900:]
+    assert "the text to look for" in system, system[-900:]
+    assert '"project": string, optional' in system, system[-900:]
+    assert "the project NAME, not its id" in system, system[-900:]
 
 
 def test_the_agent_can_read_from_a_connected_app(env):
