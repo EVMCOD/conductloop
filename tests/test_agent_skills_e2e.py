@@ -46,7 +46,10 @@ def test_installing_a_shipped_pack_for_a_seeded_ceo_lands_in_its_prompt(env):
     ids = _seeded_agents()
     cto_id = ids["cto"]
     res = packs.install_pack("cto", agent_id=cto_id)
-    assert res["installed"], res
+    # The pack may already be there (the seeded agent got it automatically),
+    # in which case the copy is kept rather than installed. Either way the
+    # skills have to be bound.
+    assert res["installed"] or res["kept"], res
 
     # The skill really is in the vault, in its own folder, with a SKILL.md.
     keys = [s["key"] for s in packs.bound_skills(cto_id)]
@@ -63,14 +66,26 @@ def test_installing_a_shipped_pack_for_a_seeded_ceo_lands_in_its_prompt(env):
 
 
 def test_the_ceo_pack_does_not_leak_into_another_seeded_ceo(env):
+    """The CTO's playbook must not reach the CFO.
+
+    The CFO now has its OWN pack (the seeded agents get their role's pack
+    automatically), so the check is not "the CFO has no skills" but "the CFO
+    does not have the CTO's skills".
+    """
     ids = _seeded_agents()
     cto_id, cfo_id = ids["cto"], ids["cfo"]
     packs.install_pack("cto", agent_id=cto_id)
 
+    cto_keys = {s["key"] for s in packs.bound_skills(cto_id)}
+    cfo_keys = {s["key"] for s in packs.bound_skills(cfo_id)}
+    assert cto_keys and cfo_keys
+    assert not (cto_keys & cfo_keys), "the two agents share a skill"
+
     cfo_agent = {"key": f"m:{cfo_id}", "id": cfo_id, "name": "CFO", "role": "cfo",
                  "title": "CFO", "skills": "", "description": "", "lead": False}
-    system = team_chat.agent_system(cfo_agent, "(no matches)", "")
-    assert "YOUR INSTALLED SKILLS" not in system
+    system = team_chat.agent_system(cfo_agent, "(no matches)", "", task="review this code")
+    for key in cto_keys:
+        assert key not in system, f"the CTO's skill {key} reached the CFO"
 
 
 def test_two_agents_can_hold_different_packs_at_the_same_time(env):
