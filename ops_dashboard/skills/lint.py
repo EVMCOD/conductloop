@@ -46,12 +46,24 @@ _INJECTION_RES = [
     re.compile(r"(?i)\b(do not|don't|never|no)\b.{0,20}\b(tell|inform|show|mention|avises|digas|muestres)\b"
                r".{0,20}\b(the )?(user|usuario)\b"),
 ]
-_HIDDEN_RES = [
+# Invisible characters (zero-width, bidirectional overrides). These are never
+# a legitimate part of a skill, anywhere: they exist to hide text, and a
+# zero-width character inside a word makes an injection phrase fail a naive
+# regex. A fenced code block is still read by the model, so this rule applies
+# to the whole text, fenced content included.
+_HIDDEN_UNICODE_RES = [
     re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\U000e0000-\U000e007f]"),
+]
+# Markup that executes when the body is RENDERED as HTML. Inside a fenced
+# code block the same text is documentation: it is read, never rendered, so
+# there the rule does not apply. Without that distinction every skill that
+# shows a React form or an HTML snippet gets rejected.
+_HIDDEN_MARKUP_RES = [
     re.compile(r"<!--"),
     re.compile(r"(?i)<\s*(script|iframe|object|embed)\b|<[a-z][^>]*\son[a-z]+\s*="),
     re.compile(r"(?i)style\s*=\s*[\"'][^\"']*(display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0)"),
 ]
+_HIDDEN_RES = _HIDDEN_UNICODE_RES + _HIDDEN_MARKUP_RES
 _EXFIL_RES = [
     re.compile(r"(?i)\b(curl|wget|iwr|invoke-webrequest)\b[^\n|]*\|\s*(sudo\s+)?(ba|z|fi|k)?sh\b"),
     re.compile(r"(?i)\b(curl|wget)\b[^\n]*\s(-d|--data[a-z-]*|-F|--form|-T|--upload-file|--post-(data|file))\b"),
@@ -149,10 +161,15 @@ def scan_text(text: str, where: str) -> list[Finding]:
         out.append(_b("email", f"{where}: contains an email address; use a placeholder"))
     if any(rx.search(text) for rx in _INJECTION_RES):
         out.append(_b("injection", f"{where}: looks like an instruction to override other instructions"))
-    # The rendering rules see only the prose: markup inside a fenced code
-    # block is documentation and never executes.
+    # Invisible characters: checked over the WHOLE text. A fenced block is
+    # still read by the model, and a hidden character there is exactly as
+    # dangerous — it makes a phrase fail a naive regex.
+    if any(rx.search(text) for rx in _HIDDEN_UNICODE_RES):
+        out.append(_b("hidden_text", f"{where}: hidden text (HTML comment, invisible unicode or hidden style)"))
+    # Markup that executes when rendered: checked over the PROSE only. Inside
+    # a fenced code block the same text is documentation and never renders.
     prose = strip_fenced_code(text)
-    if any(rx.search(prose) for rx in _HIDDEN_RES):
+    if any(rx.search(prose) for rx in _HIDDEN_MARKUP_RES):
         out.append(_b("hidden_text", f"{where}: hidden text (HTML comment, invisible unicode or hidden style)"))
     if any(rx.search(text) for rx in _EXFIL_RES):
         out.append(_b("exfiltration", f"{where}: pipes a download into a shell or sends data to a URL"))
