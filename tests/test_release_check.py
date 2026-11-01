@@ -211,6 +211,7 @@ def test_the_release_script_updates_the_cargo_lock():
     "desktop/src-tauri/Cargo.toml",
     "desktop/src-tauri/tauri.conf.json",
     "desktop/src-tauri/Cargo.lock",
+    "desktop/package.json",
 ])
 def test_the_release_script_bumps_every_version(rel):
     """One command, no version left behind.

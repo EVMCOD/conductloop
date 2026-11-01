@@ -82,11 +82,13 @@ sed -i '' '/^name = "conductloop-desktop"$/,/^$/ s/^version = ".*"$/version = "'
 REPO_ROOT="$(cd "$TAURI_DIR/../.." && pwd)"
 sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" "$REPO_ROOT/pyproject.toml"
 sed -i '' "s/^__version__ = \".*\"/__version__ = \"$VERSION\"/" "$REPO_ROOT/ops_dashboard/__init__.py"
+sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" "$REPO_ROOT/desktop/package.json"
 grep -E "^version" Cargo.toml | head -1
 grep -E "\"version\"" tauri.conf.json | head -1
 grep -A 1 'name = "conductloop-desktop"' Cargo.lock | grep version | head -1
 grep -E "^version" "$REPO_ROOT/pyproject.toml" | head -1
 grep -E "^__version__" "$REPO_ROOT/ops_dashboard/__init__.py" | head -1
+grep -E "\"version\"" "$REPO_ROOT/desktop/package.json" | head -1
 echo ""
 
 # ── 2. Build sidecar ─────────────────────────────────────────────────────────
