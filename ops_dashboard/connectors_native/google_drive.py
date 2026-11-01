@@ -207,14 +207,44 @@ def sync(client: Any, payload: dict[str, Any]) -> dict[str, Any]:
     return stats
 
 
+# The input schemas of the actions, so the model knows what to pass.
+_SCHEMA_DRIVE = {
+    "list_files": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Only files whose name contains this text."},
+            "max": {"type": "integer", "description": "How many files to return (1-100, default 20)."},
+        },
+        "required": [],
+    },
+    "get_file": {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "The file id, as returned by list_files."},
+        },
+        "required": ["id"],
+    },
+    "sync": {
+        "type": "object",
+        "properties": {
+            "days": {"type": "integer", "description": "How many days back to import (1-365, default 30)."},
+            "max": {"type": "integer", "description": "How many files to import (1-500, default 50)."},
+        },
+        "required": [],
+    },
+}
+
 SPEC = registry.register(registry.ConnectorSpec(
     id=ID, name="Google Drive",
     allowed_hosts=(*_google.AUTH_HOSTS, "www.googleapis.com"),
     read_scopes=READ_SCOPES,
     actions={
-        "list_files": registry.ActionSpec("list_files", "read", "List your Drive files (metadata only)", list_files),
-        "get_file": registry.ActionSpec("get_file", "read", "Read one Drive file as text", get_file),
-        "sync": registry.ActionSpec("sync", "read", "Import recently modified files into the vault", sync),
+        "list_files": registry.ActionSpec("list_files", "read", "List your Drive files (metadata only)", list_files,
+                                          input_schema=_SCHEMA_DRIVE["list_files"]),
+        "get_file": registry.ActionSpec("get_file", "read", "Read one Drive file as text", get_file,
+                                        input_schema=_SCHEMA_DRIVE["get_file"]),
+        "sync": registry.ActionSpec("sync", "read", "Import recently modified files into the vault", sync,
+                                    input_schema=_SCHEMA_DRIVE["sync"]),
     },
     **_google.oauth_kwargs(),
 ))

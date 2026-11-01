@@ -38,6 +38,10 @@ class ActionSpec:
     description: str
     handler: Callable[..., dict[str, Any]]      # handler(client, payload) -> dict
     summarize: Callable[[dict[str, Any]], str] | None = None   # human text for the confirm card
+    # The action's arguments, as a JSON schema. When the action is offered to
+    # the model as a tool, this is what tells it what to pass. An action
+    # without a schema takes no arguments.
+    input_schema: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -63,6 +67,13 @@ class ConnectorSpec:
     # connects once, in the history of the program, and it lasts until they
     # revoke it. A connector that does not set this must refuse a token.
     token_auth: bool = False
+    # How long this connector's credential lasts, in days, when the provider
+    # does not say (Slack and Microsoft with PKCE: 30 days of inactivity;
+    # Google in *Testing* mode: 7). 0 means "no known expiry": a personal
+    # token lasts until the user revokes it, which is the whole point of
+    # offering it. The app cannot change the provider's schedule, but it can
+    # say when the credential will stop working instead of failing later.
+    credential_lifetime_days: int = 0
     # Loopback redirect: "" ⇒ 127.0.0.1; "localhost" for providers that only
     # document localhost (Slack desktop redirects, Microsoft Entra). The
     # receiver always binds 127.0.0.1. ``redirect_port`` 0 ⇒ ephemeral; a fixed
@@ -86,6 +97,7 @@ class ConnectorSpec:
         return {
             "id": self.id, "name": self.name, "auth": self.auth,
             "token_auth": self.token_auth,
+            "credential_lifetime_days": self.credential_lifetime_days,
             "read_scopes": list(self.read_scopes), "write_scopes": list(self.write_scopes),
             "byok_required": not self.default_client_id,
             "client_secret_required": self.client_secret_required,

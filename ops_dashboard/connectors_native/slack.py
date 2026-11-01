@@ -257,8 +257,46 @@ def post_message(client: Any, payload: dict[str, Any]) -> dict[str, Any]:
     return {"channel": res.get("channel"), "ts": res.get("ts")}
 
 
+# The input schemas of the actions, so the model knows what to pass.
+_SCHEMA_SLACK = {
+    "list_channels": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+    "read_channel": {
+        "type": "object",
+        "properties": {
+            "channel": {"type": "string", "description": "The channel id or name, e.g. 'general' or 'C0123ABCD'."},
+            "days": {"type": "integer", "description": "How many days back to read (1-30, default 1)."},
+            "max": {"type": "integer", "description": "How many messages to return (1-200, default 50)."},
+        },
+        "required": ["channel"],
+    },
+    "sync": {
+        "type": "object",
+        "properties": {
+            "days": {"type": "integer", "description": "How many days back to import (1-30, default 3)."},
+            "channel_ids": {"type": "array", "items": {"type": "string"},
+                            "description": "Which channels to import, by id or name. Empty means all of them."},
+        },
+        "required": [],
+    },
+    "post_message": {
+        "type": "object",
+        "properties": {
+            "channel": {"type": "string", "description": "The channel id or name to post to."},
+            "text": {"type": "string", "description": "The message text. Plain text only."},
+            "thread_ts": {"type": "string", "description": "Timestamp of the message to reply to, for a thread."},
+        },
+        "required": ["channel", "text"],
+    },
+}
+
 SPEC = registry.register(registry.ConnectorSpec(
     id=ID, name="Slack", auth="oauth_pkce",
+    # Slack expires a PKCE refresh token after 30 days of inactivity.
+    credential_lifetime_days=30,
     # A personal token (xoxb-/xoxp-) does not expire on Slack's schedule,
     # so the user can connect once instead of every 30 days.
     token_auth=True,
@@ -274,11 +312,14 @@ SPEC = registry.register(registry.ConnectorSpec(
     redirect_host="localhost",
     redirect_port=PORT,
     actions={
-        "list_channels": registry.ActionSpec("list_channels", "read", "List public channels", list_channels),
+        "list_channels": registry.ActionSpec("list_channels", "read", "List public channels", list_channels,
+                                              input_schema=_SCHEMA_SLACK["list_channels"]),
         "read_channel": registry.ActionSpec("read_channel", "read", "Read recent messages of a channel",
-                                            read_channel),
-        "sync": registry.ActionSpec("sync", "read", "Import your channels' recent messages into the vault", sync),
+                                            read_channel, input_schema=_SCHEMA_SLACK["read_channel"]),
+        "sync": registry.ActionSpec("sync", "read", "Import your channels' recent messages into the vault", sync,
+                                    input_schema=_SCHEMA_SLACK["sync"]),
         "post_message": registry.ActionSpec("post_message", "write", "Post a message as you",
-                                            post_message, _summary_post),
+                                            post_message, _summary_post,
+                                            input_schema=_SCHEMA_SLACK["post_message"]),
     },
 ))
