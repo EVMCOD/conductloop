@@ -2,6 +2,59 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.5 — 2026-11-01 — Agents with their own playbooks, and connectors the agent can use
+
+On the Mac it installs from the app ("Check for Updates…", or the quiet check
+a little after start-up). What changes: the Boardroom's C-Suite now works to
+real playbooks instead of a free-text list of skills, the agent can use the
+connectors you have connected, and a connector can be connected once with a
+personal token instead of a consent that expires.
+
+- **The Boardroom's agents have real playbooks.** The C-Suite could list
+  skills in a text field, but there was nothing to install: an agent's
+  "skills" were words a human had pasted into a prompt. There is now a
+  catalog of role playbooks (36 of them, one pack per role), and each agent
+  can have any of them installed. A CFO's pricing playbook is not the CTO's
+  code-review playbook: they are separate documents, installed separately,
+  and an agent only ever reads its own.
+- **A new agent arrives with its role's playbook already on it.** You do not
+  have to install a pack per agent by hand. An agent created for a role that
+  has a pack gets it. A role with no pack gets nothing: guessing would
+  install the wrong procedure.
+- **The agents you already had get theirs too.** They were created before the
+  playbooks existed, so a one-off step at start-up gives each of them the
+  pack of its role.
+- **You can see what an agent will read.** The panel shows which playbooks
+  reach it, which ones are only listed by name, and why: a playbook too long
+  to read whole is listed rather than cut in half, because half a procedure
+  is worse than none.
+- **The agent can use the connectors you connected.** Until now a connector
+  was something you set up and the agent could not touch: the actions existed
+  and were audited, but the model was never offered them. Now a connected
+  connector's actions are tools of the agent. Only the connectors you have
+  connected are offered, and only the ones you connected with write
+  permission can write.
+- **A write is never a write on its own.** When the agent wants to post a
+  comment or send a mail, the action waits for you: it appears in the
+  Conectores page with what it is about to do, and runs only when you confirm
+  it. The agent is told not to claim it was done.
+- **What a connector returns is data, not instructions.** An issue can carry
+  text that tries to steer the agent. Everything a connector returns is
+  marked as data before the agent reads it.
+- **Connect a connector once, with a personal token.** The OAuth consent has
+  a shelf life the provider decides: 30 days of inactivity for Slack and
+  Microsoft, 7 days for an app in testing, and a Gmail consent stops working
+  when you change your Google password. A personal token lasts until you
+  revoke it. Slack and Microsoft now offer "Use a personal token" next to the
+  normal consent, and the token is checked with the provider before it is
+  saved and kept in the system keychain, never in a database column.
+- **The card says when a connection will lapse.** Instead of finding out the
+  day the first sync fails, the connector card says how long you have, and a
+  personal token says plainly that it does not expire.
+- **More playbooks, from other projects.** 13 role playbooks from the
+  TerminalSkills collection (Apache-2.0) join the ones written here, each
+  with its origin and licence recorded in the file.
+
 ## 1.2.4 — 2026-10-30 — A dark theme that works, better answers without a key, Linux and Windows betas
 
 On the Mac it installs from the app ("Check for Updates…", or the quiet check
