@@ -87,5 +87,3 @@ ops_dashboard/redact.py
 ops_dashboard/app_token_guard.py
 ops_dashboard/seed_agents.py
 ops_dashboard/connector_tools.py
-ops_dashboard/connector_registry.py
-ops_dashboard/connector_oauth.py
