@@ -215,6 +215,69 @@ def pack_for_role(role: str) -> dict[str, Any] | None:
     return None
 
 
+def bind_role_packs_to_existing_agents() -> dict[str, Any]:
+    """Give the agents that already exist their role's pack.
+
+    The auto-bind on creation only covers agents created from now on. The
+    agents already in the database were created before the packs existed, and
+    the seed skips them ("already exists by name"), so the feature would ship
+    inert for exactly the people who already use the product.
+
+    This is the migration path. It obeys the same rules as the creation path,
+    so the two cannot disagree:
+
+    - Only an agent whose role has a pack gets one.
+    - An agent that already has skills bound is left alone: it was curated.
+    - A skill the user disabled stays disabled. The current ``enabled`` state
+      is read BEFORE the install (which re-enables everything) and written
+      back after.
+    - One agent failing does not stop the others.
+    """
+    summary: dict[str, Any] = {"bound": [], "skipped": [], "failed": []}
+    try:
+        from .. import db as _db
+    except Exception:
+        return summary
+
+    try:
+        with _db.db() as conn:
+            rows = conn.execute(
+                "SELECT id, role FROM team_members WHERE type = 'ai_agent'").fetchall()
+    except Exception:
+        return summary
+
+    for row in rows:
+        try:
+            agent_id = int(row["id"])
+            role = str(row["role"] or "").strip()
+        except (TypeError, IndexError, KeyError):
+            continue
+        if not role:
+            continue
+        try:
+            if pack_for_role(role) is None:
+                # A custom role gets no playbook: guessing would install the
+                # wrong procedure.
+                continue
+        except Exception:
+            summary["failed"].append(agent_id)
+            continue
+        # Curated agents are left alone.
+        try:
+            if all_bound_skills(agent_id):
+                summary["skipped"].append(agent_id)
+                continue
+        except Exception:
+            summary["failed"].append(agent_id)
+            continue
+        try:
+            install_pack_for_role(role, agent_id=agent_id)
+            summary["bound"].append(agent_id)
+        except Exception:
+            summary["failed"].append(agent_id)
+    return summary
+
+
 def install_pack_for_role(role: str, *, agent_id: int) -> dict[str, Any] | None:
     """Give an agent the pack that matches its role, if there is one.
 
