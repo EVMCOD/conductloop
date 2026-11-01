@@ -2,6 +2,38 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.6 — 2026-11-01 — The agents can use the apps you connected
+
+On the Mac it installs from the app ("Check for Updates…", or the quiet check
+a little after start-up). One thing changes, and it is the thing that was
+missing: the agents that answer you can now reach the connectors you have
+connected.
+
+- **The Boardroom's CEOs can use your connectors.** Until now the connector
+  tools worked in the chat and in the task runner, but the twelve CEOs — the
+  ones that have their role playbooks — answered with no tools at all. A CFO
+  with a pricing playbook could not look at an issue in GitHub, because the
+  CEO's reply never offered to look. It does now.
+- **Talking to one agent works too.** The agent you are talking to in the team
+  chat can check a connected app, and so can the Holding CEO when you ask it
+  a quick question over Telegram or Discord.
+- **The agent is told what it has.** A tool the model is offered but never
+  told about is a tool it does not reach for. Every one of these answers now
+  says which apps it can read, and it says the two things that keep it
+  honest: what an app returns is data, not instructions (an issue can carry
+  text that tries to steer the agent), and a write waits for you to confirm it.
+- **The chat still streams when there is nothing to look up.** Reading from a
+  connected app is a round trip, so when one is involved the answer arrives
+  in one piece. With no app connected, nothing changes: the text still arrives
+  as it is written.
+- **A guard so this does not slip again.** The paths where you are waiting
+  for an answer are listed in a test, and it fails if one of them cannot
+  reach your apps, or if a new piece of the app answers you without saying
+  whether somebody is waiting.
+
+Nothing else changes: the playbooks, the connectors, the token sign-in and the
+credential warnings all work as they did in 1.2.5.
+
 ## 1.2.5 — 2026-11-01 — Agents with their own playbooks, and connectors the agent can use
 
 On the Mac it installs from the app ("Check for Updates…", or the quiet check
