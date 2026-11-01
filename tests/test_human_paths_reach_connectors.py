@@ -45,8 +45,12 @@ HUMAN_PATHS = {
 # piece of work — it is not that they cannot use a connector, it is that
 # they have a different machinery for tools.
 NOT_CONVERSATIONS = {
-    "runner.py",         # sessions/runner.py: the session agent's own tool loop
-    "browser_runner.py", # sessions/browser_runner.py: same
+    # The session agents are not conversations: nobody is waiting for the
+    # answer, they run tasks on their own. The session agent DOES reach the
+    # connectors now (behind the repository trust mark, like the repo's own
+    # skills); the browser one still has only its own machinery.
+    "runner.py",
+    "browser_runner.py",
 }
 
 
@@ -83,6 +87,20 @@ def test_the_shared_helper_is_the_one_place_that_adds_the_block():
     # And the block itself is built in one place.
     connector_tools = (APP / "connector_tools.py").read_text(encoding="utf-8")
     assert "def prompt_block" in connector_tools
+
+
+def test_the_session_agent_reaches_the_connectors_behind_the_trust_mark():
+    """The agent that works in a repository can use the user's apps.
+
+    It is behind the repository trust mark, like the repo's own skills: a
+    repository is not necessarily the user's code.
+    """
+    src = (APP / "sessions" / "runner.py").read_text(encoding="utf-8")
+    assert "connector_tools" in src, (
+        "the session agent never reaches the connectors")
+    assert "_repo_is_trusted" in src, (
+        "the session agent reaches the user's accounts without asking whether "
+        "the repository is trusted")
 
 
 def test_the_background_paths_are_not_in_the_list():
