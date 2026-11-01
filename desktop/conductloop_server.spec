@@ -22,7 +22,16 @@ pkg_datas, pkg_binaries, pkg_hidden = collect_all("ops_dashboard")
 # The web UI (html/js/json/i18n) is plain-file data — make sure it's bundled at
 # ops_dashboard/web so STATIC_DIR = Path(__file__).parent/"web" resolves.
 web_src = ROOT / "ops_dashboard" / "web"
-datas = pkg_datas + [(str(web_src), "ops_dashboard/web")]
+# The shipped skill catalog (L7): Markdown folders under skills/packs. This is
+# a data subdirectory that is NOT a Python package, so collect_all() does not
+# pick it up — without this entry the app runs, the pack list is empty, and
+# nothing says why. Ship the whole tree: the discovery code walks the folder
+# structure and reads pack.json per role.
+packs_src = ROOT / "ops_dashboard" / "skills" / "packs"
+datas = pkg_datas + [
+    (str(web_src), "ops_dashboard/web"),
+    (str(packs_src), "ops_dashboard/skills/packs"),
+]
 
 hidden = (
     pkg_hidden

@@ -825,3 +825,28 @@ def _mig_26_drop_billing_tables(conn: sqlite3.Connection) -> None:
 
 MIGRATIONS.append((26, "drop entitlements, founders, payment_events (billing retired; deletes local rows)",
                    _mig_26_drop_billing_tables))
+
+
+# ── L7: per-agent skill packs (2026-10-31) ───────────────────────────────────
+# The Boardroom C-Suite had no skills of its own: the 12 CEOs carried a free-text
+# skill list in ``capabilities`` that was only ever pasted into a prompt. This
+# table binds a real, indexed skill to one agent, so a skill can be installed
+# for the CTO without being installed for the Brain.
+#
+# ``agent_id`` is a soft reference to ``team_members.id`` (the same convention
+# the other agent tables use) because a member row can be deleted while its
+# skill bindings are still worth keeping for a re-created agent.
+def _mig_27_agent_skills(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS agent_skills ("
+        "  agent_id INTEGER NOT NULL,"
+        "  skill_key TEXT NOT NULL,"
+        "  enabled INTEGER NOT NULL DEFAULT 1,"
+        "  created_at INTEGER NOT NULL,"
+        "  PRIMARY KEY (agent_id, skill_key))"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_skills_agent ON agent_skills(agent_id)")
+
+
+MIGRATIONS.append((27, "agent_skills: per-agent skill bindings for the Boardroom C-Suite (L7)",
+                   _mig_27_agent_skills))

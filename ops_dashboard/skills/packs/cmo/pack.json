@@ -1,0 +1,11 @@
+{
+  "id": "cmo",
+  "title": "CMO — Marketing",
+  "role": "cmo",
+  "description": "Launch playbooks, content briefs, positioning statements and answer-engine optimization for a solo founder marketing many small products at once.",
+  "skills": [
+    "launch-plan",
+    "content-brief",
+    "positioning-statement"
+  ]
+}

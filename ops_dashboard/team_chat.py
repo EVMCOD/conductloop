@@ -282,7 +282,8 @@ def _context_block(context: str, web_rules: str) -> str:
             + (context or "(no matches)") + web_rules)
 
 
-def agent_system(agent: dict, context: str, web_rules: str, *, lead: dict | None = None) -> str:
+def agent_system(agent: dict, context: str, web_rules: str, *, lead: dict | None = None,
+                 peers: list[dict] | None = None) -> str:
     who = (f"You are {agent['name']}, {agent['title']} on {_owner()}'s team."
            + (f" {agent['description']}" if agent.get("description") else "")
            + (f"\nSkills: {agent['skills']}." if agent.get("skills") else ""))
@@ -291,7 +292,35 @@ def agent_system(agent: dict, context: str, web_rules: str, *, lead: dict | None
                "Work only on that task, from your own expertise, in under 200 words.\n")
     else:
         how = f"\nYou are talking directly with {_owner()}.\n"
-    return who + how + _RULES + _context_block(context, web_rules)
+    # The skills installed FOR THIS AGENT (L7). A builtin team member has no
+    # row, so it gets no block.
+    skills_block = _agent_skills_block(agent.get("id"))
+    return (who + how + _RULES + skills_block
+            + _peers_block(peers) + _context_block(context, web_rules))
+
+
+def _peers_block(peers: list[dict] | None) -> str:
+    """What the other agents on this task are working on.
+
+    Names and tasks only: a peer's own playbook stays private to that peer.
+    Without it two agents answer the same question twice, or contradict each
+    other with no way to know they were both on it.
+    """
+    if not peers:
+        return ""
+    lines = "\n".join(f"- {p.get('name', 'A teammate')} ({p.get('title', '')}): {p.get('task', '')}".rstrip()
+                       for p in peers)
+    return ("\n\nYOUR TEAMMATES ON THIS TASK (their answers arrive alongside yours; do not "
+            f"duplicate their work, and say so if you disagree):\n{lines}")
+
+
+def _agent_skills_block(agent_id: object) -> str:
+    """The skills installed for one agent, as a prompt block ('' when none)."""
+    try:
+        from .skills import packs
+        return packs.agent_skills_block(agent_id if isinstance(agent_id, int) else None)
+    except Exception:
+        return ""
 
 
 def _team_lines(team: list[dict]) -> str:
@@ -306,7 +335,11 @@ def plan_system(lead: dict, team: list[dict]) -> str:
         f"matters most (up to {MAX_ASSIGNMENTS} only for broad, cross-functional requests). Pick nobody for "
         "small talk or a quick question you can answer alone. Give each person one concrete task, "
         "written to them, in the language of the user's message.\n"
-        "Reply with JSON only, no prose and no code fences:\n"
+        # The lead's own installed skills (L7) guide WHO gets picked: a CEO
+        # with a prioritization playbook must apply it here, not only when
+        # it writes the final answer.
+        + _agent_skills_block(lead.get("id"))
+        + "\nReply with JSON only, no prose and no code fences:\n"
         '{"note": "<one short sentence to the user on how you will handle it>", '
         '"assignments": [{"agent": "<key from the list>", "task": "<task>"}]}'
     )
@@ -317,7 +350,10 @@ def synthesis_system(lead: dict, context: str, web_rules: str) -> str:
         f"You are {lead['name']}, CEO of {_owner()}'s team. You asked your team to work on "
         f"{_owner()}'s request and their answers are below. Write the final answer: decide, combine "
         "and settle disagreements, credit people by name when it helps, and do not repeat everything "
-        "they said. Under 250 words.\n" + _RULES + _context_block(context, web_rules)
+        "they said. Under 250 words.\n" + _RULES
+        # The lead's own skills also apply to the synthesis it writes.
+        + _agent_skills_block(lead.get("id"))
+        + _context_block(context, web_rules)
     )
 
 
@@ -504,9 +540,12 @@ class ChatTurn:
         def work(card: dict) -> None:
             started = time.monotonic()
             agent = _find(team, card["agent"]) or {}
+            # The other agents on this task, so nobody duplicates their work.
+            peers = [{"name": c.get("name", ""), "title": c.get("title", ""), "task": c.get("task", "")}
+                     for c in cards if c["agent"] != card["agent"]]
             try:
                 provider = self._new_provider()
-                system = agent_system(agent, context, web_rules, lead=lead)
+                system = agent_system(agent, context, web_rules, lead=lead, peers=peers)
                 for chunk in provider.stream(system, [{"role": "user", "content": card["task"]}]):
                     if chunk:
                         events.put(("delta", card["agent"], chunk))

@@ -215,6 +215,64 @@ def append_ceo_message(member_id: int, user_id: int | None, role: str, content: 
 # the response back to ceo_messages. Mock provider returns a canned line so
 # the UI flow works without a BYOK key.
 
+
+def _skills_block(member_id: int) -> str:
+    """The skills installed for this CEO (L7), as a prompt block.
+
+    '' when the CEO has none. A broken skill is skipped rather than allowed
+    to break the reply.
+    """
+    try:
+        from .skills import packs
+        return packs.agent_skills_block(member_id)
+    except Exception:
+        return ""
+
+
+# How many peer answers a CEO sees, and how long each one may be.
+PEER_ANSWERS_LIMIT = 4
+PEER_ANSWER_CHARS = 280
+
+
+def _peer_answers(member_id: int, project: str | None) -> list[tuple[str, str]]:
+    """The recent answers the OTHER CEOs gave on this project.
+
+    Each CEO has its own thread, so without this the C-Suite cannot work
+    together: the chairman becomes the only one who knows what everybody
+    said. Only PEER answers (role='ceo') are carried — the chairman's own
+    words arrive once, in this thread.
+    """
+    try:
+        with db.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT cm.member_id, tm.name, cm.content, cm.created_at "
+                "  FROM ceo_messages cm "
+                "  JOIN team_members tm ON tm.id = cm.member_id "
+                " WHERE cm.member_id != ? AND cm.role = 'ceo' "
+                "   AND (? IS NULL OR tm.project_slug = ?) "
+                " ORDER BY cm.created_at DESC, cm.id DESC LIMIT ?",
+                (member_id, project, project, PEER_ANSWERS_LIMIT),
+            ).fetchall()
+    except Exception:
+        return []
+    out: list[tuple[str, str]] = []
+    for r in rows:
+        content = (r["content"] or "").strip()
+        if not content:
+            continue
+        out.append((r["name"] or "A colleague", content[:PEER_ANSWER_CHARS]))
+    return out
+
+
+def _peers_block(member_id: int, project: str | None) -> str:
+    """What the other CEOs on this project recently answered."""
+    peers = _peer_answers(member_id, project)
+    if not peers:
+        return ""
+    lines = "\n".join(f"- {name}: {content}" for name, content in peers)
+    return ("\n\nOTHER CEOs ON THIS PROJECT (what they already answered; build on it, "
+            f"correct it if it is wrong, and do not repeat it verbatim):\n{lines}")
+
 def generate_ceo_reply(member_id: int, trigger_msg_id: int | None = None) -> dict | None:
     """Synthesize a CEO reply. Called as background task. Returns the saved
     row (None on failure). Marks the CEO's status as 'working' / 'replied'."""
@@ -234,6 +292,7 @@ def generate_ceo_reply(member_id: int, trigger_msg_id: int | None = None) -> dic
             + (f" Project: {project}." if project else "")
             + (f" Persona: {persona}" if persona else "")
             + f" Default autonomy tier: {tier}."
+            + _skills_block(member_id)
             + "\n\nREPLY RULES (strict):\n"
             "1. Reply to the chairman's most recent message. Max 3 sentences.\n"
             "2. NUMERIC METRICS are sacred. NEVER invent percentage, count, or dollar figures.\n"
@@ -254,6 +313,10 @@ def generate_ceo_reply(member_id: int, trigger_msg_id: int | None = None) -> dic
         for m in thread:
             who = "Chairman" if m.get("role") == "chairman" else (ceo_name if m.get("role") == "ceo" else "System")
             convo_lines.append(f"{who}: {(m.get('content') or '')[:280]}\n")
+        # What the other CEOs on this project already answered (L7b).
+        peers_block = _peers_block(member_id, project)
+        if peers_block:
+            convo_lines.append(peers_block + "\n")
         # Add minimal real-analytics block (per-project only, not global)
         try:
             with db.get_connection() as conn:

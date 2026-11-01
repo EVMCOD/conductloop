@@ -1,0 +1,11 @@
+{
+  "id": "head_cs",
+  "title": "Head of Customer Success — Onboarding, Churn, Support",
+  "role": "head_cs",
+  "description": "Customer success procedure with thresholds: one activation definition and drop-rate targets, a weekly churn-signal check with five pattern tests, and support macros with a fixed escalation boundary.",
+  "skills": [
+    "onboarding-flow",
+    "churn-signal-triage",
+    "support-macro"
+  ]
+}

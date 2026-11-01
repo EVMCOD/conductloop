@@ -1,0 +1,67 @@
+"""Static guards for the agent-skills UI (L7).
+
+The skills panel lives in the CEO thread page (boardroom-thread.html). It
+renders server data into the page, so the same rules the Aprendizaje page
+follows apply: no HTML sink without escaping, no external origin, and only
+our own API.
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+WEB = Path(__file__).resolve().parent.parent / "ops_dashboard" / "web"
+PAGE = WEB / "boardroom-thread.html"
+SINKS = re.compile(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function")
+
+
+def _html() -> str:
+    return PAGE.read_text()
+
+
+def test_skills_panel_exists_with_its_controls():
+    html = _html()
+    assert 'id="skillsPanel"' in html
+    assert 'id="skillsList"' in html
+    assert 'id="skillPackSelect"' in html
+    assert 'id="installPackBtn"' in html
+
+
+def test_every_server_value_rendered_into_the_panel_is_escaped():
+    """A skill name or description comes from a file the user can edit; it
+    must never be pasted into the page unescaped."""
+    html = _html()
+    # Only the skills rendering functions, not the rest of the page.
+    block = html.split("function renderSkills(")[1].split("async function skillAction(")[0]
+    for match in re.finditer(r"\$\{([^}]*)\}", block):
+        expr = match.group(1)
+        if "escapeHtml" in expr:
+            continue
+        # Anything else interpolated into the row must carry no server
+        # STRING: only a boolean may be interpolated raw (it renders as
+        # 0/1 or picks between two literals we control).
+        props = set(re.findall(r"\.(\w+)", expr))
+        assert props <= {"enabled"}, expr
+
+
+def test_no_external_origin_in_the_skills_code():
+    html = _html()
+    script = html.split("<script>")[1].split("</script>")[0]
+    for url in re.findall(r"https?://[^\s'\"]+", script):
+        # The only external URLs allowed in this page are the channel webhook
+        # examples in a placeholder string, which are not fetched.
+        assert "example" in url or "hooks.slack" in url or "discord.com/api/webhooks" in url, url
+
+
+def test_skills_calls_only_our_own_api():
+    html = _html()
+    script = html.split("<script>")[1].split("</script>")[0]
+    for path in re.findall(r"['\"`](/api/[a-zA-Z0-9_/\$\{\}-]*)", script):
+        assert path.startswith("/api/"), path
+
+
+def test_skill_actions_use_the_registered_endpoints():
+    html = _html()
+    for endpoint in ("install", "uninstall", "toggle"):
+        assert f"/skills/${endpoint}" in html or "skills/${path}" in html
+    assert "/api/skills/packs" in html

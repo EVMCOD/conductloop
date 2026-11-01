@@ -164,6 +164,19 @@
       </div>
     </div>
 
+    <div class="channels-panel" id="skillsPanel">
+      <div class="channels-head">
+        <strong>🧠 Skills</strong>
+        <div>
+          <select id="skillPackSelect" class="ch-btn ghost sm" title="Skill pack to install"></select>
+          <button class="ch-btn ghost" id="installPackBtn">+ Install pack</button>
+        </div>
+      </div>
+      <div class="channels-list" id="skillsList">
+        <div class="ch-empty">No skills installed for this CEO yet. Install a pack so it works to its own playbook.</div>
+      </div>
+    </div>
+
     <div class="messages" id="messages"></div>
     <div id="thinking" class="thinking" style="display:none">
       <span class="dot"></span><span class="dot"></span><span class="dot"></span>
@@ -306,6 +319,59 @@
     function safeJson(s) { try { return JSON.parse(s); } catch (_) { return {}; } }
     load();
     loadChannels();
+    loadSkills();
+
+    // Skills panel (L7): the packs this CEO has, and the skills it actually runs.
+    let allPacks = [];
+    async function loadSkills() {
+      try {
+        const [pr, ar] = await Promise.all([
+          fetch('/api/skills/packs', { credentials: 'include' }),
+          fetch(`/api/agents/${ceoId}/skills`, { credentials: 'include' }),
+        ]);
+        const pd = await pr.json();
+        const ad = await ar.json();
+        allPacks = pd.packs || [];
+        const installed = new Set(ad.packs || []);
+        const sel = $('skillPackSelect');
+        sel.innerHTML = allPacks
+          .map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.title)} — ${p.skills.length} skills</option>`)
+          .join('');
+        renderSkills(ad.skills || [], installed);
+      } catch (e) {
+        $('skillsList').innerHTML = '<div class="ch-empty">Failed to load skills.</div>';
+      }
+    }
+    function renderSkills(skills, installedPacks) {
+      const box = $('skillsList');
+      if (!skills.length) {
+        box.innerHTML = '<div class="ch-empty">No skills installed for this CEO yet. Install a pack so it works to its own playbook.</div>';
+        return;
+      }
+      const byPack = allPacks.filter(p => installedPacks.has(p.id));
+      const descOf = {};
+      for (const p of allPacks) for (const s of p.skills) descOf[s.name] = s.description;
+      box.innerHTML = skills.map(s => `
+        <div class="ch-row" data-skill="${escapeHtml(s.key)}">
+          <div class="ch-meta">
+            <div class="ch-name">${escapeHtml(s.key)}</div>
+            <div class="ch-sub">${escapeHtml(descOf[s.key] || '')}</div>
+          </div>
+          <button class="ch-btn ghost sm" data-act="skill-toggle" data-skill="${escapeHtml(s.key)}" data-en="${s.enabled ? 0 : 1}">${s.enabled ? 'Disable' : 'Enable'}</button>
+        </div>`).join('')
+        + (byPack.length ? `<div class="ch-empty" style="padding-top:10px">Packs: ${byPack.map(p => escapeHtml(p.title)).join(', ')}</div>` : '');
+    }
+    async function skillAction(path, body) {
+      const r = await fetch(`/api/agents/${ceoId}/skills/${path}`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (r.ok) { loadSkills(); return true; }
+      showToast(d.message || d.error || 'Failed', true);
+      return false;
+    }
 
     // Channels panel (2026-07-16)
     async function loadChannels() {
@@ -338,6 +404,21 @@
     document.addEventListener('click', async (e) => {
       const t = e.target;
       const act = t.dataset && t.dataset.act;
+      if (act === 'skill-toggle') {
+        const key = t.dataset.skill;
+        const enabled = !!parseInt(t.dataset.en, 10);
+        await skillAction('toggle', { skill: key, enabled });
+        return;
+      }
+      if (t.id === 'installPackBtn') {
+        const pack = $('skillPackSelect').value;
+        if (!pack) { showToast('No pack selected', true); return; }
+        t.disabled = true;
+        const ok = await skillAction('install', { pack: pack });
+        t.disabled = false;
+        if (ok) showToast('Pack installed');
+        return;
+      }
       if (act === 'toggle' || act === 'delete') {
         const cid = parseInt(t.dataset.cid, 10);
         if (act === 'delete' && !confirm('Unbind this channel?')) return;

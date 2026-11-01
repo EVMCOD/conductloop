@@ -1,0 +1,7 @@
+{
+  "id": "vp_devops",
+  "title": "VP DevOps — Delivery, Reliability & Cost",
+  "role": "vp_devops",
+  "description": "Post-deploy verification, infrastructure cost control and incident triage procedures for a solo-founder portfolio running on Cloudflare and cloud providers.",
+  "skills": ["deploy-verification", "cost-audit", "incident-triage"]
+}
