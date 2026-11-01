@@ -62,9 +62,14 @@ def srv(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def on(monkeypatch):
+def on(monkeypatch, tmp_path):
     monkeypatch.setenv("CONDUCTLOOP_APP_TOKEN", TOKEN)
     monkeypatch.setenv("CONDUCTLOOP_APP_BOOT", BOOT)
+    # The token is persisted next to the data. A test must not write that
+    # file into the real data directory: the next run of the app would then
+    # use a token that is in a test file on disk.
+    from ops_dashboard import app_token_guard
+    monkeypatch.setattr(app_token_guard, "_DATA_DIR", tmp_path)
 
 
 def _code(data: bytes) -> str:

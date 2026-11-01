@@ -94,6 +94,8 @@ def resolve_token() -> str:
         pass
     token = _env(TOKEN_ENV)
     if not token:
+        # No token in the environment: the guard is off (the development
+        # server), and there is nothing worth persisting.
         return ""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -105,7 +107,11 @@ def resolve_token() -> str:
 
 
 def enabled() -> bool:
-    return bool(resolve_token())
+    # The environment decides whether the guard is on at all. The file on
+    # disk only chooses WHICH token is used. That distinction matters: a
+    # file left behind by an earlier run must not silently turn the guard
+    # on for a development server that never asked for it.
+    return bool(_env(TOKEN_ENV))
 
 
 def _reset_for_tests() -> None:

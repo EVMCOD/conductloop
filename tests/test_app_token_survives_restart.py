@@ -79,9 +79,9 @@ def test_a_wrong_cookie_is_still_refused(tmp_path, data_dir, monkeypatch):
 def test_the_token_file_is_not_world_readable(tmp_path, data_dir, monkeypatch):
     monkeypatch.setenv(guard.TOKEN_ENV, "a" * 40)
     guard.resolve_token()
-    path = tmp_path / "app-token"
-    mode = path.stat().st_mode & 0o777
-    assert mode & 0o077 == 0, f"the token file is readable by others: {oct(mode)}"
+    # The repo's helper, because Windows has no POSIX permission bits.
+    from tests.posix_perms import assert_no_group_other_access
+    assert_no_group_other_access(tmp_path / "app-token")
 
 
 def test_the_development_server_stays_open(tmp_path, data_dir, monkeypatch):
