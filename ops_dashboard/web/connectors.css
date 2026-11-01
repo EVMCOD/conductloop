@@ -53,3 +53,27 @@ details.guide h4 { font-size:13px; margin:12px 0 4px; color:var(--cl-ink-muted);
 details.guide ol.steps, details.guide ul.warnings { margin:4px 0; padding-left:20px; font-size:13px; line-height:1.5; }
 details.guide ul.warnings li { color:var(--cl-warn); }
 details.guide li.unverified { color:var(--cl-warn); font-style:italic; }
+
+/* ── The catalogue ─────────────────────────────────────────────────────────
+   The page opens with what the apps are for. The tiles are a grid, two
+   across on a wide window, one on a narrow one. The mark carries the app's
+   own colour, applied by the renderer (the connector carries it). */
+.catalog-section { max-width:1300px; margin:0 auto; padding:4px 24px 0; }
+.catalog-head { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
+.catalog-head h2 { margin:0; }
+#catalog-search { min-width:260px; }
+.catalog-group { margin-bottom:18px; }
+.catalog-group-title { margin:0 0 8px; color:var(--cl-ink-muted); font-size:12px; text-transform:uppercase; letter-spacing:.06em; font-weight:600; }
+.catalog-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+@media (max-width: 760px) { .catalog-grid { grid-template-columns:1fr; } }
+.app-card { display:flex; align-items:center; gap:12px; flex-wrap:wrap; background:var(--cl-bg); border:1px solid var(--cl-border); border-radius:12px; padding:12px; min-width:0; }
+.app-mark { flex:0 0 auto; width:34px; height:34px; border-radius:9px; background:var(--brand, var(--cl-accent)); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px; }
+.app-info { flex:1 1 auto; min-width:0; }
+.app-name { display:flex; align-items:center; gap:8px; font-weight:600; }
+.app-desc { color:var(--cl-ink-muted); font-size:12px; margin-top:2px; overflow-wrap:anywhere; }
+.app-action { flex:0 0 auto; }
+.app-add { width:30px; height:30px; padding:0; border-radius:50%; font-size:17px; line-height:1; display:flex; align-items:center; justify-content:center; }
+.app-status { flex:1 0 100%; width:100%; }
+.app-status input { min-width:180px; width:100%; max-width:420px; }
+.settings-summary { cursor:pointer; font-weight:600; padding:10px 2px; color:var(--cl-ink-muted); }
+.settings-summary:hover { color:var(--cl-ink); }

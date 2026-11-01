@@ -61,6 +61,16 @@ class ConnectorSpec:
     extra_authorize_params: dict[str, str] = field(default_factory=dict)
     actions: dict[str, ActionSpec] = field(default_factory=dict)
     docs_url: str = ""
+    # What the app is for, in one line, the way a catalogue entry says it.
+    # The English line is the fallback; the page shows the Spanish one when
+    # the app is in Spanish.
+    description: str = ""
+    description_es: str = ""
+    # The section of the catalogue this app belongs to ("Google", "Work"…),
+    # and the colour of its mark. Both are presentation, but they belong to
+    # the connector: the catalogue is a product surface, not a web page.
+    category: str = ""
+    brand: str = ""
     # This connector also accepts a personal token (a PAT, a bot token, an
     # app token) as an alternative to the OAuth flow. The point is that a
     # personal token does not expire on the provider's schedule: the user
@@ -104,6 +114,10 @@ class ConnectorSpec:
             "actions": [{"name": a.name, "kind": a.kind, "description": a.description}
                         for a in self.actions.values()],
             "docs_url": self.docs_url,
+            "description": self.description,
+            "description_es": self.description_es,
+            "category": self.category,
+            "brand": self.brand,
         }
 
 

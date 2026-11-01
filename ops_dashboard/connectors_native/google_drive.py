@@ -236,6 +236,9 @@ _SCHEMA_DRIVE = {
 
 SPEC = registry.register(registry.ConnectorSpec(
     id=ID, name="Google Drive",
+    description="Documents, spreadsheets and files",
+    description_es="Documentos, hojas de cálculo y archivos",
+    category="productivity", brand="#0F9D58",
     allowed_hosts=(*_google.AUTH_HOSTS, "www.googleapis.com"),
     read_scopes=READ_SCOPES,
     actions={

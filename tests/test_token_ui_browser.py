@@ -75,6 +75,8 @@ def test_native_connector_cards(site):
                   else None)
             pg.on("dialog", lambda d: d.accept())
             pg.goto(base_url + "/connectors")
+            # The connection settings live below the catalogue, folded.
+            pg.eval_on_selector("#settings-details", "e => { e.open = true; }")
             card = '[data-connector="fakenotes"]'
             pg.wait_for_selector(f"{card} [data-testid=token-details] input[type=password]")
             assert pg.text_content(f"{card} [data-testid=status]") == "desconectado"
@@ -129,6 +131,8 @@ def test_native_connector_cards(site):
 
             en = browser.new_context(locale="en-US").new_page()
             en.goto(base_url + "/connectors")
+            # The connection settings live below the catalogue, folded.
+            en.eval_on_selector("#settings-details", "e => { e.open = true; }")
             en.wait_for_selector(f"{gh} [data-testid=token-source]")
             assert "Connections" in (en.text_content(f"{gh} [data-testid=token-source]") or "")
             assert en.is_visible(f"{gh} button:text-is('Sync now')")
