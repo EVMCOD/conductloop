@@ -107,6 +107,15 @@ ls -la "$SIDECAR_DEST"
 echo ""
 
 # ── 3. Build app + bundles ───────────────────────────────────────────────────
+# The DMG step asks the Finder to dress the volume, and a Finder that is
+# stuck answers "El Finder está en uso (-15260)" and the build dies there.
+# It has happened on three releases out of four. Restarting it is cheap and
+# reversible (macOS relaunches it); the windows the user had open are
+# closed, which is the price of a release that finishes.
+echo "▸ Restarting Finder (it gets stuck before the DMG step)"
+killall Finder 2>/dev/null || true
+sleep 3
+
 echo "▸ Building .app + DMG + updater artifacts"
 cd "$TAURI_DIR"
 # Panic locations embed absolute source paths (~/.cargo/registry/…, ~/.rustup/…),
