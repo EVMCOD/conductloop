@@ -3,5 +3,11 @@
   "title": "VP Frontend — Web Engineering",
   "role": "vp_frontend",
   "description": "Performance budgets, component contract review and browser-quirk triage for React / Next.js / TypeScript / Tailwind front ends.",
-  "skills": ["performance-budget", "component-contract-review", "browser-quirks-triage"]
+  "skills": [
+    "browser-quirks-triage",
+    "component-contract-review",
+    "performance-budget",
+    "tailwindcss",
+    "typescript"
+  ]
 }

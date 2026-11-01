@@ -4,8 +4,10 @@
   "role": "cfo",
   "description": "Unit economics, pricing changes, burn and runway analysis with explicit formulas and thresholds. Every number is measured, cited or labelled an assumption; no fabricated figures.",
   "skills": [
-    "unit-economics-review",
+    "business-finance-fundamentals",
+    "cash-runway-planning",
     "pricing-change-analysis",
-    "cash-runway-planning"
+    "pricing-strategy",
+    "unit-economics-review"
   ]
 }
