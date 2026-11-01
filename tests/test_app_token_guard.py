@@ -129,11 +129,10 @@ def test_boot_only_get(srv, on):
     {"sec-fetch-dest": "image"},                          # <img> (case-insensitive)
 ])
 def test_browser_requests_without_cookie_refused(srv, on, headers):
-    # The API and the other pages refuse a browser request without the
-    # cookie. The MAIN page is the exception: it hands out a cookie that
-    # works, so that a reload can never leave the app on a blank page (see
-    # test_reloading_the_page_hands_out_a_cookie_that_works).
-    for method, path in [("GET", "/api/projects"), ("GET", "/brain")]:
+    # Every browser request without the cookie is refused, the main page
+    # included: handing the session out with the page would give it to every
+    # browser that visits localhost (see test_the_page_does_not_hand_out_a_cookie).
+    for method, path in [("GET", "/"), ("GET", "/api/projects"), ("GET", "/brain")]:
         st, data, h = srv(method, path, headers)
         assert st == 403, (method, path, headers)
         assert _code(data) == "app_token_required"
@@ -164,28 +163,28 @@ def test_browser_with_cookie_allowed(srv, on):
     assert st == 200
 
 
-def test_reloading_the_page_hands_out_a_cookie_that_works(srv, on):
-    """A reload must never leave the app on a blank page.
+def test_the_page_does_not_hand_out_a_cookie(srv, on):
+    """The page must not give the session to anyone who asks for it.
 
-    The window keeps its token in a cookie. If that cookie stopped matching
-    (the server restarted with a different token), a reload used to answer
-    403 — the page would not load at all, and the user was left with an app
-    that looked broken and could not be recovered without quitting it.
+    The token is what separates the desktop window from any other browser on
+    the machine. If the main page handed it out, every browser that visited
+    localhost would get the session, and the isolation the boot flow exists
+    for would be gone. The page therefore refuses a request without the
+    cookie, exactly like the API does.
 
-    So the page itself hands out a cookie that works.
+    A session that expires is recovered by reopening the app, which boots
+    with a one-time nonce. The token is kept between launches, so that only
+    happens after the app was updated under an open window.
     """
-    st, _, hdrs = srv("GET", "/", BROWSER)
-    assert st == 200, "the main page answered an error instead of loading"
+    st, data, hdrs = srv("GET", "/", BROWSER)
+    assert st == 403, "the main page handed the session to a browser without a cookie"
+    assert _code(data) == "app_token_required"
     cookies = hdrs.get("_set_cookie_all") or []
-    assert any("cl_app=" in c for c in cookies), (
-        "the page did not hand out a cookie: " + repr(cookies))
-    token = cookies[0].split("cl_app=", 1)[1].split(";", 1)[0]
-    from ops_dashboard import app_token_guard
-    assert app_token_guard.has_valid_cookie({"Cookie": f"cl_app={token}"})
+    assert not any("cl_app=" in c for c in cookies), (
+        "the main page set a session cookie: " + repr(cookies))
 
 
 def test_an_api_call_without_a_cookie_is_still_refused(srv, on):
-    """Only the page gets a new cookie. The API does not hand one out."""
     st, _, _ = srv("GET", "/api/projects", BROWSER)
     assert st == 403
 

@@ -112,10 +112,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def _send(self, status: int, body: bytes, content_type: str = "text/html", headers: dict | None = None) -> None:
         self.send_response(status)
-        # Headers the app token guard attached to this response (the page
-        # handing the window a cookie that works).
-        for k, v in (getattr(self, "_pending_headers", None) or {}).items():
-            self.send_header(k, v)
         self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
         if content_type.startswith("text/html") and not any(

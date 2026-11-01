@@ -1,16 +1,20 @@
-"""The app has to be able to recover from a lost session.
+"""What happens when the session token in the cookie stops matching.
 
-The window keeps its session token in a cookie. If the server restarts with a
-different token, that cookie stops matching, every request answers 403, and
-the frontend turns that into an error: the page stops working and the user
-is left with an app that looks broken.
+The window keeps its session token in a cookie. If the server restarts with
+a different token, that cookie stops matching and every request answers 403.
 
-Two things fix it, and both are checked here:
+The token is now kept between launches, so the cookie in the window that is
+already open keeps working. What is left is the case where the app was
+updated under an open window: the window holds a token that no longer
+exists.
 
-- the server keeps the token across restarts (so the cookie that is already
-  in the window keeps working), and
-- the page hands out a cookie that works, so a reload repairs the session.
-  The frontend does that reload by itself, once, when it sees a 403.
+That case is NOT repaired by reloading and it must NOT be repaired by
+handing the token out with the page: every browser that visits localhost
+would then get the session. The page refuses the request without a cookie,
+and the app says what to do — reopen it, which boots with a one-time nonce.
+
+These tests pin that: no silent reload, and a message that tells the user
+what to do.
 """
 from __future__ import annotations
 
@@ -23,33 +27,28 @@ def _read(name: str) -> str:
     return (WEB / name).read_text(encoding="utf-8")
 
 
-def test_the_helper_exists():
-    assert (WEB / "session-repair.js").exists(), "there is no session repair helper"
+def test_there_is_no_silent_reload():
+    """A reload cannot repair this, and it would leave a blank page."""
+    for name in ("app.js", "connectors.js"):
+        src = _read(name)
+        assert "reloadOnce" not in src, (
+            f"{name} reloads the window when the session is lost; the page "
+            "needs a token too, so the reload ends in a blank page")
+        assert "session-repair.js" not in src, (
+            f"{name} still loads the repair helper")
 
 
-def test_both_pages_load_the_helper():
+def test_the_pages_do_not_load_the_repair_helper():
     for page in ("index.html", "connectors.html"):
-        assert "session-repair.js" in _read(page), (
-            f"{page} does not load the session repair helper")
+        assert "session-repair.js" not in _read(page), (
+            f"{page} still loads the repair helper")
+    assert not (WEB / "session-repair.js").exists(), (
+        "the repair helper is still there, and it reloads the window")
 
 
-def test_the_helper_reloads_once():
-    """Once: a reload that does not help must not become a loop."""
-    src = _read("session-repair.js")
-    assert "reloadOnce" in src
-    assert "sessionStorage" in src, "the reload is not throttled, so it could loop"
-    assert "location.reload" in src
-
-
-def test_the_brain_reloads_when_the_server_forgets_the_session():
-    src = _read("app.js")
-    block = src.split("async function fetchJSON")[1].split("\n}")[0]
-    assert "403" in block, "a 403 is not recognised"
-    assert "reloadOnce" in block, "a 403 does not trigger the repair"
-
-
-def test_the_connectors_page_reloads_when_the_server_forgets_the_session():
-    src = _read("connectors.js")
-    assert "reloadOnce" in src, (
-        "the connectors page does not repair a lost session, so it is the one "
-        "that shows the error")
+def test_a_lost_session_says_what_to_do():
+    for name in ("app.js", "connectors.js"):
+        src = _read(name)
+        assert "403" in src, f"{name} does not recognise a lost session"
+        assert "reopen ConductLoop" in src, (
+            f"{name} does not tell the user how to recover from a lost session")

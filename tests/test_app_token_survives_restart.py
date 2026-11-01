@@ -94,6 +94,26 @@ def test_the_development_server_stays_open(tmp_path, data_dir, monkeypatch):
     assert not guard.enabled()
 
 
+def test_a_token_left_on_disk_does_not_turn_the_guard_on(tmp_path, data_dir, monkeypatch):
+    """The file on disk does not enable the guard, it only picks the token.
+
+    The environment decides whether the guard is on. A file left behind by an
+    earlier run must not silently turn the guard on for a development server
+    that never asked for it — that would make every browser request answer
+    403 in a server that is supposed to be open.
+    """
+    monkeypatch.setenv(guard.TOKEN_ENV, "a" * 40)
+    guard.resolve_token()
+    assert (tmp_path / "app-token").exists(), "the token was not persisted"
+
+    # A development server: same data directory, no token in the environment.
+    monkeypatch.delenv(guard.TOKEN_ENV, raising=False)
+    assert not guard.enabled(), (
+        "a token left on disk turned the guard on for a server that never "
+        "asked for it")
+    assert not guard.has_valid_cookie({"Cookie": f"{guard.COOKIE}=" + "a" * 40})
+
+
 def test_the_guard_is_on_when_the_app_passes_a_token(tmp_path, data_dir, monkeypatch):
     monkeypatch.setenv(guard.TOKEN_ENV, "a" * 40)
     assert guard.enabled()

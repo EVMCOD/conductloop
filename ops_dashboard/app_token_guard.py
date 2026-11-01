@@ -136,6 +136,11 @@ def _cookie_value(headers: Any) -> str:
 
 
 def has_valid_cookie(headers: Any) -> bool:
+    # With the guard off there is no valid cookie: the token is only there
+    # for the desktop window, and a server that was never asked to check one
+    # must not treat one as a pass.
+    if not enabled():
+        return False
     token = resolve_token()
     got = _cookie_value(headers)
     return bool(token and got) and hmac.compare_digest(got.encode(), token.encode())
@@ -195,19 +200,5 @@ def check(handler: Any) -> bool:
         return True
     if has_valid_cookie(handler.headers):
         return True
-    # The page itself: hand the window a cookie that works instead of an
-    # error. The window keeps the token in a cookie, and if that cookie
-    # stopped matching (the server was restarted with a different token),
-    # a reload used to answer 403: the app would not load at all, and the
-    # only way out was to quit and reopen it.
-    #
-    # Only the page does this. The API never hands a token out, so a page
-    # on the open web cannot ask for one and use it.
-    if path == "/" or path.endswith(".html"):
-        token = resolve_token()
-        if token:
-            handler._pending_headers = {
-                "Set-Cookie": f"{COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax"}
-            return True
     return _deny(handler, 403, "app_token_required",
                  "this local API only accepts browser requests from the ConductLoop window")
