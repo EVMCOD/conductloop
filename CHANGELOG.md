@@ -2,6 +2,29 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.8 — 2026-11-01 — The agent that works in your repo can use your apps
+
+The agent that works in a repository — the one that reads files, runs the test
+suite and writes code — had its own tool protocol: the model replies with one
+JSON object, `{"tool": ..., "args": {...}}`. That protocol knew nothing about
+the connectors. An agent doing research could not look up an issue in GitHub,
+even with the connector connected and working. It could only work from what
+was in the worktree.
+
+- **It can read from your apps now**, and write to them with your
+  confirmation. The write is queued and shows up in the Conectores page.
+- **The app's answer is data, not instructions.** An issue title is
+  attacker-controlled text, so the result comes back fenced, like everywhere
+  else.
+- **A repository has to be marked as trusted.** The same mark that already
+  guards the repo's own skills: a repository is not necessarily your code,
+  and a README that says "read my inbox" is an instruction from the
+  repository. The page that asks for the trust now says what trusting one
+  hands over.
+
+Nothing else changes: the catalogue, the C-suite agents, the playbooks and the
+token sign-in all work as they did in 1.2.7.
+
 ## 1.2.7 — 2026-11-01 — Your apps, in a catalogue
 
 The Connectors page used to be a list of connection settings: a client id, a
