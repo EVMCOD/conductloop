@@ -1,0 +1,75 @@
+{
+  "skill_name": "conductloop-agent-skills",
+  "conductloop": {
+    "suite": "skills",
+    "target": "agent.ask",
+    "vault": "../fixtures/vault",
+    "embedder": "stub"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "¿Subimos el precio un 10% este trimestre?",
+      "expected_output": "Antes de subir el precio hay que comprobar el churn: sin ese dato no se decide el aumento. Pide el churn y luego cuantifica el margen.",
+      "files": [],
+      "assertions": [
+        "No sube el precio sin comprobar el churn",
+        "Pide el dato de churn antes de decidir"
+      ],
+      "conductloop": {
+        "key": "skill-follows-playbook",
+        "required": true,
+        "params": {
+          "role": "cfo",
+          "skill": "pricing-change-analysis"
+        },
+        "checks": [
+          {
+            "type": "prompt_contains",
+            "text": "churn"
+          },
+          {
+            "type": "must_contain",
+            "text": "churn"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "10% is fine"
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Revisa este cambio en el módulo de facturación",
+      "expected_output": "El CTO prioriza leer el contrato del cambio antes que el diff, y distingue los hallazgos bloqueantes de los comentarios de estilo.",
+      "files": [],
+      "assertions": [
+        "Lee el contrato del cambio antes del diff",
+        "Distingue bloqueantes de estilo"
+      ],
+      "conductloop": {
+        "key": "skill-reaches-the-right-agent",
+        "required": true,
+        "params": {
+          "role": "cto",
+          "skill": "code-review-rigor"
+        },
+        "checks": [
+          {
+            "type": "prompt_contains",
+            "text": "code review"
+          },
+          {
+            "type": "must_contain",
+            "text": "blocking"
+          },
+          {
+            "type": "prompt_not_contains",
+            "text": "churn"
+          }
+        ]
+      }
+    }
+  ]
+}

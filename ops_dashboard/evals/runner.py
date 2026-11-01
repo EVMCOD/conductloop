@@ -34,7 +34,7 @@ from . import netguard as _netguard
 
 MAX_DROP_POINTS = 5.0
 REPORT_VERSION = 1
-TARGETS = ("brain.ask", "db.search", "web.ask_page", "browser.agent")  # web.*: browser PR 10
+TARGETS = ("brain.ask", "db.search", "web.ask_page", "browser.agent", "agent.ask")  # web.*: browser PR 10
 EMBEDDERS = ("stub", "unavailable")
 
 
@@ -247,6 +247,11 @@ def case_env(suite: Suite, case: Case, workdir: Path) -> Iterator[_Patches]:
         dbfile = workdir / "evals.db"
         patches.setattr(db, "DB_PATH", dbfile)
         patches.setenv("CONDUCTLOOP_DB_PATH", str(dbfile))
+        # The skills vault is pinned to the workdir too: a case that installs a
+        # pack must never write into the developer's real vault.
+        skills_dir = workdir / "skills"
+        skills_dir.mkdir(parents=True, exist_ok=True)
+        patches.setenv("OPS_SKILLS_DIR", str(skills_dir))
         for name in _ENV_CLEAR:
             patches.setenv(name, None)
         patches.setattr(brain, "_PROVIDER_LAST_FAILURE", {})
@@ -337,6 +342,9 @@ def _run_target(suite: Suite, case: Case, provider_factory: Callable[[Suite, Cas
                          source=case.params.get("source"), fuzzy=bool(case.params.get("fuzzy", False)))
         return _checks.Outcome(results=[dict(r) for r in rows]), None
 
+    if suite.target == "agent.ask":
+        return _run_agent_ask(suite, case, provider_factory, patches)
+
     provider = (provider_factory(suite, case) if provider_factory
                 else _cassette.CassetteProvider(cassette_path(suite, case)))
     orig = brain.resolve_provider
@@ -354,6 +362,63 @@ def _run_target(suite: Suite, case: Case, provider_factory: Callable[[Suite, Cas
         answer=ans.answer, citations=list(ans.citations), prompt=prompt,
         memory_proposals=list(ans.memory_proposals), usage=dict(getattr(provider, "last_usage", None) or {}),
     ), provider
+
+
+def _run_agent_ask(suite: Suite, case: Case, provider_factory: Callable[[Suite, Case], Any] | None,
+                   patches: _Patches | None = None) -> tuple[_checks.Outcome, Any]:
+    """Answer as a Boardroom agent that carries a skill pack.
+
+    The case names a role and a skill. The agent is created with that role, the
+    role's pack is installed for it, and the question is asked through the
+    agent's own prompt path. So what the checks read is the prompt the agent
+    really answered from — the skill's text in it, or its absence.
+    """
+    from .. import db, team_chat
+    from ..skills import packs
+
+    role = str(case.params.get("role") or "").strip()
+    skill = str(case.params.get("skill") or "").strip()
+
+    with db.db() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO teams (key, name, type, created_at, updated_at) "
+            "VALUES ('eval', 'Eval', 'mixed', 0, 0)")
+        cur = conn.execute(
+            "INSERT INTO team_members (team_id, name, type, role, status, capabilities, notes, "
+            "level, is_ceo, created_at, updated_at) "
+            "VALUES (1, ?, 'ai_agent', ?, 'active', '{}', ?, 'ceo', 1, 0, 0)", (role, role, role))
+        agent_id = int(cur.lastrowid or 0)
+
+    if skill:
+        # The skill has to exist as a FILE for the agent to run it: a binding
+        # without the file behind it is the silent no-op this whole feature
+        # exists to prevent. So install the role's pack for real (the copy
+        # lands in the vault the eval is using) and then bind the case's skill.
+        try:
+            packs.install_pack_for_role(role, agent_id=agent_id)
+        except Exception:
+            pass
+        with db.db() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO agent_skills (agent_id, skill_key, enabled, created_at) "
+                "VALUES (?, ?, 1, ?)", (agent_id, skill, int(time.time())))
+
+    agent = {"key": f"m:{agent_id}", "id": agent_id, "name": role, "role": role,
+             "title": role.upper(), "skills": "", "description": "", "lead": False}
+    system = team_chat.agent_system(agent, "(no matches)", "", task=case.prompt)
+
+    provider = (provider_factory(suite, case) if provider_factory
+                else _cassette.CassetteProvider(cassette_path(suite, case)))
+    answer = ""
+    try:
+        for chunk in provider.stream(system, [{"role": "user", "content": case.prompt}]):
+            answer += chunk or ""
+    except Exception:
+        answer = ""
+    calls = getattr(provider, "calls", [])
+    if calls and not answer:
+        answer = calls[-1].get("response", "") or ""
+    return _checks.Outcome(answer=answer, prompt=system, citations=[]), provider
 
 
 def run_case(suite: Suite, case: Case, *, guard: Any = None,
