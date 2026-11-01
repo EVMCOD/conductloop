@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -154,6 +155,25 @@ def _run(env, prov):
     out = SessionRunner(store, env["sid"], provider_factory=lambda s: prov).run_task(
         store.claim_task(env["sid"]))
     return out
+
+
+def test_the_trust_ui_says_what_trusting_a_repo_gives():
+    """Trusting a repo is not only about the repo's skills.
+
+    It now also hands the agent the user's connected apps, so the page that
+    asks for the trust has to say so. A checkbox that quietly gives away a
+    Gmail account is a surprise, and the user is the one who has to be
+    informed before they tick it.
+    """
+    web = Path(__file__).resolve().parent.parent / "ops_dashboard" / "web"
+    js = (web / "learning.js").read_text(encoding="utf-8")
+    html = (web / "learning.html").read_text(encoding="utf-8")
+    for src in (js, html):
+        low = src.lower()
+        assert "app" in low, "the trust text never mentions the connected apps"
+        assert "gmail" in low or "github" in low, (
+            "the trust text does not name a single app, so the user cannot "
+            "tell what they are handing over")
 
 
 def test_the_agent_is_told_which_apps_it_can_reach(env):
