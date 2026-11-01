@@ -13,16 +13,32 @@ ci.yml or the mypy ratchet).
 from __future__ import annotations
 
 import importlib
-import pkgutil
 
 _SKIP = {"base"}
+
+# The modules are named here on purpose. A frozen build does not ship the
+# package as files: its modules live inside the PYZ archive, so walking the
+# folder finds nothing there. These connectors used to register themselves by
+# walking it, and in the frozen app the walk came back empty — no connector
+# registered itself, the page showed zero connectors, and nothing raised.
+#
+# A test walks the folder and fails when this list and the folder drift
+# apart, so a connector added later is not forgotten here.
+_MODULES = (
+    "github",
+    "linear",
+    "notion",
+    "readwise",
+    "rss",
+    "todoist",
+)
 
 
 def load_all() -> list[str]:
     loaded = []
-    for m in pkgutil.iter_modules(__path__):
-        if m.name.startswith("_") or m.name in _SKIP:
+    for name in _MODULES:
+        if name in _SKIP:
             continue
-        importlib.import_module(f"{__name__}.{m.name}")
-        loaded.append(m.name)
+        importlib.import_module(f"{__name__}.{name}")
+        loaded.append(name)
     return loaded

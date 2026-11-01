@@ -16,8 +16,33 @@ from PyInstaller.utils.hooks import (  # noqa: F821
 
 ROOT = Path(SPECPATH).parent  # repo root (spec lives in desktop/)  # noqa: F821
 
+# PyInstaller runs this spec with SPECPATH (desktop/) at the front of
+# sys.path — NOT the repo root. So `import ops_dashboard` fails here, and
+# collect_all/collect_submodules find NOTHING: they return empty lists
+# without raising. The build succeeds, the app ships, and every module that
+# is only reached by a string import is missing from the frozen binary.
+#
+# That is how the connectors disappeared: they register themselves by
+# importing their own module by name, and those modules were never in the
+# bundle. The installed app had zero connectors and said nothing about it.
+sys.path.insert(0, str(ROOT))
+
 # Collect the whole app package (string-imported submodules aren't traced).
 pkg_datas, pkg_binaries, pkg_hidden = collect_all("ops_dashboard")
+
+# A guard, not a hope: if the package cannot be found from here, the build
+# must fail. Shipping a binary that silently lost a feature is worse than
+# not shipping.
+_pkg_submodules = collect_submodules("ops_dashboard")
+assert _pkg_submodules, (
+    "collect_submodules('ops_dashboard') found nothing — is the repo root on "
+    "sys.path? A frozen build without these modules loses every feature that "
+    "is only reached by a string import."
+)
+assert any(m.startswith("ops_dashboard.connectors_native.") for m in _pkg_submodules), (
+    "the connector modules are not in the bundle's hidden imports: the "
+    "installed app would have zero connectors."
+)
 
 # The web UI (html/js/json/i18n) is plain-file data — make sure it's bundled at
 # ops_dashboard/web so STATIC_DIR = Path(__file__).parent/"web" resolves.
@@ -35,7 +60,7 @@ datas = pkg_datas + [
 
 hidden = (
     pkg_hidden
-    + collect_submodules("ops_dashboard")
+    + _pkg_submodules
     + ["typer", "rich", "httpx", "segno", "sqlite3"]
 )
 
