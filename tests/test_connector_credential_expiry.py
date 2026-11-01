@@ -114,23 +114,38 @@ def test_a_fresh_credential_is_not_flagged(env):
     assert state["days_left"] is not None and state["days_left"] > 1, state
 
 
-def test_the_warning_uses_the_credential_record_not_the_connection_date(env):
-    """An OAuth credential carries its own expiry. That is the truth; the
-    connection date is a guess."""
+def test_the_access_token_expiry_is_not_the_connection_expiry(env):
+    """The access token expires in an hour and is renewed automatically.
+
+    Its expiry says nothing about the connection: reporting it would show
+    "expires in 0 days" on a connection made a minute ago, and would tell
+    the user to reconnect a connection that works. What the card shows is
+    the lifetime of the refresh credential, which is the thing that can
+    stop being renewed.
+    """
     registry.register(_spec(lifetime_days=30))
-    # The credential record says two days; the connection date would say 30
-    # (the declared lifetime). The record is the truth.
-    expires = int(time.time()) + 2 * 86400
-    tokens.save_token("gh", {"access_token": "tok", "auth_method": "oauth",
-                             "expires_at": expires})
     store.upsert_account("gh", status="connected", permission="read",
                          granted_scopes=[], account_label=None, client_id=None,
                          last_error=None, connected_at=int(time.time()))
+    tokens.save_token("gh", {"access_token": "tok", "auth_method": "oauth",
+                             "expires_at": int(time.time()) + 3600})
     state = oauth.credential_state("gh")
-    assert state["days_left"] is not None and state["days_left"] <= 2, state
+    # Not zero, and not the one hour of the access token.
+    assert state["days_left"] is not None and state["days_left"] >= 29, state
+    assert state["expiring_soon"] is False, state
+
+
+def test_a_connection_about_to_lose_its_refresh_credential_is_flagged(env):
+    """The refresh credential's own lifetime is what runs out."""
+    registry.register(_spec(lifetime_days=30))
+    store.upsert_account("gh", status="connected", permission="read",
+                         granted_scopes=[], account_label=None, client_id=None,
+                         last_error=None,
+                         connected_at=int(time.time()) - 29 * 86400)
+    tokens.save_token("gh", {"access_token": "tok", "auth_method": "oauth"})
+    state = oauth.credential_state("gh")
+    assert state["days_left"] is not None and state["days_left"] <= 1, state
     assert state["expiring_soon"] is True, state
-    # The declared lifetime did not win over the record.
-    assert state["expires_at"] == expires, state
 
 
 def test_a_credential_without_an_expiry_record_is_not_flagged(env):

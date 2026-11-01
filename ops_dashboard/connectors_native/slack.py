@@ -277,7 +277,8 @@ _SCHEMA_SLACK = {
         "type": "object",
         "properties": {
             "days": {"type": "integer", "description": "How many days back to import (1-30, default 3)."},
-            "channel_ids": {"type": "string", "description": "Which channels to import. Empty means all of them."},
+            "channel_ids": {"type": "array", "items": {"type": "string"},
+                            "description": "Which channels to import, by id or name. Empty means all of them."},
         },
         "required": [],
     },

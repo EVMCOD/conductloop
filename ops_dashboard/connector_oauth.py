@@ -443,9 +443,11 @@ def credential_expiry(connector_id: str, *, now: float | None = None) -> int | N
         if rec.get("auth_method") == "token":
             # A personal token: no expiry until the user revokes it.
             return None
-        exp = rec.get("expires_at")
-        if exp:
-            return int(exp)
+        # NOTE: ``expires_at`` here is the ACCESS TOKEN's expiry — an hour,
+        # renewed automatically by ``access_token()``. It says nothing about
+        # the connection: reporting it would tell the user to reconnect a
+        # connection that works. What can stop working is the REFRESH
+        # credential, and how long it lasts is the provider's rule.
 
     days = int(spec.credential_lifetime_days or 0)
     if not days:

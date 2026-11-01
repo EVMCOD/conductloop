@@ -468,8 +468,8 @@ _SCHEMA_MS = {
         "type": "object",
         "properties": {
             "title": {"type": "string", "description": "Event title (up to 300 characters)."},
-            "start": {"type": "string", "description": "Start time, e.g. '2026-11-03 10:00'."},
-            "end": {"type": "string", "description": "End time, e.g. '2026-11-03 11:00'."},
+            "start": {"type": "string", "description": "Start: RFC 3339 with a UTC offset, e.g. '2026-11-03T10:00:00+01:00', or a date '2026-11-03' for all day."},
+            "end": {"type": "string", "description": "End: RFC 3339 with a UTC offset, e.g. '2026-11-03T11:00:00+01:00', or a date '2026-11-03' for all day."},
             "description": {"type": "string", "description": "Event description."},
             "location": {"type": "string", "description": "Where the event happens."},
         },
