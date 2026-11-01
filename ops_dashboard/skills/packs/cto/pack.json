@@ -4,8 +4,10 @@
   "role": "cto",
   "description": "Code review, build-versus-buy, and technical debt triage for a solo founder shipping across many small products. Concrete thresholds, blast radius, and reversible decisions.",
   "skills": [
-    "code-review-rigor",
+    "api-versioning",
     "build-vs-buy-decision",
+    "code-review-rigor",
+    "database-schema-designer",
     "technical-debt-triage"
   ]
 }

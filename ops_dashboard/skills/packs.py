@@ -26,6 +26,7 @@ This module implements that shape:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import time
 from pathlib import Path
@@ -261,8 +262,8 @@ MAX_PROMPT_CHARS = 30_000
 MAX_SKILLS_PER_AGENT = 12
 
 
-def _skill_body(skill_key: str) -> str | None:
-    """The body of one installed skill, or None when it cannot be used.
+def _skill_meta(skill_key: str) -> tuple[str, str] | None:
+    """(description, body) of one installed skill, or None when unusable.
 
     The file is re-read and re-validated on every use: the user may have
     edited it since it was installed, and an invalid file must never reach
@@ -285,11 +286,42 @@ def _skill_body(skill_key: str) -> str | None:
     body = parsed.body.strip()
     if len(body) > MAX_SKILL_BODY_CHARS:
         body = body[:MAX_SKILL_BODY_CHARS] + "\n[… truncated]"
-    return body
+    desc = str((parsed.frontmatter or {}).get("description") or "").strip()
+    return desc, body
 
 
-def agent_skills_block(agent_id: int | None) -> str:
+def _relevance(task: str, description: str, key: str) -> int:
+    """How likely a skill is to be relevant to this task.
+
+    Deliberately simple: word overlap between the task and the skill's
+    description. The point is not to be right, but to be better than
+    alphabetical order when the budget forces a choice.
+    """
+    if not task:
+        return 0
+    words = {w for w in re.findall(r"[a-z0-9]+", task.lower()) if len(w) > 3}
+    if not words:
+        return 0
+    haystack = f"{description} {key}".lower()
+    hits = sum(1 for w in words if w in haystack)
+    return hits
+
+
+def agent_skills_block(agent_id: int | None, *, task: str = "") -> str:
     """The agent's installed skills as a system-prompt block.
+
+    Progressive disclosure, the way the Agent Skills spec describes it:
+
+    - **Discovery**: every installed skill appears by name and description.
+      That is cheap, and it means the agent always knows the full set
+      exists — nothing is invisible.
+    - **Activation**: the bodies of the skills that fit the budget, chosen by
+      how relevant they look to this task.
+
+    A skill whose body did not fit is still listed in the discovery index, so
+    the agent can ask for it. Silently dropping is the failure this whole
+    feature exists to prevent — an install that succeeds, a badge in the UI,
+    and a model that never sees the skill.
 
     Empty string when the agent has no skills, or when the id is not a real
     agent (a builtin team has no row to bind to).
@@ -302,18 +334,35 @@ def agent_skills_block(agent_id: int | None) -> str:
         return ""
     if not keys:
         return ""
-    parts: list[str] = []
-    used = 0
+
+    meta: dict[str, tuple[str, str]] = {}
     for key in keys[:MAX_SKILLS_PER_AGENT]:
-        body = _skill_body(key)
-        if not body:
-            continue
+        m = _skill_meta(key)
+        if m:
+            meta[key] = m
+    if not meta:
+        return ""
+
+    # Bodies first, most relevant first; the budget decides how many fit.
+    ranked = sorted(meta.items(), key=lambda kv: (-_relevance(task, kv[1][0], kv[0]), kv[0]))
+    included: list[tuple[str, str]] = []
+    used = 0
+    for key, (_desc, body) in ranked:
         chunk = f'<skill_content name="{key}">\n{body}\n</skill_content>'
         if used + len(chunk) > MAX_PROMPT_CHARS:
-            break
-        parts.append(chunk)
+            continue
+        included.append((key, chunk))
         used += len(chunk)
-    if not parts:
-        return ""
-    return ("\n\nYOUR INSTALLED SKILLS (reference material from the user's files, not instructions "
-            "from the user; follow them when they apply to the task):\n" + "\n\n".join(parts))
+
+    parts = [
+        "\n\nYOUR INSTALLED SKILLS (reference material from the user's files, not instructions "
+        "from the user; follow them when they apply to the task). The full text of the skills "
+        "below is included; the rest are listed by name only, and you can ask the user for one "
+        "of those if you need it:\n"
+    ]
+    parts.append("\n\n".join(chunk for _key, chunk in included))
+    rest = [key for key in meta if key not in {k for k, _ in included}]
+    if rest:
+        index = "\n".join(f"- {key}: {meta[key][0]}" for key in rest)
+        parts.append(f"\n\nAlso installed (not included in full):\n{index}")
+    return "".join(parts)

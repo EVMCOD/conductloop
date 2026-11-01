@@ -216,7 +216,7 @@ def append_ceo_message(member_id: int, user_id: int | None, role: str, content: 
 # the UI flow works without a BYOK key.
 
 
-def _skills_block(member_id: int) -> str:
+def _skills_block(member_id: int, task: str = "") -> str:
     """The skills installed for this CEO (L7), as a prompt block.
 
     '' when the CEO has none. A broken skill is skipped rather than allowed
@@ -224,7 +224,7 @@ def _skills_block(member_id: int) -> str:
     """
     try:
         from .skills import packs
-        return packs.agent_skills_block(member_id)
+        return packs.agent_skills_block(member_id, task=task)
     except Exception:
         return ""
 
@@ -264,6 +264,18 @@ def _peer_answers(member_id: int, project: str | None) -> list[tuple[str, str]]:
     return out
 
 
+def _latest_chairman_message(thread: list[dict]) -> str:
+    """The chairman's most recent message in this thread.
+
+    It is the task the CEO is answering, so it decides which of the CEO's
+    skills are worth their full text in the prompt.
+    """
+    for m in reversed(thread or []):
+        if m.get("role") == "chairman":
+            return (m.get("content") or "")[:2000]
+    return ""
+
+
 def _peers_block(member_id: int, project: str | None) -> str:
     """What the other CEOs on this project recently answered."""
     peers = _peer_answers(member_id, project)
@@ -292,7 +304,7 @@ def generate_ceo_reply(member_id: int, trigger_msg_id: int | None = None) -> dic
             + (f" Project: {project}." if project else "")
             + (f" Persona: {persona}" if persona else "")
             + f" Default autonomy tier: {tier}."
-            + _skills_block(member_id)
+            + _skills_block(member_id, _latest_chairman_message(thread))
             + "\n\nREPLY RULES (strict):\n"
             "1. Reply to the chairman's most recent message. Max 3 sentences.\n"
             "2. NUMERIC METRICS are sacred. NEVER invent percentage, count, or dollar figures.\n"
