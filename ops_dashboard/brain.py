@@ -28,6 +28,7 @@ import re
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,6 +43,42 @@ log = logging.getLogger(__name__)
 # but generous — the user is actively waiting on brain chat. Env override:
 # BRAIN_LLM_TIMEOUT (seconds).
 LLM_TIMEOUT = float(os.environ.get("BRAIN_LLM_TIMEOUT", "90"))
+
+
+def ask_with_connector_tools(provider, system: str, messages: list[dict], *,
+                             on_tool_call: Callable[..., None] | None = None) -> tuple[str, bool]:
+    """Ask a provider, offering it the connected connectors' tools.
+
+    Returns ``(answer, used_tools)``. When the provider cannot do tool
+    calling, the question is asked the plain way and the answer is the same
+    one it always was — the tools are an addition, never a requirement.
+
+    The system prompt gains the block that says what the agent can reach and
+    that what comes back is data. A tool the prompt never mentions is a tool
+    the model does not reach for.
+    """
+    from . import tools as brain_tools
+    try:
+        supported = bool(provider.supports_tools())
+    except Exception:
+        supported = False
+    if not supported:
+        return provider.ask(system, messages), False
+
+    prov_tools = (brain_tools.tools_for_anthropic() if provider.name == "anthropic"
+                  else brain_tools.tools_for_openai())
+    connector_tools = [t for t in prov_tools
+                       if t.get("function", {}).get("name", "").startswith("connector_")]
+    if not connector_tools:
+        # Nothing connected: do not pay for an empty tool list.
+        return provider.ask(system, messages), False
+
+    from .connector_tools import prompt_block
+    block = prompt_block()
+    if block:
+        system = system + block
+    answer = provider.ask_with_tools(system, messages, prov_tools, on_tool_call=on_tool_call)
+    return answer, True
 
 
 def ask_with_deadline(provider, system: str, messages: list[dict],
@@ -1878,6 +1915,10 @@ def ask(question: str, *, conversation_id: int | None = None,
         prov_tools = brain_tools.tools_for_anthropic() if provider.name == "anthropic" else brain_tools.tools_for_openai()
         # L5: catalog of enabled skills (name + description); empty when none.
         system += skills_catalog.catalog_prompt()
+        # L8: the connected apps, so the model knows what it can reach and
+        # that what comes back is data rather than instructions.
+        from .connector_tools import prompt_block as _connector_prompt
+        system += _connector_prompt()
         # Capture on_tool_call for system-prompt-level tool log
         tool_log: list[dict] = []
         def _on_call(name, args, result):

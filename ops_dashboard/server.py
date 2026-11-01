@@ -2630,8 +2630,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
             def on_call(name, args, result):
                 tool_log.append({"name": name, "args": args, "ok": result.get("ok", False)})
             prov_tools = brain_tools.tools_for_anthropic() if provider.name == "anthropic" else brain_tools.tools_for_openai()
+            # The tools are in the API call; the prompt is what tells the
+            # model what they are and when a question needs one.
+            from .connector_tools import prompt_block as _connector_prompt
             try:
-                answer = provider.ask_with_tools(system, messages, prov_tools, on_tool_call=on_call)
+                answer = provider.ask_with_tools(
+                    system + _connector_prompt(), messages, prov_tools, on_tool_call=on_call)
             except Exception as e:
                 perr = brain._translate_provider_error(e, provider.name)
                 self._send(perr.status or 502, _json({

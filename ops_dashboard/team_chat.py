@@ -462,6 +462,30 @@ class ChatTurn:
         yield {"type": "done", "thread_id": self.thread_id}
 
     def _stream_answer(self, system: str, messages: list[dict]) -> Iterator[dict]:
+        """Answer, streaming the text as it arrives.
+
+        With a connector connected the agent may need to look something up
+        first, and a tool round trip is not streamable: the answer arrives in
+        one piece. That is the trade — the tools are worth a round trip, and
+        the common case (no connector connected) keeps streaming exactly as
+        before.
+        """
+        from . import connector_tools as ct
+
+        if ct.available_tools():
+            try:
+                answer, _used = brain.ask_with_connector_tools(
+                    self.provider, system, messages)
+            except Exception as e:
+                err = brain._translate_provider_error(e, self.provider.name)
+                yield {"type": "error", "code": err.code, "message": err.message}
+                return
+            answer = (answer or "").strip()
+            if answer:
+                yield {"type": "delta", "content": answer}
+                _save(self.thread_id, "assistant", answer, self.provider.name)
+            return
+
         parts: list[str] = []
         try:
             for chunk in self.provider.stream(system, messages):
