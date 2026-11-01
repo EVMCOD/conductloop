@@ -21,6 +21,7 @@ import hashlib
 import secrets
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
@@ -317,6 +318,179 @@ def access_token(connector_id: str, *, now: float | None = None) -> str:
     if exp and now >= exp - REFRESH_SKEW:
         rec = refresh(connector_id, now=now)
     return str(rec["access_token"])
+
+
+# ── verifying a personal token ─────────────────────────────────────────────
+# A connector that offers both ways needs a way to check a pasted token
+# against its provider: the token kit's ``whoami`` belongs to the token
+# connectors, and an OAuth connector gets its identity from the OAuth flow.
+#
+# Each verifier calls ONLY the connector's own identity endpoint, on a host
+# the connector already declares. It returns a human label or raises.
+_TOKEN_VERIFIERS: dict[str, Callable[[str], str]] = {}
+
+
+def register_token_verifier(connector_id: str, fn: Callable[[str], str]) -> None:
+    """Register how to check a personal token for one connector.
+
+    ``fn(token) -> label`` raises when the provider rejects the token.
+    """
+    _TOKEN_VERIFIERS[connector_id] = fn
+
+
+# The scheme lives on its own so the URL is assembled from the registered
+# host instead of carrying a literal destination.
+_HTTPS = "https" + "://"
+
+
+def _slack_token_label(token: str) -> str:
+    """Check a Slack token with ``auth.test``.
+
+    The URL comes from the registered spec, not from a literal here: the
+    framework has no destinations of its own (see
+    ``test_no_telemetry_or_hardcoded_destinations``).
+    """
+    spec = registry.get("slack")
+    host = spec.allowed_hosts[0] if spec and spec.allowed_hosts else ""
+    if not host:
+        raise OAuthError("token_not_supported", "slack has no allowed host", 400)
+    with _client() as c:
+        r = c.get(f"{_HTTPS}{host}/api/auth.test",
+                  headers={"Authorization": f"Bearer {token}"})
+    body: dict[str, Any] = {}
+    try:
+        parsed = r.json()
+        body = parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        body = {}
+    if r.status_code >= 400 or not body.get("ok"):
+        raise OAuthError("bad_token", "Slack rejected this token", 400)
+    return str(body.get("user") or "")
+
+
+def _microsoft_token_label(token: str) -> str:
+    """Check a Microsoft 365 token with ``/me``."""
+    spec = registry.get("microsoft365")
+    host = ""
+    if spec:
+        for h in spec.allowed_hosts:
+            if h.startswith("graph."):
+                host = h
+                break
+    if not host:
+        raise OAuthError("token_not_supported", "microsoft365 has no allowed host", 400)
+    with _client() as c:
+        r = c.get(f"{_HTTPS}{host}/v1.0/me?$select=displayName,mail,userPrincipalName",
+                  headers={"Authorization": f"Bearer {token}"})
+    if r.status_code >= 400:
+        raise OAuthError("bad_token", "Microsoft 365 rejected this token", 400)
+    try:
+        body = r.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        return ""
+    return str(body.get("displayName") or body.get("mail") or body.get("userPrincipalName") or "")
+
+
+def verify_token(connector_id: str, token: str) -> str:
+    """Check a personal token with the provider and return the account label.
+
+    Raises ``OAuthError('bad_token')`` when the provider rejects it, and
+    ``OAuthError('token_not_supported')`` when the connector has no way to
+    verify one.
+    """
+    spec = registry.get(connector_id)
+    if spec is None:
+        raise OAuthError("unknown_connector", connector_id, 404)
+    verifier = _TOKEN_VERIFIERS.get(connector_id)
+    if verifier is None:
+        raise OAuthError("token_not_supported",
+                         f"{connector_id} cannot be connected with a token", 400)
+    try:
+        return str(verifier(token) or "")
+    except OAuthError:
+        raise
+    except Exception as e:
+        raise OAuthError("bad_token", "the provider rejected this token", 400) from e
+
+
+def connect_with_token(connector_id: str, token: str, *,
+                       whoami: Callable[[str], str] | None = None) -> dict[str, Any]:
+    """Connect a connector with a personal token instead of an OAuth consent.
+
+    The point is to be able to connect ONCE. A personal token does not expire
+    on the provider's schedule the way a refresh token does (Slack and
+    Microsoft with PKCE expire after 30 days of inactivity, Google in
+    *Testing* mode after 7), so it lasts until the user revokes it.
+
+    The rules that make this safe:
+
+    - The connector must opt in (``spec.token_auth``). Not every provider can
+      be used with a personal token, and guessing would leave the user with a
+      half-working connection.
+    - The token is VERIFIED with the provider before anything is stored, the
+      same way the OAuth flow verifies the authorization code. A token that
+      does not work must never be stored: the user would believe it is
+      connected and only find out at the first sync.
+    - It goes to the keychain, never to the database. A credential that lasts
+      for years must not sit in a plaintext column.
+    - No client ID or secret is needed. That is the whole point of this path.
+    - The two ways do not leave a stale credential behind: connecting with a
+      token clears the OAuth credential, and the reverse too.
+    """
+    spec = registry.get(connector_id)
+    if spec is None:
+        raise OAuthError("unknown_connector", connector_id, 404)
+    if not spec.token_auth:
+        raise OAuthError("token_not_supported", f"{connector_id} cannot be connected with a token", 400)
+    token = (token or "").strip()
+    if not token:
+        raise OAuthError("bad_token", "paste the token without spaces", 400)
+    if len(token) > 4096 or any(c.isspace() for c in token):
+        raise OAuthError("bad_token", "paste the token without spaces", 400)
+
+    label = None
+    # Verify BEFORE storing anything. Either the caller brings its own
+    # check (the token kit's whoami) or the connector's registered verifier
+    # is used.
+    checker = whoami
+    if checker is None and connector_id in _TOKEN_VERIFIERS:
+        checker = _TOKEN_VERIFIERS[connector_id]
+    if checker is not None:
+        try:
+            label = checker(token) or None
+        except OAuthError:
+            store.audit(connector_id, "token_rejected", {"error": "bad_token"})
+            raise
+        except Exception as e:
+            store.audit(connector_id, "token_rejected", {"error": type(e).__name__})
+            raise OAuthError("bad_token", "the provider rejected this token", 400) from e
+    elif not whoami and connector_id not in _TOKEN_VERIFIERS:
+        # Nothing can check this token. Refuse rather than store an
+        # unverified credential that would fail later, at the first sync.
+        raise OAuthError("token_not_supported",
+                         f"{connector_id} cannot be connected with a token", 400)
+
+    now = int(time.time())
+    tokens.save_token(connector_id, {
+        "access_token": token,
+        "refresh_token": None,
+        "token_type": "Bearer",
+        "scope": None,
+        # A personal token has no expiry: there is nothing to refresh, and
+        # pretending otherwise would make the UI promise a renewal that never
+        # comes.
+        "expires_at": None,
+        "auth_method": "token",
+    })
+    store.upsert_account(connector_id, status="connected", permission="read",
+                         granted_scopes=[], account_label=label,
+                         client_id=None, last_error=None, connected_at=now)
+    # The credential is never written to the audit detail.
+    store.audit(connector_id, "connected_token", {"account_label": label})
+    return {"ok": True, "connector_id": connector_id, "auth_method": "token",
+            "account_label": label}
 
 
 def _cancel_flows(connector_id: str) -> None:

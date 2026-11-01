@@ -19,6 +19,8 @@ _SENSITIVE_KEY = re.compile(r"token|secret|password|passwd|verifier|authorizatio
 _MAX_STR = 300
 AUDIT_EVENTS = (
     "client_saved", "client_cleared", "connect_started", "connected", "connect_failed",
+    # Connecting with a personal token instead of an OAuth consent.
+    "connected_token", "token_rejected",
     "disconnected", "disconnect_failed", "permission_changed", "token_refreshed", "refresh_failed",
     "read", "read_failed", "write_requested", "write_confirmed", "write_rejected",
     "write_expired", "write_done", "write_failed", "write_blocked",

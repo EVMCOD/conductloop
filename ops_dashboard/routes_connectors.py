@@ -198,6 +198,50 @@ def connector_connect(handler: Any, connector_id: str) -> None:
     _send_json(handler, 200, {"ok": True, **oauth.start(connector_id, permission)})
 
 
+@router.post("/api/connectors/<connector_id>/connect-token")
+@_guarded
+def connector_connect_token(handler: Any, connector_id: str) -> None:
+    """Connect with a personal token instead of an OAuth consent.
+
+    The path to "connect once": a personal token does not expire on the
+    provider's schedule, so the user does not have to come back and press
+    "Connect" every 30 days (Slack, Microsoft with PKCE) or every 7 (Google in
+    *Testing* mode).
+    """
+    spec = _spec(connector_id)
+    data = _body(handler)
+    token = str(data.get("token") or "").strip()
+    if not token:
+        raise actions.ActionError("bad_token", "paste the token without spaces", 400)
+    if len(token) > 4096 or any(c.isspace() for c in token):
+        raise actions.ActionError("bad_token", "paste the token without spaces", 400)
+    if not spec.token_auth:
+        raise actions.ActionError("token_not_supported",
+                                  f"{connector_id} cannot be connected with a token", 400)
+    # Verify with the provider BEFORE storing: a token that does not work
+    # must never be saved, or the user believes it is connected and only
+    # finds out at the first sync.
+    #
+    # Two ways to verify, and one of them is NOT optional:
+    #   - a connector in the token kit has its own ``whoami``;
+    #   - an OAuth connector has a registered token verifier.
+    # If neither exists the token is refused rather than stored unverified.
+    whoami = None
+    try:
+        from .connectors_token import base as token_base
+        nc = token_base.get(connector_id)
+    except Exception:
+        nc = None
+    if nc is not None:
+        def whoami(t: str) -> str:  # noqa: F811
+            return token_base.clean_text(nc.whoami(token_base.client_for(nc, t)), 200)
+    try:
+        out = oauth.connect_with_token(connector_id, token, whoami=whoami)
+    except oauth.OAuthError as e:
+        raise actions.ActionError(e.code, str(e), e.status) from e
+    _send_json(handler, 200, out)
+
+
 @router.get("/api/connectors/flows/<state>")
 @_guarded
 def connector_flow(handler: Any, state: str) -> None:
