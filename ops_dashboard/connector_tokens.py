@@ -134,12 +134,20 @@ def available() -> bool:
 def save_token(connector_id: str, token: dict, *, now: float | None = None) -> dict:
     """Persist the token response; returns the stored record (with expires_at)."""
     now = time.time() if now is None else now
+    expires_at = token.get("expires_at")
+    if expires_at is None and token.get("expires_in"):
+        expires_at = int(now + int(token["expires_in"]))
     rec = {
         "access_token": str(token.get("access_token") or ""),
         "refresh_token": token.get("refresh_token"),
         "token_type": token.get("token_type") or "Bearer",
         "scope": token.get("scope"),
-        "expires_at": int(now + int(token["expires_in"])) if token.get("expires_in") else None,
+        "expires_at": expires_at,
+        # How the credential was obtained: "oauth" or "token". The UI has to
+        # be able to tell a personal token from an OAuth consent, because
+        # they behave differently (one expires on the provider's schedule,
+        # the other does not).
+        "auth_method": str(token.get("auth_method") or "oauth"),
     }
     if not rec["access_token"]:
         raise ValueError("token response has no access_token")

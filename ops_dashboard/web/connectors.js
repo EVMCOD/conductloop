@@ -33,6 +33,11 @@
       client_id: 'Client ID de tu app OAuth (BYOK)', client_secret: 'Client secret (este proveedor lo exige)',
       save: 'Guardar', clear: 'Quitar',
       connect_read: 'Conectar (solo lectura)', connect_write: 'Conectar con escritura',
+      token_connect: 'Usar un token personal',
+      token_label: 'Token personal',
+      token_hint: 'Con un token personal conectas una vez y no hay que reconectar: el token no caduca según el proveedor.',
+      token_advantage: 'No caduca por el proveedor: conectas una vez.',
+      token_saved: 'Conectado con token personal.',
       disconnect: 'Desconectar', make_read: 'Pasar a solo lectura',
       open_consent: 'Abrir la página de autorización', waiting: 'Esperando la autorización en el navegador…',
       connected_ok: 'Conectado.', flow_failed: 'No se pudo conectar: {0}',
@@ -74,6 +79,11 @@
       client_id: 'Client ID of your OAuth app (BYOK)', client_secret: 'Client secret (required by this provider)',
       save: 'Save', clear: 'Remove',
       connect_read: 'Connect (read-only)', connect_write: 'Connect with write',
+      token_connect: 'Use a personal token',
+      token_label: 'Personal token',
+      token_hint: 'With a personal token you connect once and do not reconnect: the token does not expire on the provider\u2019s schedule.',
+      token_advantage: 'It does not expire on the provider\u2019s schedule: connect once.',
+      token_saved: 'Connected with a personal token.',
       disconnect: 'Disconnect', make_read: 'Make read-only',
       open_consent: 'Open the authorization page', waiting: 'Waiting for authorization in the browser…',
       connected_ok: 'Connected.', flow_failed: 'Could not connect: {0}',
@@ -178,6 +188,40 @@
     }).catch(function (e) { showError(e.message); });
   }
 
+  function startTokenConnect(c, statusNode) {
+    // The user pastes a personal token. It is verified with the provider
+    // before it is stored, and it goes to the keychain — never to the page
+    // and never to the database.
+    showError('');
+    var box = el('div', 'row');
+    var lab = el('label', 'hint', t('token_label'));
+    var inp = el('input');
+    inp.type = 'password';
+    inp.autocomplete = 'off';
+    inp.setAttribute('aria-label', t('token_label'));
+    inp.setAttribute('data-testid', 'token-input');
+    lab.appendChild(document.createElement('br'));
+    lab.appendChild(inp);
+    box.appendChild(lab);
+    var adv = el('div', 'hint', t('token_advantage'));
+    adv.setAttribute('data-testid', 'token-hint');
+    box.appendChild(adv);
+    box.appendChild(button(t('token_connect'), 'ghost small', function () {
+      var token = inp.value.trim();
+      if (!token) { showError(t('token_label')); return; }
+      api('/api/connectors/' + encodeURIComponent(c.id) + '/connect-token', { token: token })
+        .then(function () {
+          // The value is dropped as soon as it is sent.
+          inp.value = '';
+          clear(statusNode);
+          statusNode.textContent = t('token_saved');
+          load();
+        })
+        .catch(function (e) { inp.value = ''; showError(e.message); });
+    }));
+    return box;
+  }
+
   function renderConnector(c) {
     if (c.auth === 'token' && window.CLToken) return window.CLToken.render(c, { el: el, button: button, api: api, t: t, load: load, showError: showError, clear: clear, scopeList: scopeList, ES: ES });
     var card = el('div', 'conn');
@@ -235,6 +279,18 @@
         var b2 = button(t('connect_write'), 'ghost small', function () { startConnect(c, 'write', statusNode); });
         b2.disabled = !c.client_id_set;
         actions.appendChild(b2);
+      }
+      if (c.token_auth) {
+        // The personal token is offered next to the OAuth flow. It is NOT
+        // disabled by the missing client ID: a personal token needs no OAuth
+        // app, and requiring one would defeat the point.
+        var bt = button(t('token_connect'), 'ghost small', function () {
+          var tokenBox = startTokenConnect(c, statusNode);
+          clear(statusNode);
+          statusNode.appendChild(tokenBox);
+        });
+        bt.setAttribute('data-testid', 'token-connect');
+        actions.appendChild(bt);
       }
     } else {
       if (c.permission === 'write') {

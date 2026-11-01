@@ -5602,6 +5602,15 @@ def _default(
     host = _resolve_bind(host, port)
     db.init_db()
     live_urls.ensure_schema()
+    # Move connector credentials out of the connections table and into the
+    # keychain. A credential that lasts for years must not live in a
+    # database column. Best-effort: without a keychain nothing moves and
+    # the connectors keep working as they did.
+    try:
+        from .connectors_token import base as _token_base
+        _token_base.migrate_plaintext_credentials()
+    except Exception:
+        pass
     # ── Demo mode: load fixture data when CONDUCTLOOP_DEMO=1 ────────────
     if os.environ.get("CONDUCTLOOP_DEMO") == "1":
         from .indexers import demo as _demo_mod

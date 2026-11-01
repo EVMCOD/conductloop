@@ -422,6 +422,9 @@ def delete_event(client: Any, payload: dict[str, Any]) -> dict[str, Any]:
 
 SPEC = registry.register(registry.ConnectorSpec(
     id=ID, name="Microsoft 365 (Outlook)", auth="oauth_pkce",
+    # A personal token does not expire on Microsoft's schedule, so the user
+    # can connect once instead of every 30 days.
+    token_auth=True,
     allowed_hosts=("login.microsoftonline.com", "graph.microsoft.com"),
     authorize_url=f"{AUTH}/authorize", token_url=f"{AUTH}/token", revoke_url="",
     read_scopes=READ_SCOPES, write_scopes=WRITE_SCOPES, client_secret_required=False,

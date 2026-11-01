@@ -125,11 +125,20 @@ _NATIVE: dict[str, TokenConnector] = {}
 def register_connector(nc: TokenConnector) -> TokenConnector:
     if nc.token_mode not in TOKEN_MODES:
         raise registry.RegistryError(f"{nc.id}: bad token_mode {nc.token_mode!r}")
-    if nc.spec.auth != "token":
+    if nc.spec.auth != "token" and not nc.spec.token_auth:
+        # A connector may offer BOTH: the OAuth flow and a personal token.
+        # In that case the spec keeps auth='oauth_pkce' (the flow it also
+        # supports) and declares token_auth=True.
         raise registry.RegistryError(f"{nc.id}: token connectors use auth='token'")
     if nc.token_mode == "connections" and not nc.connections_provider:
         raise registry.RegistryError(f"{nc.id}: connections_provider is required")
-    if registry.get(nc.id) is not nc.spec:
+    existing = registry.get(nc.id)
+    if existing is not None and existing is not nc.spec:
+        # The connector is already registered (it offers both ways). Keep the
+        # registration that is there: the OAuth spec is the richer one.
+        if not (existing.token_auth and nc.spec.token_auth):
+            raise registry.RegistryError(f"{nc.id}: already registered")
+    elif existing is None:
         registry.register(nc.spec)
     _NATIVE[nc.id] = nc
     return nc
@@ -143,8 +152,50 @@ def unregister_connector(connector_id: str) -> None:
 def get(connector_id: str) -> TokenConnector:
     nc = _NATIVE.get(connector_id)
     if nc is None:
-        raise TokenError("unknown_connector", connector_id, 404)
+        # A connector that offers BOTH ways: it lives in the main registry
+        # (auth='oauth_pkce', token_auth=True) and not in the token kit.
+        # Build a token-kit view of it on the fly so the token route can
+        # reach it: same id, same keychain item, same account row.
+        spec = registry.get(connector_id)
+        if spec is not None and spec.token_auth:
+            nc = _dual_view(spec)
+            _NATIVE[connector_id] = nc
+        elif spec is not None:
+            # It exists, but it does not accept a personal token. Say so
+            # plainly: "unknown connector" would send the user looking for a
+            # connector that is right there on screen.
+            raise TokenError("token_not_supported",
+                             f"{connector_id} cannot be connected with a token", 400)
+        else:
+            raise TokenError("unknown_connector", connector_id, 404)
     return nc
+
+
+def _dual_view(spec: registry.ConnectorSpec) -> TokenConnector:
+    """A token-kit view of a connector that also supports OAuth.
+
+    The connector keeps its own module (the OAuth one); this view only
+    exists so the token route can reach the same account and the same
+    keychain item.
+    """
+    def _verify(token: str) -> str:
+        """Check the token with the provider.
+
+        A stub here would be worse than nothing: the route would take it as
+        a successful verification and store a credential the provider
+        rejects.
+        """
+        from .. import connector_oauth as oauth
+        return oauth.verify_token(spec.id, token)
+
+    return TokenConnector(
+        spec=registry.ConnectorSpec(
+            id=spec.id, name=spec.name, auth="token",
+            allowed_hosts=spec.allowed_hosts, token_auth=True),
+        token_mode="keychain",
+        whoami=lambda c: _verify(getattr(c, "_token", "") or ""),
+        sync=lambda c, cfg: [],
+    )
 
 
 def all_connectors() -> list[TokenConnector]:
@@ -310,12 +361,76 @@ def _connection_token(nc: TokenConnector, connection_id: int) -> str | None:
     return str(tok) if tok else None
 
 
+def migrate_plaintext_credentials() -> dict[str, Any]:
+    """Move credentials out of the ``connections`` table and into the keychain.
+
+    The ``connections`` table keeps its credentials as JSON in a TEXT column,
+    and the column says so in its own comment. That is acceptable debt for a
+    short-lived OAuth token. It is not acceptable for a personal token that
+    is valid for years and that the whole "connect once" promise rests on: a
+    database backup or a support bundle would carry a working credential.
+
+    So the credential moves to the OS keychain and the database keeps only
+    the fact that there is one.
+
+    Rules:
+
+    - The keychain wins. If the credential is already there, the database
+      copy is redundant and is cleared, but the keychain copy is untouched.
+    - Without a keychain, nothing is moved and nothing is cleared: the
+      connector keeps working the way it did.
+    - A credential that cannot be moved is left alone. A half-migration that
+      loses the token is worse than no migration.
+    """
+    moved: list[str] = []
+    skipped: list[str] = []
+    if not tokens.available():
+        return {"moved": moved, "skipped": skipped, "available": False}
+
+    from .. import db
+
+    for nc in list(_NATIVE.values()):
+        if nc.token_mode == "none":
+            continue
+        try:
+            cid = load_state(nc.id).get("connection_id")
+            if not cid:
+                # A keychain connector that never had a connection: nothing to
+                # move. (Its token, if any, is already in the keychain.)
+                continue
+            row = db.get_connection_by_id(int(cid))
+            if not row:
+                continue
+            creds = row.get("credentials") or {}
+            tok = creds.get(nc.connections_key) or creds.get("token") or creds.get("api_key")
+            if not tok:
+                continue
+            existing = tokens.load_token(nc.id)
+            if existing is None:
+                # Move it: the keychain becomes the source of truth.
+                tokens.save_token(nc.id, {"access_token": str(tok), "auth_method": "token"})
+            # The plaintext copy goes either way: it is now redundant.
+            new_creds = {k: v for k, v in creds.items()
+                         if k not in (nc.connections_key, "token", "api_key")}
+            db.update_connection(int(cid), credentials=new_creds)
+            moved.append(nc.id)
+        except Exception:
+            skipped.append(nc.id)
+            continue
+    return {"moved": moved, "skipped": skipped, "available": True}
+
+
 def token_for(nc: TokenConnector) -> str:
     if nc.token_mode == "none":
         return ""
+    # The keychain wins: a credential there was either stored by the token
+    # flow or migrated out of the connections table, and it is the source of
+    # truth either way.
+    rec = tokens.load_token(nc.id)
+    if rec and rec.get("access_token"):
+        return str(rec["access_token"])
     if nc.token_mode == "keychain":
-        rec = tokens.load_token(nc.id)
-        tok = rec.get("access_token") if rec else None
+        tok = None
     else:
         cid = load_state(nc.id).get("connection_id")
         tok = _connection_token(nc, cid) if cid else None
@@ -343,6 +458,9 @@ def connect(connector_id: str, *, token: str | None = None, connection_id: int |
     """Verify the credential with the provider (whoami) *before* storing
     anything, then mark the account connected with permission ``read``."""
     nc = get(connector_id)
+    if not nc.spec.token_auth and nc.spec.auth != "token":
+        raise TokenError("token_not_supported",
+                         f"{connector_id} cannot be connected with a token", 400)
     now = time.time() if now is None else now
     via: dict[str, Any] = {"via": nc.token_mode}
     if token is not None:

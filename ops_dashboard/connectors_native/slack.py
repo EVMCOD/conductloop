@@ -259,6 +259,9 @@ def post_message(client: Any, payload: dict[str, Any]) -> dict[str, Any]:
 
 SPEC = registry.register(registry.ConnectorSpec(
     id=ID, name="Slack", auth="oauth_pkce",
+    # A personal token (xoxb-/xoxp-) does not expire on Slack's schedule,
+    # so the user can connect once instead of every 30 days.
+    token_auth=True,
     allowed_hosts=("slack.com",),
     authorize_url="https://slack.com/oauth/v2_user/authorize",
     token_url=f"{API}/oauth.v2.user.access",

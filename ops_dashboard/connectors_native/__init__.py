@@ -115,3 +115,19 @@ def _install_routes() -> None:
 
 load_all()
 _install_routes()
+
+
+def _register_token_verifiers() -> None:
+    """How to check a personal token for each connector that accepts one.
+
+    A connector that offers both the OAuth flow and a personal token needs
+    to be able to check a pasted token against its provider before storing
+    it. The check calls only the connector's own identity endpoint.
+    """
+    from .. import connector_oauth as oauth
+
+    oauth.register_token_verifier("slack", oauth._slack_token_label)
+    oauth.register_token_verifier("microsoft365", oauth._microsoft_token_label)
+
+
+_register_token_verifiers()

@@ -57,6 +57,12 @@ class ConnectorSpec:
     extra_authorize_params: dict[str, str] = field(default_factory=dict)
     actions: dict[str, ActionSpec] = field(default_factory=dict)
     docs_url: str = ""
+    # This connector also accepts a personal token (a PAT, a bot token, an
+    # app token) as an alternative to the OAuth flow. The point is that a
+    # personal token does not expire on the provider's schedule: the user
+    # connects once, in the history of the program, and it lasts until they
+    # revoke it. A connector that does not set this must refuse a token.
+    token_auth: bool = False
     # Loopback redirect: "" ⇒ 127.0.0.1; "localhost" for providers that only
     # document localhost (Slack desktop redirects, Microsoft Entra). The
     # receiver always binds 127.0.0.1. ``redirect_port`` 0 ⇒ ephemeral; a fixed
@@ -79,6 +85,7 @@ class ConnectorSpec:
     def public(self) -> dict[str, Any]:
         return {
             "id": self.id, "name": self.name, "auth": self.auth,
+            "token_auth": self.token_auth,
             "read_scopes": list(self.read_scopes), "write_scopes": list(self.write_scopes),
             "byok_required": not self.default_client_id,
             "client_secret_required": self.client_secret_required,
