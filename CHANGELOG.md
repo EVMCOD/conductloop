@@ -2,6 +2,30 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.10 — 2026-11-01 — The app survives its own restart
+
+The window keeps its session token in a cookie, and the app handed the
+server a **new** token every time it launched. So whenever the server
+restarted — an update, a crash, the scheduler — the cookie in the open
+window stopped matching and **every request answered 403**.
+
+The frontend turned that into an error, and the page stopped working: no
+data, no buttons, nothing. The only way out was to quit the app and open it
+again. Reloading was worse: the main page answered 403 too, so the app came
+back as a **blank page**.
+
+- **The token is kept between launches** (next to the data, readable only by
+  you), so the window that is already open keeps working after the server
+  restarts under it.
+- **If the session is really lost** — the app was updated under a window
+  that stayed open — the app says so instead of failing silently, and tells
+  you to reopen it (which boots with a one-time nonce).
+
+The token is what separates the desktop window from any other browser on the
+machine, so it is never handed out: a browser that opens the local address
+is refused, exactly as before. And the window no longer reloads itself on a
+403, because a reload cannot repair it and would end in a blank page.
+
 ## 1.2.9 — 2026-11-01 — Your apps are back
 
 The Conectores page showed an empty catalogue in the installed app. Not a bug
