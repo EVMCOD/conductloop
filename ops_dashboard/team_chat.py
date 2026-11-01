@@ -283,7 +283,7 @@ def _context_block(context: str, web_rules: str) -> str:
 
 
 def agent_system(agent: dict, context: str, web_rules: str, *, lead: dict | None = None,
-                 peers: list[dict] | None = None) -> str:
+                 peers: list[dict] | None = None, task: str = "") -> str:
     who = (f"You are {agent['name']}, {agent['title']} on {_owner()}'s team."
            + (f" {agent['description']}" if agent.get("description") else "")
            + (f"\nSkills: {agent['skills']}." if agent.get("skills") else ""))
@@ -293,8 +293,9 @@ def agent_system(agent: dict, context: str, web_rules: str, *, lead: dict | None
     else:
         how = f"\nYou are talking directly with {_owner()}.\n"
     # The skills installed FOR THIS AGENT (L7). A builtin team member has no
-    # row, so it gets no block.
-    skills_block = _agent_skills_block(agent.get("id"))
+    # row, so it gets no block. The task decides which skills' full text fits
+    # the prompt budget.
+    skills_block = _agent_skills_block(agent.get("id"), task)
     return (who + how + _RULES + skills_block
             + _peers_block(peers) + _context_block(context, web_rules))
 
@@ -314,11 +315,12 @@ def _peers_block(peers: list[dict] | None) -> str:
             f"duplicate their work, and say so if you disagree):\n{lines}")
 
 
-def _agent_skills_block(agent_id: object) -> str:
+def _agent_skills_block(agent_id: object, task: str = "") -> str:
     """The skills installed for one agent, as a prompt block ('' when none)."""
     try:
         from .skills import packs
-        return packs.agent_skills_block(agent_id if isinstance(agent_id, int) else None)
+        return packs.agent_skills_block(agent_id if isinstance(agent_id, int) else None,
+                                        task=task)
     except Exception:
         return ""
 
@@ -345,14 +347,14 @@ def plan_system(lead: dict, team: list[dict]) -> str:
     )
 
 
-def synthesis_system(lead: dict, context: str, web_rules: str) -> str:
+def synthesis_system(lead: dict, context: str, web_rules: str, *, task: str = "") -> str:
     return (
         f"You are {lead['name']}, CEO of {_owner()}'s team. You asked your team to work on "
         f"{_owner()}'s request and their answers are below. Write the final answer: decide, combine "
         "and settle disagreements, credit people by name when it helps, and do not repeat everything "
         "they said. Under 250 words.\n" + _RULES
         # The lead's own skills also apply to the synthesis it writes.
-        + _agent_skills_block(lead.get("id"))
+        + _agent_skills_block(lead.get("id"), task)
         + _context_block(context, web_rules)
     )
 
@@ -523,7 +525,7 @@ class ChatTurn:
         if outputs:
             answers = "\n\n".join(f"### {o['name']} ({o['title']}) — task: {o['task']}\n{o['text']}" for o in outputs)
             prompt = _transcript(history, self.message) + "\n\nYour team's answers:\n\n" + answers
-            system = synthesis_system(lead, context, web_rules)
+            system = synthesis_system(lead, context, web_rules, task=self.message)
         else:
             prompt = _transcript(history, self.message)
             system = agent_system(lead, context, web_rules)
@@ -545,7 +547,8 @@ class ChatTurn:
                      for c in cards if c["agent"] != card["agent"]]
             try:
                 provider = self._new_provider()
-                system = agent_system(agent, context, web_rules, lead=lead, peers=peers)
+                system = agent_system(agent, context, web_rules, lead=lead, peers=peers,
+                                       task=card["task"])
                 for chunk in provider.stream(system, [{"role": "user", "content": card["task"]}]):
                     if chunk:
                         events.put(("delta", card["agent"], chunk))
