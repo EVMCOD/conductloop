@@ -2,6 +2,34 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.7 — 2026-11-01 — Your apps, in a catalogue
+
+The Connectors page used to be a list of connection settings: a client id, a
+set of permissions, a credential line, an audit table. It answered "how do I
+wire this" and never "what does this app do for me" — so choosing one was
+guesswork.
+
+Now it opens like a catalogue.
+
+- **Every app says what it is for.** Under the name, one line: "Issues, pull
+  requests and releases" for GitHub, "Lee y busca en tu correo, y envía
+  mensajes" for Gmail. In your language.
+- **The apps are in sections.** Productivity (mail, calendar, files, tasks),
+  Work (issues, notes, messages), Reading (highlights, feeds).
+- **A search box**, so you can find the app by what it does and not by the
+  name you half-remember.
+- **Each app has its own colour and a "+" to connect it.** The "+" opens the
+  connection that app already uses — the token form for the ones that take a
+  token, the consent screen for the ones that use OAuth, and the settings (with
+  the reason why) for the ones that need your own client id first.
+- **The settings are still there, folded below.** The client id, the scopes,
+  the credential and the audit log did not go anywhere: they are one click
+  away, and they remember whether you had them open, so a reload does not
+  fold them under your hands.
+
+Nothing else changes: the connectors, the playbooks, the token sign-in and the
+write confirmations all work as they did in 1.2.6.
+
 ## 1.2.6 — 2026-11-01 — The agents can use the apps you connected
 
 On the Mac it installs from the app ("Check for Updates…", or the quiet check

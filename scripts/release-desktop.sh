@@ -72,8 +72,21 @@ echo ""
 echo "▸ Updating version to $VERSION"
 sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
 sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" tauri.conf.json
+# The lockfile carries the crate's own version. `cargo check --locked` (three
+# workflows) refuses to build when it disagrees with Cargo.toml, so bumping
+# the crate without the lock breaks CI on the next push.
+sed -i '' '/^name = "conductloop-desktop"$/,/^$/ s/^version = ".*"$/version = "'"$VERSION"'"/' Cargo.lock
+# The Python side carries the version too, and the pre-flight checks both
+# (they are FAIL, not WARN). Bumping them here means the release is one
+# command and nothing is left at the previous version.
+REPO_ROOT="$(cd "$TAURI_DIR/../.." && pwd)"
+sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" "$REPO_ROOT/pyproject.toml"
+sed -i '' "s/^__version__ = \".*\"/__version__ = \"$VERSION\"/" "$REPO_ROOT/ops_dashboard/__init__.py"
 grep -E "^version" Cargo.toml | head -1
 grep -E "\"version\"" tauri.conf.json | head -1
+grep -A 1 'name = "conductloop-desktop"' Cargo.lock | grep version | head -1
+grep -E "^version" "$REPO_ROOT/pyproject.toml" | head -1
+grep -E "^__version__" "$REPO_ROOT/ops_dashboard/__init__.py" | head -1
 echo ""
 
 # ── 2. Build sidecar ─────────────────────────────────────────────────────────
