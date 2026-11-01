@@ -2,6 +2,29 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.9 — 2026-11-01 — Your apps are back
+
+The Conectores page showed an empty catalogue in the installed app. Not a bug
+in the connectors: **the connectors were never in the binary**.
+
+PyInstaller builds the bundled server with the spec's own directory at the
+front of the import path, not the repository root. So the step that collects
+the app's modules found **nothing — and returned an empty list without
+raising**. The build succeeded, the app shipped, and every module that is
+only reached by importing it by name was missing. The connectors register
+themselves that way, so all eleven were missing: the app you run had no
+connectors at all, and nothing said so.
+
+- **The 11 apps are in the app now**, with their catalogue, their
+  descriptions and their section.
+- **The build fails instead of shipping a broken app.** If the package
+  cannot be found, the build stops there.
+- **The connectors no longer register by walking a folder.** A frozen build
+  has no folder to walk: the modules live inside the archive.
+
+Nothing else changes: the catalogue, the C-suite agents, the session agent
+and the token sign-in work as they did in 1.2.8.
+
 ## 1.2.8 — 2026-11-01 — The agent that works in your repo can use your apps
 
 The agent that works in a repository — the one that reads files, runs the test
