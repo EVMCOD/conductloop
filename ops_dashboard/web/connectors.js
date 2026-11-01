@@ -270,6 +270,19 @@
 
   var catalogItems = [];
 
+  function rememberSettings(det) {
+    // The catalogue is what the page opens with, so the settings start
+    // folded. But a reload — a sync finishing, a write confirmed — must not
+    // fold them again under the user's hands. Whatever was open stays open.
+    var key = 'cl-settings-open';
+    var wasOpen = false;
+    try { wasOpen = sessionStorage.getItem(key) === '1'; } catch (e) { wasOpen = false; }
+    if (wasOpen) det.open = true;
+    det.addEventListener('toggle', function () {
+      try { sessionStorage.setItem(key, det.open ? '1' : '0'); } catch (e) { /* private mode */ }
+    });
+  }
+
   function openSettings(connectorId) {
     // The settings live below the catalogue, collapsed. Opening one from a
     // tile means opening the disclosure too, or the scroll goes nowhere.
@@ -316,7 +329,10 @@
       var grid = el('div', 'catalog-grid');
       group.forEach(function (c) {
         var tile = el('div', 'app-card');
-        tile.setAttribute('data-connector', c.id);
+        // "data-app" and not "data-connector": the settings card below uses
+        // data-connector, and one id with two meanings makes every selector
+        // on this page ambiguous.
+        tile.setAttribute('data-app', c.id);
 
         var mark = el('div', 'app-mark', (String(c.name || '?').charAt(0)).toUpperCase());
         if (c.brand) mark.style.setProperty('--brand', c.brand);
@@ -637,6 +653,8 @@
     applyStatic();
     $('audit-refresh').addEventListener('click', load);
     $('catalog-search').addEventListener('input', function () { renderCatalog(catalogItems); });
+    var det = $('settings-details');
+    if (det) rememberSettings(det);
     $('mcp-transport').addEventListener('change', syncTransport);
     $('mcp-save').addEventListener('click', saveMcp);
     syncTransport();

@@ -115,7 +115,7 @@ def test_the_catalogue_tile_connects_the_way_the_app_connects(site):
                   if r.status >= 400 and not r.url.endswith("/favicon.ico") else None)
 
             pg.goto(site + "/connectors")
-            tile = '#catalog-list [data-connector="faketok"]'
+            tile = '#catalog-list [data-app="faketok"]'
             pg.wait_for_selector(tile)
 
             # It is a catalogue: the name, and the line that says what it does.

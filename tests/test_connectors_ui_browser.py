@@ -103,6 +103,10 @@ def test_connectors_page_full_flow(site):
             assert any("script-src 'self'" in c and "object-src 'none'" in c for c in policies), policies
             assert not any("unsafe-inline" in c for c in policies), policies
             card = '[data-connector="fakechat"]'
+            # The catalogue is what the page opens with; the connection
+            # settings live below it, folded. Open them, the way a user
+            # would, before driving the settings.
+            pg.eval_on_selector("#settings-details", "e => { e.open = true; }")
             pg.wait_for_selector(card)
             assert pg.title().startswith("Conectores")
             assert pg.text_content(f"{card} [data-testid=status]") == "desconectado"
@@ -155,6 +159,8 @@ def test_connectors_page_full_flow(site):
             # English
             en = browser.new_context(locale="en-US").new_page()
             en.goto(base + "/connectors")
+            # The settings start folded, in every language.
+            en.eval_on_selector("#settings-details", "e => { e.open = true; }")
             en.wait_for_selector(card)
             assert en.title().startswith("Connectors")
             assert en.text_content(f"{card} [data-testid=status]") == "disconnected"

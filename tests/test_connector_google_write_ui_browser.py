@@ -67,6 +67,9 @@ def test_confirm_and_reject_google_writes(tmp_path, monkeypatch):
             pg.on("pageerror", lambda e: errors.append(str(e)))
             pg.on("dialog", lambda d: errors.append("dialog: " + d.message))
             pg.goto(f"http://127.0.0.1:{srv.server_address[1]}/connectors")
+            # The catalogue is what the page opens with; the connection
+            # settings live below it, folded. Open them before driving them.
+            pg.eval_on_selector("#settings-details", "e => { e.open = true; }")
             m_item = f'#pending-list li[data-action-id="{mail["action_id"]}"]'
             e_item = f'#pending-list li[data-action-id="{ev["action_id"]}"]'
             pg.wait_for_selector(m_item)
