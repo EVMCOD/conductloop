@@ -18,7 +18,6 @@ Two things are pinned here:
 """
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -76,18 +75,22 @@ def test_collecting_from_the_spec_environment_finds_every_connector():
 
     saved = list(sys.path)
     try:
-        sys.path = [p for p in sys.path
-                    if os.path.abspath(p or ".") != str(ROOT)]
-        sys.path.insert(0, str(ROOT / "desktop"))
-        without = collect_submodules("ops_dashboard")
-        sys.path.insert(0, str(ROOT))
+        # What the spec does: the repo root at the front of the path. This is
+        # the environment that decides what ends up in the binary.
+        #
+        # Only this direction is checked. The opposite one — "without the
+        # repo root the package is not found at all" — cannot be checked
+        # here: collect_submodules IMPORTS the package, and an import that
+        # is already in sys.modules ignores the path entirely. Whether the
+        # package was already imported depends on which tests ran before
+        # this one, so the result was different on a developer machine and
+        # in CI. The reason the spec needs the insert is pinned by
+        # test_the_spec_puts_the_repo_root_on_the_path_before_collecting.
+        sys.path = [str(ROOT)] + saved
         with_root = collect_submodules("ops_dashboard")
     finally:
         sys.path = saved
 
-    assert not without, (
-        "the spec's environment finds no submodules at all — this is why "
-        "the frozen app shipped without the connectors")
     native = [m for m in with_root if m.startswith("ops_dashboard.connectors_native.")]
     token = [m for m in with_root if m.startswith("ops_dashboard.connectors_token.")]
     assert len(native) >= 5, native
