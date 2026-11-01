@@ -441,12 +441,36 @@ def _activate_skill(args: dict) -> dict:
     return catalog.activate((args or {}).get("name"))
 
 
+def _connector_tools() -> list[dict]:
+    """The connected connectors' actions, as tools.
+
+    Only connectors the user has connected offer actions, so this list is
+    empty in a fresh install and grows as the user connects things. The
+    agent can then use the connectors the user set up, instead of the
+    user setting them up for the agent to never touch.
+    """
+    try:
+        from . import connector_tools
+        return connector_tools.available_tools()
+    except Exception:
+        # A broken connector must not take the Brain's tools down with it.
+        return []
+
+
 def _all_tools() -> list[dict]:
-    """Static TOOLS + activate_skill, registered only when the catalog has
-    enabled skills (its ``name`` is an enum of those skills)."""
+    """Static TOOLS + activate_skill + the connected connectors' actions.
+
+    ``activate_skill`` is registered only when the catalog has enabled skills
+    (its ``name`` is an enum of those skills). The connector tools are
+    registered only for connectors that are actually connected.
+    """
     from .skills import catalog
     spec = catalog.tool_spec()
-    return TOOLS + [spec] if spec else TOOLS
+    out = list(TOOLS)
+    if spec:
+        out.append(spec)
+    out.extend(_connector_tools())
+    return out
 
 
 def call(name: str, args: dict) -> dict:
@@ -454,6 +478,10 @@ def call(name: str, args: dict) -> dict:
         return _activate_skill(args)
     fn = IMPL.get(name)
     if not fn:
+        # A connector tool: ``connector_<id>_<action>``.
+        if name.startswith("connector_"):
+            from . import connector_tools
+            return connector_tools.call(name, args)
         return _err(f"unknown tool: {name}")
     # Fix #4: warn about unknown args the LLM may have passed by mistake
     allowed = _KNOWN_ARGS.get(name)
