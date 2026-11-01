@@ -53,7 +53,11 @@ STEPS=(
 )
 
 # secret-scan.yml, "Scan the full history (blocking)" (there it runs ./gitleaks).
-GITLEAKS_CMD='gitleaks git --log-opts="--all" --redact --no-banner --verbose --exit-code 1 .'
+# What gets scanned is what would be PUBLISHED: everything the remote has
+# (the published history) plus HEAD (the branch being published). `--all`
+# would also cover branches that only exist on this machine, and a finding
+# in one of those is not something a release would ever ship.
+GITLEAKS_CMD='gitleaks git --log-opts="--remotes=origin HEAD" --redact --no-banner --verbose --exit-code 1 .'
 
 # What --fast does to the table: steps it drops, and the pytest command it uses
 # instead (the browser/JS tests are the slow ones; CI runs them separately).

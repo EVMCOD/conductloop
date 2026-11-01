@@ -37,6 +37,15 @@ let _ideasSummary = { new: 0, in_progress: 0, done: 0, total: 0 };
 // ---- HTTP / utils ----
 async function fetchJSON(url) {
   const r = await fetch(url);
+  if (r.status === 403) {
+    // The session token in the cookie no longer matches. Reloading does not
+    // help: the page needs a token too, and handing one out to any browser
+    // that asks for the page would give the session away. The token is kept
+    // between launches, so this only happens if the app was updated under a
+    // window that stayed open — and the way out is to reopen the app.
+    throw new Error(
+      'Your session expired. Quit and reopen ConductLoop to continue.');
+  }
   if (!r.ok) throw new Error(url + ' HTTP ' + r.status);
   return r.json();
 }
