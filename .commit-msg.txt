@@ -1,0 +1,26 @@
+feat(connectors): say when a credential expires, before it breaks
+
+"Connect once" is only true for a personal token. An OAuth credential
+expires on the provider's schedule: Slack and Microsoft with PKCE expire
+after 30 days of inactivity, Google in *Testing* mode after 7, and a Gmail
+refresh token stops working when the user changes their password.
+
+The app cannot change that. What it can do is tell the truth instead of
+failing later: the connector card says when the credential stops working,
+and the app warns before it happens rather than the day the first sync
+breaks.
+
+The rules:
+
+- The credential's OWN record is the truth. An OAuth credential carries its
+  expiry and that is used. Only when the record says nothing does the
+  connector's declared lifetime come in, and that is a provider rule (Slack:
+  30 days of inactivity), not a guess.
+- A personal token is never given an expiry. It lasts until the user
+  revokes it, and inventing a date for it would be a lie. The card says so,
+  which is what distinguishes a token from a consent at a glance.
+- The check is cheap: it reads the stored record and never calls the
+  provider. A page load must not turn into a request per connector, and a
+  check must not be a side effect.
+- The report names the connector and how many days are left, and it never
+  carries the credential itself.

@@ -38,6 +38,10 @@
       token_hint: 'Con un token personal conectas una vez y no hay que reconectar: el token no caduca según el proveedor.',
       token_advantage: 'No caduca por el proveedor: conectas una vez.',
       token_saved: 'Conectado con token personal.',
+      cred_expires_in: 'La credencial caduca en {0} días.',
+      cred_expires_soon: 'La credencial caduca en {0} días: conéctala de nuevo antes de que caduque.',
+      cred_no_expiry: 'La credencial no caduca: sigue hasta que la revoques.',
+      cred_token_no_expiry: 'Token personal: no caduca, sigue hasta que lo revoques.',
       disconnect: 'Desconectar', make_read: 'Pasar a solo lectura',
       open_consent: 'Abrir la página de autorización', waiting: 'Esperando la autorización en el navegador…',
       connected_ok: 'Conectado.', flow_failed: 'No se pudo conectar: {0}',
@@ -84,6 +88,10 @@
       token_hint: 'With a personal token you connect once and do not reconnect: the token does not expire on the provider\u2019s schedule.',
       token_advantage: 'It does not expire on the provider\u2019s schedule: connect once.',
       token_saved: 'Connected with a personal token.',
+      cred_expires_in: 'The credential expires in {0} days.',
+      cred_expires_soon: 'The credential expires in {0} days: reconnect before it does.',
+      cred_no_expiry: 'The credential does not expire: it lasts until you revoke it.',
+      cred_token_no_expiry: 'Personal token: it does not expire, it lasts until you revoke it.',
       disconnect: 'Disconnect', make_read: 'Make read-only',
       open_consent: 'Open the authorization page', waiting: 'Waiting for authorization in the browser…',
       connected_ok: 'Connected.', flow_failed: 'Could not connect: {0}',
@@ -222,6 +230,22 @@
     return box;
   }
 
+  function credentialLine(c) {
+    // What the credential will do, in words. The server sends the number;
+    // the page only formats it, and it never pastes a raw timestamp.
+    var cred = c.credential;
+    if (!cred || !cred.connected) return null;
+    if (cred.days_left === null || cred.days_left === undefined) {
+      var noExp = cred.auth_method === 'token' ? t('cred_token_no_expiry') : t('cred_no_expiry');
+      return el('div', 'hint', noExp);
+    }
+    var days = Math.max(0, Math.floor(Number(cred.days_left) || 0));
+    var text = cred.expiring_soon ? t('cred_expires_soon', String(days)) : t('cred_expires_in', String(days));
+    var node = el('div', 'hint' + (cred.expiring_soon ? ' warn' : ''), text);
+    node.setAttribute('data-testid', 'credential-expiry');
+    return node;
+  }
+
   function renderConnector(c) {
     if (c.auth === 'token' && window.CLToken) return window.CLToken.render(c, { el: el, button: button, api: api, t: t, load: load, showError: showError, clear: clear, scopeList: scopeList, ES: ES });
     var card = el('div', 'conn');
@@ -241,6 +265,8 @@
     card.appendChild(head);
     if (c.account_label) card.appendChild(el('div', 'hint', t('account', c.account_label)));
     if (c.last_error) card.appendChild(el('div', 'hint', t('error', c.last_error)));
+    var credLine = credentialLine(c);
+    if (credLine) card.appendChild(credLine);
     card.appendChild(scopeList(t('read_scopes'), c.read_scopes));
     if (c.write_scopes && c.write_scopes.length) card.appendChild(scopeList(t('write_scopes'), c.write_scopes));
 

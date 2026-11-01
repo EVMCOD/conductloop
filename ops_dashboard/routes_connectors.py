@@ -119,10 +119,18 @@ def _spec(connector_id: str) -> registry.ConnectorSpec:
 
 def connector_view(spec: registry.ConnectorSpec) -> dict[str, Any]:
     acc = store.get_account(spec.id)
+    # The credential's expiry, so the card can tell the truth instead of
+    # failing later. "Connect once" is only true for a personal token; an
+    # OAuth credential has a date, and the user should see it.
+    try:
+        cred = oauth.credential_state(spec.id)
+    except Exception:
+        cred = {}
     return {**spec.public(), "status": acc["status"], "permission": acc["permission"],
             "granted_scopes": acc["granted_scopes"], "account_label": acc["account_label"],
             "client_id": acc["client_id"] or "", "client_id_set": bool(acc["client_id"] or spec.default_client_id),
-            "last_error": acc["last_error"], "connected_at": acc["connected_at"]}
+            "last_error": acc["last_error"], "connected_at": acc["connected_at"],
+            "credential": cred}
 
 
 # ---------- page ----------
@@ -301,6 +309,17 @@ def connector_action_reject(handler: Any, action_id: str) -> None:
     if not action_id.isdigit():
         raise actions.ActionError("unknown_action_id", action_id, 404)
     _send_json(handler, 200, actions.reject(int(action_id)))
+
+
+@router.get("/api/connectors/expiring")
+@_guarded
+def connectors_expiring(handler: Any) -> None:
+    """The connected credentials that are about to stop working.
+
+    The user cannot act on a failure they did not see coming. This is
+    cheap: it reads the stored records, it does not call any provider.
+    """
+    _send_json(handler, 200, {"ok": True, "expiring": oauth.expiring_credentials()})
 
 
 @router.get("/api/connectors/audit")

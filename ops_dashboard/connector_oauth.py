@@ -415,6 +415,103 @@ def verify_token(connector_id: str, token: str) -> str:
         raise OAuthError("bad_token", "the provider rejected this token", 400) from e
 
 
+# How close to the expiry counts as "soon". Three days: long enough to fix
+# before the break, short enough not to be noise.
+EXPIRY_WARNING_DAYS = 3
+
+
+def credential_expiry(connector_id: str, *, now: float | None = None) -> int | None:
+    """When this connector's credential stops working, as a unix timestamp.
+
+    The credential's OWN record is the truth. An OAuth credential carries
+    its expiry; a personal token does not, because it lasts until the user
+    revokes it, and inventing an expiry for it would be a lie.
+
+    Only when the record says nothing does the connector's declared lifetime
+    come in — and that is a provider rule (Slack: 30 days of inactivity),
+    not a guess.
+    """
+    spec = registry.get(connector_id)
+    if spec is None:
+        return None
+    acc = store.get_account(connector_id)
+    if acc.get("status") != "connected":
+        return None
+
+    rec = tokens.load_token(connector_id)
+    if rec:
+        if rec.get("auth_method") == "token":
+            # A personal token: no expiry until the user revokes it.
+            return None
+        exp = rec.get("expires_at")
+        if exp:
+            return int(exp)
+
+    days = int(spec.credential_lifetime_days or 0)
+    if not days:
+        return None
+    connected_at = acc.get("connected_at")
+    if not connected_at:
+        return None
+    return int(connected_at) + days * 86400
+
+
+def credential_state(connector_id: str, *, now: float | None = None) -> dict[str, Any]:
+    """What the page needs to tell the truth about a credential.
+
+    ``expiring_soon`` is the flag the card turns red on. ``days_left`` is
+    None when there is no known expiry — which is the good case, not a
+    missing value.
+    """
+    now = time.time() if now is None else now
+    spec = registry.get(connector_id)
+    acc = store.get_account(connector_id)
+    rec = tokens.load_token(connector_id)
+    expires = credential_expiry(connector_id, now=now)
+    days_left: int | None = None
+    if expires is not None:
+        days_left = int((expires - now) // 86400)
+    return {
+        "connector_id": connector_id,
+        "connected": acc.get("status") == "connected",
+        "auth_method": (rec or {}).get("auth_method") or ("oauth" if acc.get("status") == "connected" else None),
+        "expires_at": expires,
+        "days_left": days_left,
+        "expiring_soon": bool(days_left is not None and days_left <= EXPIRY_WARNING_DAYS),
+        "lifetime_days": int(spec.credential_lifetime_days) if spec else 0,
+    }
+
+
+def expiring_credentials(*, now: float | None = None) -> list[dict[str, Any]]:
+    """The connected credentials that are about to stop working.
+
+    Cheap on purpose: it reads the stored record and the account row, and
+    it never calls the provider. A page load must not turn into a request
+    per connector, and a check must not be a side effect.
+
+    A personal token is never in this list: it lasts until the user revokes
+    it, so there is nothing to warn about.
+    """
+    out: list[dict[str, Any]] = []
+    for spec in registry.all_specs():
+        try:
+            state = credential_state(spec.id, now=now)
+        except Exception:
+            continue
+        if not state.get("connected"):
+            continue
+        if not state.get("expiring_soon"):
+            continue
+        out.append({
+            "connector_id": spec.id,
+            "connector_name": spec.name,
+            "days_left": state.get("days_left"),
+            "expires_at": state.get("expires_at"),
+            "action": "connect again before it expires",
+        })
+    return out
+
+
 def connect_with_token(connector_id: str, token: str, *,
                        whoami: Callable[[str], str] | None = None) -> dict[str, Any]:
     """Connect a connector with a personal token instead of an OAuth consent.
