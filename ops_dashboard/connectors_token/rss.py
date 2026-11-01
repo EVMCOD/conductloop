@@ -201,6 +201,9 @@ def sync(c: base.TokenClient, config: dict) -> Iterator[base.Item]:
 CONNECTOR = base.register_connector(base.TokenConnector(
     spec=registry.ConnectorSpec(
         id="rss", name="RSS / Atom", auth="token",
+        description="Feeds, newsletters and articles",
+        description_es="Feeds, newsletters y artículos",
+        category="reading", brand="#F26522",
         # Placeholder: RSS never uses ConnectorClient; TokenClient only talks to
         # the feed hosts the user configured (hosts_from_config, public IPs only).
         allowed_hosts=("feeds.user-configured.invalid",),

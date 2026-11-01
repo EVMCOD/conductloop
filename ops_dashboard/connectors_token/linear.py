@@ -134,6 +134,9 @@ def _summary(p: dict) -> str:
 CONNECTOR = base.register_connector(base.TokenConnector(
     spec=registry.ConnectorSpec(
         id="linear", name="Linear", auth="token", allowed_hosts=("api.linear.app",),
+        description="Issues and project cycles",
+        description_es="Incidencias y ciclos de proyecto",
+        category="work", brand="#5E6AD2",
         docs_url="https://linear.app/settings/account/security",
         actions={
             "sync": registry.ActionSpec("sync", "read", "Import issues into the vault", base.sync_action("linear"),

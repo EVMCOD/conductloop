@@ -107,6 +107,9 @@ def _summary(p: dict) -> str:
 CONNECTOR = base.register_connector(base.TokenConnector(
     spec=registry.ConnectorSpec(
         id="readwise", name="Readwise", auth="token", allowed_hosts=("readwise.io",),
+        description="Books, highlights and reading notes",
+        description_es="Libros, resaltados y notas de lectura",
+        category="reading", brand="#2C6E63",
         docs_url="https://readwise.io/access_token",
         actions={
             "sync": registry.ActionSpec("sync", "read", "Import books and highlights into the vault",

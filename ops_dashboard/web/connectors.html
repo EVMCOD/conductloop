@@ -23,6 +23,16 @@
   <div id="global-error" class="error" role="alert" hidden></div>
   <div id="keychain-warning" class="banner warn" hidden data-i18n="keychain_off">No hay llavero del sistema disponible: no se puede conectar nada (los tokens nunca se guardan en un fichero).</div>
 
+  <!-- The catalogue: what the apps are for, and the way in. -->
+  <section class="catalog-section" id="catalog-card">
+    <div class="catalog-head">
+      <h2 data-i18n="catalog_title">Tus apps</h2>
+      <input type="text" id="catalog-search" autocomplete="off"
+             data-i18n-ph="catalog_search" placeholder="Buscar apps…" />
+    </div>
+    <div id="catalog-list"></div>
+  </section>
+
   <main class="grid">
     <section class="col-side">
       <div class="card" id="privacy-card">
@@ -44,11 +54,14 @@
     </section>
 
     <section class="col-main">
+      <details id="settings-details">
+      <summary class="settings-summary" data-i18n="catalog_settings">Ajustes de conexión</summary>
       <div class="card" id="connectors-card">
         <h2 data-i18n="connectors">Conectores</h2>
         <p class="hint" id="connectors-empty" hidden data-i18n="no_connectors">Aún no hay conectores instalados. El marco está listo; los conectores (Google, Microsoft, Slack, Notion…) llegarán en próximas versiones.</p>
         <div id="connectors-list"></div>
       </div>
+      </details>
 
       <div class="card" id="mcp-card">
         <h2 data-i18n="mcp_title">Servidores MCP</h2>

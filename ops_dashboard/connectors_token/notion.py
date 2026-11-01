@@ -273,6 +273,9 @@ def create_page(c: base.TokenClient, payload: dict) -> dict:
 CONNECTOR = base.register_connector(base.TokenConnector(
     spec=registry.ConnectorSpec(
         id="notion", name="Notion", auth="token", allowed_hosts=("api.notion.com",),
+        description="Pages, databases and shared notes",
+        description_es="Páginas, bases de datos y notas compartidas",
+        category="work", brand="#191919",
         docs_url="https://developers.notion.com/docs/authorization",
         actions={
             "sync": registry.ActionSpec("sync", "read", "Import shared pages into the vault", base.sync_action("notion"),

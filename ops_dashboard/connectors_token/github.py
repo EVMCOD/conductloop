@@ -112,6 +112,9 @@ def _summary(p: dict) -> str:
 CONNECTOR = base.register_connector(base.TokenConnector(
     spec=registry.ConnectorSpec(
         id="github", name="GitHub", auth="token", allowed_hosts=("api.github.com",),
+        description="Issues, pull requests and releases",
+        description_es="Incidencias, pull requests y releases",
+        category="work", brand="#24292F",
         docs_url="https://github.com/settings/personal-access-tokens",
         actions={
             "sync": registry.ActionSpec("sync", "read", "Import issues and PRs into the vault", base.sync_action("github"),
