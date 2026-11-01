@@ -124,7 +124,11 @@ def test_boot_only_get(srv, on):
     {"sec-fetch-dest": "image"},                          # <img> (case-insensitive)
 ])
 def test_browser_requests_without_cookie_refused(srv, on, headers):
-    for method, path in [("GET", "/"), ("GET", "/api/projects"), ("GET", "/brain")]:
+    # The API and the other pages refuse a browser request without the
+    # cookie. The MAIN page is the exception: it hands out a cookie that
+    # works, so that a reload can never leave the app on a blank page (see
+    # test_reloading_the_page_hands_out_a_cookie_that_works).
+    for method, path in [("GET", "/api/projects"), ("GET", "/brain")]:
         st, data, h = srv(method, path, headers)
         assert st == 403, (method, path, headers)
         assert _code(data) == "app_token_required"
@@ -153,6 +157,32 @@ def test_browser_with_cookie_allowed(srv, on):
     assert st == 200
     st, _, _ = srv("GET", "/api/projects", {**BROWSER, "Cookie": f"ops_csrf=x; cl_app={TOKEN}; y=z"})
     assert st == 200
+
+
+def test_reloading_the_page_hands_out_a_cookie_that_works(srv, on):
+    """A reload must never leave the app on a blank page.
+
+    The window keeps its token in a cookie. If that cookie stopped matching
+    (the server restarted with a different token), a reload used to answer
+    403 — the page would not load at all, and the user was left with an app
+    that looked broken and could not be recovered without quitting it.
+
+    So the page itself hands out a cookie that works.
+    """
+    st, _, hdrs = srv("GET", "/", BROWSER)
+    assert st == 200, "the main page answered an error instead of loading"
+    cookies = hdrs.get("_set_cookie_all") or []
+    assert any("cl_app=" in c for c in cookies), (
+        "the page did not hand out a cookie: " + repr(cookies))
+    token = cookies[0].split("cl_app=", 1)[1].split(";", 1)[0]
+    from ops_dashboard import app_token_guard
+    assert app_token_guard.has_valid_cookie({"Cookie": f"cl_app={token}"})
+
+
+def test_an_api_call_without_a_cookie_is_still_refused(srv, on):
+    """Only the page gets a new cookie. The API does not hand one out."""
+    st, _, _ = srv("GET", "/api/projects", BROWSER)
+    assert st == 403
 
 
 def test_cli_style_requests_keep_loopback_trust(srv, on):

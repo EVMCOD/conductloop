@@ -152,12 +152,18 @@
 
   function api(path, body) {
     var opts = { credentials: 'same-origin', headers: { 'Accept': 'application/json' } };
+    // (the 403 repair lives in the fetch wrapper below)
     if (body !== undefined) {
       opts.method = 'POST';
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
     }
     return fetch(path, opts).then(function (r) {
+      if (r.status === 403 && window.CLSession && window.CLSession.reloadOnce()) {
+        // The session token in the cookie no longer matches (the server was
+        // restarted). The page hands out a cookie that works, so reload once.
+        return new Promise(function () {});
+      }
       return r.json().catch(function () { return {}; }).then(function (j) {
         if (!r.ok || j.ok === false) throw new Error((j && (j.message || j.error)) || ('HTTP ' + r.status));
         return j;

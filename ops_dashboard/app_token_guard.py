@@ -32,6 +32,7 @@ from __future__ import annotations
 import hmac
 import os
 import threading
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -55,8 +56,56 @@ def _env(name: str) -> str:
     return v if len(v) >= MIN_LEN else ""
 
 
+# Where the token is kept between launches. Tests point it elsewhere.
+_DATA_DIR: Path | None = None
+
+
+def _token_path() -> Path:
+    base = _DATA_DIR
+    if base is None:
+        from .app_paths import data_dir
+        base = data_dir()
+    return base / "app-token"
+
+
+def resolve_token() -> str:
+    """The session token, persisted so a restart does not break the app.
+
+    The desktop app hands a token to the server in the environment, once per
+    launch. The browser keeps that token as a cookie, and every request from
+    the window has to carry it. If the token changed on every launch, a
+    server restart — an update, a crash, the scheduler — would leave the open
+    window holding a cookie that no longer matches: every request would
+    answer 403 and the app would look broken.
+
+    So the token is kept next to the data, and the copy on disk is the one
+    that is used: it is the one the window that is already open has.
+
+    With no token in the environment there is nothing to persist, and the
+    guard stays off — that is the development server, which must keep
+    working without a cookie.
+    """
+    path = _token_path()
+    try:
+        stored = path.read_text(encoding="utf-8").strip()
+        if len(stored) >= MIN_LEN:
+            return stored
+    except OSError:
+        pass
+    token = _env(TOKEN_ENV)
+    if not token:
+        return ""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(token, encoding="utf-8")
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return token
+
+
 def enabled() -> bool:
-    return bool(_env(TOKEN_ENV))
+    return bool(resolve_token())
 
 
 def _reset_for_tests() -> None:
@@ -81,7 +130,7 @@ def _cookie_value(headers: Any) -> str:
 
 
 def has_valid_cookie(headers: Any) -> bool:
-    token = _env(TOKEN_ENV)
+    token = resolve_token()
     got = _cookie_value(headers)
     return bool(token and got) and hmac.compare_digest(got.encode(), token.encode())
 
@@ -140,5 +189,19 @@ def check(handler: Any) -> bool:
         return True
     if has_valid_cookie(handler.headers):
         return True
+    # The page itself: hand the window a cookie that works instead of an
+    # error. The window keeps the token in a cookie, and if that cookie
+    # stopped matching (the server was restarted with a different token),
+    # a reload used to answer 403: the app would not load at all, and the
+    # only way out was to quit and reopen it.
+    #
+    # Only the page does this. The API never hands a token out, so a page
+    # on the open web cannot ask for one and use it.
+    if path == "/" or path.endswith(".html"):
+        token = resolve_token()
+        if token:
+            handler._pending_headers = {
+                "Set-Cookie": f"{COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax"}
+            return True
     return _deny(handler, 403, "app_token_required",
                  "this local API only accepts browser requests from the ConductLoop window")

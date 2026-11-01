@@ -37,6 +37,12 @@ let _ideasSummary = { new: 0, in_progress: 0, done: 0, total: 0 };
 // ---- HTTP / utils ----
 async function fetchJSON(url) {
   const r = await fetch(url);
+  if (r.status === 403 && window.CLSession && window.CLSession.reloadOnce()) {
+    // The session token in the cookie no longer matches (the server was
+    // restarted). The page hands out a cookie that works, so reload once.
+    // This promise never settles: the reload takes over.
+    await new Promise(function () {});
+  }
   if (!r.ok) throw new Error(url + ' HTTP ' + r.status);
   return r.json();
 }
