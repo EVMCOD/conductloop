@@ -94,6 +94,35 @@ def test_short_token_counts_as_disabled(srv, monkeypatch):
     assert st == 200
 
 
+def test_the_cookie_the_boot_hands_out_is_the_one_the_server_accepts(
+    srv, on, tmp_path, monkeypatch
+):
+    """The whole way round, through the real server.
+
+    The boot hands the window its cookie; every request afterwards carries
+    it. If the boot handed out a token the server does not accept, the
+    window answers 403 to everything and the app looks broken.
+
+    This is the bug that shipped: the boot handed out the token from the
+    environment (a new one every launch) while the server checked the
+    persisted one, which does not change.
+    """
+    from ops_dashboard import app_token_guard
+
+    app_token_guard._reset_for_tests()
+    # The token of an earlier launch, still on disk: the session that has
+    # to survive. The environment brings a NEW one, as it does on every
+    # launch.
+    (tmp_path / "app-token").write_text("b" * 40, encoding="utf-8")
+    monkeypatch.setenv("CONDUCTLOOP_APP_TOKEN", "c" * 40)
+    st, _, h = srv("GET", f"/__cl/boot?n={BOOT}", BROWSER)
+    assert st == 302, (st, h)
+    cookie = next(c for c in h["_set_cookie_all"] if c.startswith("cl_app="))
+    token = cookie.split("cl_app=", 1)[1].split(";", 1)[0]
+    st2, data, _ = srv("GET", "/api/projects", {"Cookie": f"cl_app={token}", **BROWSER})
+    assert st2 == 200, f"the cookie the boot handed out was refused: {data!r}"
+
+
 def test_boot_sets_cookie_once(srv, on):
     st, _, h = srv("GET", f"/__cl/boot?n={BOOT}", BROWSER)
     assert st == 302 and h["location"] == "/"
