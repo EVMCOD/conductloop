@@ -1,3 +1,3 @@
 """ConductLoop — your AI-native second brain + ops cockpit."""
 
-__version__ = "1.2.11"
+__version__ = "1.2.12"

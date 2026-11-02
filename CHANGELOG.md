@@ -2,6 +2,25 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.12 — 2026-11-02 — The app tells you what went wrong
+
+The desktop window is served over http by the local server, and Tauri v2
+overrides `window.alert` with an IPC call to the dialog plugin. Without the
+permission for that call the message went nowhere: the action appeared to do
+nothing and the app looked broken.
+
+There were **47 `alert()`** calls in the shell, so this was not one bad
+message but **every** message the app can show — the error of a connection
+that cannot be added, a document that cannot be created, a delete that
+failed. The desktop app swallowed all of them.
+
+- **Every message the app reports is now visible**: a toast in the page, in
+  the app and in a browser, with no dependency on Tauri. An error is marked
+  as an error.
+- Two tests guard it: the shell must not use `alert()` again, and it must
+  stay valid JavaScript (a syntax error there is a blank app, and nothing
+  says so).
+
 ## 1.2.11 — 2026-11-02 — The window keeps its session
 
 The window gets its session cookie from the boot, and every request it makes
