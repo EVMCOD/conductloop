@@ -2,6 +2,26 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.11 — 2026-11-02 — The window keeps its session
+
+The window gets its session cookie from the boot, and every request it makes
+afterwards carries that cookie. The server checks it against the token it
+accepts.
+
+Those were **two different tokens**. The boot handed out the one from the
+environment — a new one on every launch — while the server checked the
+persisted one, which does not change. So from the second launch onwards the
+window held a cookie that answered **403 to everything**: the page loaded
+with no data, no buttons, nothing.
+
+The session was kept, but the cookie carrying it was the wrong one. The same
+failure as before the token was persisted, in another place.
+
+- **The boot hands out the token the server accepts**, so the session
+  survives a restart and a fresh launch gets a cookie that works.
+- The cookie is still only handed out by the boot, which needs the nonce only
+  the app has: no other browser on this computer can get one.
+
 ## 1.2.10 — 2026-11-01 — The app survives its own restart
 
 The window keeps its session token in a cookie, and the app handed the
