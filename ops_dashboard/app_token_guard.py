@@ -106,6 +106,18 @@ def resolve_token() -> str:
     return token
 
 
+def session_token() -> str:
+    """The token the window gets as a cookie, and the one the server checks.
+
+    They have to be the same token. The boot hands this out and the server
+    compares against it; if the boot handed out the token from the
+    environment — a new one on every launch — while the server checked the
+    persisted one, the window would be left holding a cookie that answers
+    403 to everything.
+    """
+    return resolve_token()
+
+
 def enabled() -> bool:
     # The environment decides whether the guard is on at all. The file on
     # disk only chooses WHICH token is used. That distinction matters: a
@@ -191,7 +203,7 @@ def check(handler: Any) -> bool:
         # cross-site under schemeful same-site) and must carry the cookie.
         # SameSite is not the boundary here anyway: browser tabs have a
         # separate cookie store.
-        cookie = f"{COOKIE}={_env(TOKEN_ENV)}; Path=/; HttpOnly; SameSite=Lax"
+        cookie = f"{COOKIE}={session_token()}; Path=/; HttpOnly; SameSite=Lax"
         handler._send(302, b"", "text/html", {"Location": "/", "Set-Cookie": cookie})
         return False
     if path in EXEMPT_PATHS:
