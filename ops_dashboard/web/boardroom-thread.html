@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/confirm.js"></script>
   <script src="/csrf.js" defer></script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>CEO Thread — ConductLoop</title>
   <link rel="stylesheet" href="/theme.css" />
+  <link rel="stylesheet" href="/confirm.css" />
   <style>
     /* Legacy tokens are aliases of the shared design system in /theme.css. */
     :root { --bg: var(--cl-bg); --card: var(--cl-bg-soft); --ink: var(--cl-ink); --muted: var(--cl-ink-muted); --brand: var(--cl-accent); --border: var(--cl-border); --ok: var(--cl-ok); --bad: var(--cl-danger); }
@@ -445,7 +447,7 @@
       }
       if (act === 'toggle' || act === 'delete') {
         const cid = parseInt(t.dataset.cid, 10);
-        if (act === 'delete' && !confirm('Unbind this channel?')) return;
+        if (act === 'delete' && !await confirmAction('Unbind this channel?')) return;
         const method = act === 'delete' ? 'DELETE' : 'POST';
         const body = act === 'toggle' ? JSON.stringify({enabled: !!parseInt(t.dataset.en, 10)}) : null;
         const r = await fetch(`/api/boardroom/ceo/${ceoId}/channels/${cid}`, {

@@ -57,6 +57,7 @@
       connected_ok: 'Conectado.', flow_failed: 'No se pudo conectar: {0}',
       confirm: 'Confirmar y ejecutar', reject: 'Rechazar', expires: 'caduca {0}',
       confirm_disconnect: '¿Desconectar {0}? Se borrará el token del llavero.',
+      dlg_confirm: 'Confirmar', dlg_cancel: 'Cancelar', dlg_ok: 'Aceptar',
       account: 'Cuenta: {0}', error: 'Error: {0}', byok_needed: 'Necesitas tu propio client ID para conectar.',
       mcp_title: 'Servidores MCP',
       mcp_hint: 'Las herramientas son de solo lectura por defecto. Las que escriben o tienen efectos esperan tu confirmación. Lo que devuelven se trata como contenido no confiable.',
@@ -117,6 +118,7 @@
       connected_ok: 'Connected.', flow_failed: 'Could not connect: {0}',
       confirm: 'Confirm and run', reject: 'Reject', expires: 'expires {0}',
       confirm_disconnect: 'Disconnect {0}? The token will be removed from the keychain.',
+      dlg_confirm: 'Confirm', dlg_cancel: 'Cancel', dlg_ok: 'Accept',
       account: 'Account: {0}', error: 'Error: {0}', byok_needed: 'You need your own client ID to connect.',
       mcp_title: 'MCP servers',
       mcp_hint: 'Tools are read-only by default. Tools that write or have side effects wait for your confirmation. What they return is treated as untrusted content.',
@@ -485,8 +487,8 @@
       } else if (c.write_scopes && c.write_scopes.length) {
         actions.appendChild(button(t('connect_write'), 'ghost small', function () { startConnect(c, 'write', statusNode); }));
       }
-      actions.appendChild(button(t('disconnect'), 'danger small', function () {
-        if (!window.confirm(t('confirm_disconnect', c.name))) return;
+      actions.appendChild(button(t('disconnect'), 'danger small', async function () {
+        if (!await confirmAction(t('confirm_disconnect', c.name), { confirm: t('dlg_confirm'), cancel: t('dlg_cancel') })) return;
         api('/api/connectors/' + encodeURIComponent(c.id) + '/disconnect', {}).then(load).catch(function (e) { showError(e.message); });
       }));
     }
@@ -591,8 +593,8 @@
     row.appendChild(button(sv.permission === 'write' ? t('mcp_read_only') : t('mcp_allow_write'), 'ghost small', function () {
       api(mcpUrl(sv.name, '/permission'), { permission: sv.permission === 'write' ? 'read' : 'write' }).then(load).catch(function (e) { showError(e.message); });
     }));
-    row.appendChild(button(t('mcp_remove'), 'danger small', function () {
-      if (!window.confirm(t('mcp_confirm_remove', sv.name))) return;
+    row.appendChild(button(t('mcp_remove'), 'danger small', async function () {
+      if (!await confirmAction(t('mcp_confirm_remove', sv.name), { confirm: t('dlg_confirm'), cancel: t('dlg_cancel') })) return;
       api(mcpUrl(sv.name, '/remove'), {}).then(load).catch(function (e) { showError(e.message); });
     }));
     card.appendChild(row);

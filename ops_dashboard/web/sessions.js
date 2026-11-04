@@ -275,21 +275,14 @@
     };
   }
 
-  // ── confirmation dialog (no window.confirm, text only) ──────────────────────
+  // ── confirmation dialog (the shared one, web/confirm.js) ─────────────────────
+  // One primitive for the whole product: the same <dialog> every other page
+  // opens, so the question is asked the same way in the browser and in the
+  // desktop app (a native confirm() there is a Promise, not a boolean, and
+  // the truthiness guard lets the destructive action through unasked).
+  // The ids are the ones this page's test pins: #confirm-dialog, #confirm-yes.
   function confirmBox(text) {
-    return new Promise(function (resolve) {
-      var dlg = h('dialog', { class: 'confirm', id: 'confirm-dialog' },
-        h('p', { text: text }),
-        h('div', { class: 'row end' },
-          h('button', { type: 'button', class: 'ghost', id: 'confirm-no', text: t('cancel'),
-            on: { click: function () { done(false); } } }),
-          h('button', { type: 'button', id: 'confirm-yes', text: t('confirm'),
-            on: { click: function () { done(true); } } })));
-      function done(v) { try { dlg.close(); } catch (e) { /* closed */ } dlg.remove(); resolve(v); }
-      dlg.addEventListener('cancel', function (e) { e.preventDefault(); done(false); });
-      document.body.appendChild(dlg);
-      dlg.showModal();
-    });
+    return confirmAction(text, { confirm: t('confirm'), cancel: t('cancel') });
   }
 
   // ── state ────────────────────────────────────────────────────────────────

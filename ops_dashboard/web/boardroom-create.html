@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/toast.js"></script>
   <script src="/csrf.js" defer></script>
   <link rel="stylesheet" href="/theme.css">
   <meta charset="utf-8" />
@@ -147,7 +148,7 @@
       const slug = $('slug').value.trim();
       const persona = $('persona').value.trim();
       if (!name || !slug || !persona) {
-        alert('All three fields are required.');
+        notifyError('All three fields are required.');
         return;
       }
       // Step 2 tools load (fetch suggest)
@@ -233,7 +234,7 @@
         document.querySelectorAll('.card').forEach(c => c.style.display = 'none');
         document.querySelector('.steps').style.display = 'none';
       } catch (e) {
-        alert('Could not create CEO: ' + e.message);
+        notifyError('Could not create CEO: ' + e.message);
         $('create').disabled = false;
       }
     };

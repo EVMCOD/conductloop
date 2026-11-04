@@ -18,6 +18,18 @@
     return root;
   }
 
+  // The validation error belongs to the form the user is looking at, so it
+  // goes into the card itself. alert() is invisible in the desktop app.
+  function showFieldError(card, msg) {
+    var e = card.querySelector('.dialog-error');
+    if (!e) {
+      e = document.createElement('div');
+      e.className = 'dialog-error';
+      card.insertBefore(e, card.firstChild);
+    }
+    e.textContent = msg;
+  }
+
   function close() {
     var root = ensureRoot();
     root.style.display = 'none';
@@ -83,7 +95,7 @@
         else data[f.key] = el.value.trim();
       });
       var err = (opts.validate ? opts.validate(data) : null);
-      if (err) { alert(err); return; }
+      if (err) { showFieldError(card, err); return; }
       close();
       if (opts.onSubmit) opts.onSubmit(data);
     });

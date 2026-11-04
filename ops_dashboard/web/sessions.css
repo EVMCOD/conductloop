@@ -74,6 +74,3 @@ pre.diff .add { color:var(--cl-ok); background:var(--cl-ok-soft); }
 pre.diff .del { color:var(--cl-danger); background:var(--cl-danger-soft); }
 pre.diff .hunk { color:var(--cl-info); }
 pre.diff .meta { color:var(--cl-ink-muted); font-weight:600; }
-dialog.confirm { background:var(--cl-bg-soft); color:var(--cl-ink); border:1px solid var(--cl-border); border-radius:12px; max-width:460px; padding:18px; }
-dialog.confirm::backdrop { background:rgba(0,0,0,.55); }
-dialog.confirm p { margin:0 0 14px; white-space:pre-wrap; }

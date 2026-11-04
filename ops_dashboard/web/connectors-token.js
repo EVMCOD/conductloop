@@ -156,8 +156,8 @@
         post(H, c, '/sync', {}, function (r) { flow.textContent = tr(H, 'n_sync_ok', (r.sync && r.sync.fetched) || 0); });
       }));
       if (d.documents) {
-        row3.appendChild(H.button(tr(H, 'n_forget'), 'ghost small', function () {
-          if (!window.confirm(tr(H, 'n_confirm_forget', c.name))) return;
+        row3.appendChild(H.button(tr(H, 'n_forget'), 'ghost small', async function () {
+          if (!await confirmAction(tr(H, 'n_confirm_forget', c.name), { confirm: H.t('dlg_confirm'), cancel: H.t('dlg_cancel') })) return;
           post(H, c, '/forget', {});
         }));
       }
@@ -168,8 +168,8 @@
           row3.appendChild(H.button(tr(H, 'n_grant'), 'ghost small', function () { post(H, c, '/permission', { permission: 'write' }); }));
         }
       }
-      row3.appendChild(H.button(H.t('disconnect'), 'danger small', function () {
-        if (!window.confirm(H.t('confirm_disconnect', c.name))) return;
+      row3.appendChild(H.button(H.t('disconnect'), 'danger small', async function () {
+        if (!await confirmAction(H.t('confirm_disconnect', c.name), { confirm: H.t('dlg_confirm'), cancel: H.t('dlg_cancel') })) return;
         H.api('/api/connectors/' + encodeURIComponent(c.id) + '/disconnect', {}).then(H.load).catch(function (e) { H.showError(e.message); });
       }));
       box.appendChild(row3);
