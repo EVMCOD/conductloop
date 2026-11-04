@@ -76,6 +76,14 @@
       resolve(value);
     }
     wire(done);
+    // A modal keeps its keystrokes. The page behind it must not react to
+    // them: the dashboard's global Escape handler navigates back, and a
+    // native dialog used to swallow the key while it was up. Handling the
+    // dialog's own 'cancel' event is not enough -- that is a different
+    // event, and the keydown has already bubbled to the document by then.
+    dlg.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+    });
     dlg.addEventListener('click', function (e) {
       if (e.target === dlg) done(cancelValue);
     });

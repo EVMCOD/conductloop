@@ -104,6 +104,10 @@
     if (first) setTimeout(function(){ first.focus(); }, 50);
     // Enter to submit
     card.addEventListener('keydown', function(e) {
+      // The overlay is modal: it keeps its keystrokes. The dashboard's
+      // global Escape handler would navigate back while the user is only
+      // closing the dialog.
+      e.stopPropagation();
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         card.querySelector('[data-dialog-submit]').click();
       } else if (e.key === 'Escape') close();
