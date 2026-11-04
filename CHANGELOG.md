@@ -2,6 +2,40 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.13 — 2026-11-04 — The app asks before it deletes
+
+The desktop window is served over http by the local server, and Tauri v2
+overrides `window.confirm` with an **async** call to the dialog plugin. So in
+the app `confirm()` returns a **Promise**, not a boolean — and a guard like
+`if (!confirm(...)) return;` sees a truthy promise, never fires, and the
+destructive action runs **without asking**.
+
+Awaiting the global is not the fix either: the plugin's `message` command
+needs the `dialog:allow-message` permission, which this repo grants to
+**nobody** on purpose. Without it the awaited promise rejects with an ACL
+error instead of resolving `false`.
+
+There were **21 confirmations** in the shell — deleting a todo, an idea, a
+document, a memory, a trigger, an agent, a decision, a cost, an approval, a
+session task, a claim, a connector, a token, an MCP server, a skill
+proposal, a backup restore, a device pairing, a media asset, a channel
+binding. Every one of them was a "delete" that the app performed silently in
+the desktop app, while the browser asked correctly.
+
+- **Every question is now asked in the page**: a `<dialog>` opened with
+  `showModal()`, the same shape `web/sessions.js` already used. No
+  permission, no IPC, no capability — and the same behaviour in the browser
+  and in the app.
+- **`prompt()` is gone too**. The shell does not override it, but wry ships
+  no text-input panel at all, so a prompt comes back as an empty string and
+  the flow stops without the user ever being asked — a failure nobody
+  reports. Text input is a dialog with a field.
+- **`alert()` was already a toast**; the pages that had no feedback facility
+  of their own now share `web/toast.js`, so a message there is visible too.
+- Two tests guard it: no page may ask through a browser global again, and
+  the browser tests now fail if a **native** dialog is ever raised — the
+  defect is caught at the source instead of in the desktop app.
+
 ## 1.2.12 — 2026-11-02 — The app tells you what went wrong
 
 The desktop window is served over http by the local server, and Tauri v2
