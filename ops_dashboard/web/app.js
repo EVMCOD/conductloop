@@ -1063,7 +1063,7 @@ function showDocEditorModal(docId, title, path, source, content, projectKey) {
     }
   });
   document.getElementById('doc-edit-delete').addEventListener('click', async function() {
-    if (!confirm('Delete this document from the index? (Original file on disk is not touched.)')) return;
+    if (!await confirmAction('Delete this document from the index? (Original file on disk is not touched.)')) return;
     try {
       var r = await fetch('/api/docs/delete?doc_id=' + docId, { method: 'DELETE' });
       if (!r.ok) {
@@ -1948,7 +1948,7 @@ async function refreshMembers() {
 
 async function assignTodoPrompt(todoId) {
   if (!_members || !_members.length) { await refreshMembers(); }
-  var choice = prompt('Assign to (type id or partial name):\n\n' + _members.map(function(m){ return m.id + '. ' + (m.type === 'ai_agent' ? '🤖' : '👤') + ' ' + m.name + (m.workload ? ' (' + m.workload + ' todos)' : ''); }).join('\n'));
+  var choice = await promptAction('Assign to (type id or partial name):\n\n' + _members.map(function(m){ return m.id + '. ' + (m.type === 'ai_agent' ? '🤖' : '👤') + ' ' + m.name + (m.workload ? ' (' + m.workload + ' todos)' : ''); }).join('\n'));
   if (choice === null) return;
   choice = choice.trim();
   if (!choice) return;
@@ -2181,7 +2181,7 @@ async function toggleUserTodo(id) {
 }
 
 async function deleteUserTodo(id) {
-  if (!confirm('Delete this todo?')) return;
+  if (!await confirmAction('Delete this todo?')) return;
   try {
     var r = await fetch('/api/user_todos/' + id, { method: 'DELETE' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -2190,11 +2190,11 @@ async function deleteUserTodo(id) {
   } catch (e) { notify('error: ' + e.message); }
 }
 
-function editUserTodo(id) {
-  // Simple inline: prompt for new text
+async function editUserTodo(id) {
+  // In-page dialog: a native prompt does not work in the desktop app.
   var d = _userTodos.find(function(x) { return x.id === id; });
   if (!d) return;
-  var nv = prompt('Edit todo:', d.content);
+  var nv = await promptAction('Edit todo:', { defaultValue: d.content });
   if (nv == null) return;
   fetch('/api/user_todos/' + id, {
     method: 'PUT',
@@ -2345,7 +2345,7 @@ async function updateIdeaStatus(id, status) {
 }
 
 async function deleteIdea(id) {
-  if (!confirm('Delete this idea?')) return;
+  if (!await confirmAction('Delete this idea?')) return;
   try {
     var r = await fetch('/api/ideas/' + id, { method: 'DELETE' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -3974,7 +3974,7 @@ async function renderApprovalsView() {
     });
     main.querySelectorAll('[data-approval-reject]').forEach(function(b) {
       b.addEventListener('click', async function() {
-        if (!confirm('Reject this proposal?')) return;
+        if (!await confirmAction('Reject this proposal?')) return;
         await fetch('/api/approvals/' + b.dataset.approvalReject + '/reject', {method:'POST'});
         renderApprovalsView();
         refreshApprovalsBadge();
@@ -4383,16 +4383,16 @@ async function renderDecisionsView() {
     }
     main.innerHTML = html;
     renderOutline();
-    document.getElementById('add-decision').addEventListener('click', function() {
-      var t = prompt('Decision title:');
+    document.getElementById('add-decision').addEventListener('click', async function() {
+      var t = await promptAction('Decision title:');
       if (!t) return;
-      var d = prompt('What was decided:');
+      var d = await promptAction('What was decided:');
       if (!d) return;
       fetch('/api/decision', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title: t, decision: d})}).then(function(){renderDecisionsView();});
     });
     main.querySelectorAll('[data-decision-del]').forEach(function(b) {
-      b.addEventListener('click', function() {
-        if (!confirm('Delete this decision?')) return;
+      b.addEventListener('click', async function() {
+        if (!await confirmAction('Delete this decision?')) return;
         fetch('/api/decision/' + b.dataset.decisionDel, {method:'DELETE'}).then(function(){renderDecisionsView();});
       });
     });
@@ -4443,13 +4443,13 @@ async function renderCostsView() {
     }
     main.innerHTML = html;
     renderOutline();
-    document.getElementById('add-cost').addEventListener('click', function() {
-      var provider = prompt('Provider (cloudflare, anthropic, vercel…):');
+    document.getElementById('add-cost').addEventListener('click', async function() {
+      var provider = await promptAction('Provider (cloudflare, anthropic, vercel…):');
       if (!provider) return;
-      var amount = prompt('Amount (e.g. 5.0):');
+      var amount = await promptAction('Amount (e.g. 5.0):');
       if (!amount) return;
-      var currency = prompt('Currency (EUR / USD / GBP):', 'EUR') || 'EUR';
-      var desc = prompt('Description (optional):') || '';
+      var currency = await promptAction('Currency (EUR / USD / GBP):', { defaultValue: 'EUR' }) || 'EUR';
+      var desc = await promptAction('Description (optional):') || '';
       fetch('/api/cost', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({provider: provider, amount: parseFloat(amount), currency: currency, description: desc})}).then(function(){renderCostsView();});
     });
   } catch (e) { main.innerHTML = '<div class="empty-state">error: ' + esc(e.message) + '</div>'; }
@@ -5213,8 +5213,8 @@ async function renderTemplatesView() {
     main.innerHTML = html;
     renderOutline();
     main.querySelectorAll('[data-tpl-run]').forEach(function(b) {
-      b.addEventListener('click', function() {
-        var proj = prompt('Attach todos to which project? (leave empty for none)');
+      b.addEventListener('click', async function() {
+        var proj = await promptAction('Attach todos to which project? (leave empty for none)');
         fetch('/api/templates/by-key/' + b.dataset.tplRun + '/instantiate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({project_key: proj || null})})
           .then(function(r){return r.json();})
           .then(function(d){notify('created ' + d.ids.length + ' todos');});
@@ -5374,11 +5374,11 @@ function renderAgentsMount(mount, data) {
   });
 
   // New agent button
-  document.getElementById('agent-add-btn').addEventListener('click', function() {
-    var name = prompt('Agent name:');
+  document.getElementById('agent-add-btn').addEventListener('click', async function() {
+    var name = await promptAction('Agent name:');
     if (!name) return;
-    var teamId = prompt('Team ID (numeric, or leave blank for 1):') || '1';
-    var type = prompt('Type (human | ai_agent | system):', 'ai_agent') || 'ai_agent';
+    var teamId = await promptAction('Team ID (numeric, or leave blank for 1):') || '1';
+    var type = await promptAction('Type (human | ai_agent | system):', { defaultValue: 'ai_agent' }) || 'ai_agent';
     fetch('/api/members', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({team_id: parseInt(teamId), name: name.trim(), type: type.trim()})
@@ -5396,14 +5396,14 @@ function renderAgentsMount(mount, data) {
 }
 
 // Global drop handler — reparent a member to another member
-window._agentDrop = function(targetMemberId, ev) {
+window._agentDrop = async function(targetMemberId, ev) {
   ev.preventDefault();
   ev.currentTarget.style.background = '';
   var sourceId = window._agentDragId;
   window._agentDragId = null;
   if (!sourceId || sourceId === targetMemberId) return;
   if (!_agentEditing) { notify('enable edit mode to reparent'); return; }
-  if (!confirm('Make ' + sourceId + ' report to ' + targetMemberId + '?')) return;
+  if (!await confirmAction('Make ' + sourceId + ' report to ' + targetMemberId + '?')) return;
   fetch('/api/members/' + sourceId, {
     method: 'PUT', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({manager_id: targetMemberId})
@@ -5641,7 +5641,7 @@ async function loadAgentMemory(mid) {
     });
     mount.querySelectorAll('[data-mem-del]').forEach(function(b) {
       b.addEventListener('click', async function() {
-        if (!confirm('Delete memory?')) return;
+        if (!await confirmAction('Delete memory?')) return;
         var r = await fetch('/api/agents/' + mid + '/memory/' + b.dataset.memDel, {method:'DELETE'});
         if (r.ok) loadAgentMemory(mid);
       });
@@ -5701,7 +5701,7 @@ async function loadAgentTriggers(mid) {
     });
     mount.querySelectorAll('[data-trig-del]').forEach(function(b) {
       b.addEventListener('click', async function() {
-        if (!confirm('Delete trigger?')) return;
+        if (!await confirmAction('Delete trigger?')) return;
         var r = await fetch('/api/agents/' + mid + '/triggers/' + b.dataset.trigDel, {method:'DELETE'});
         if (r.ok) loadAgentTriggers(mid);
       });
@@ -5798,11 +5798,11 @@ async function wireAgentDetail() {
   // Wake button
   var wakeBtn = document.querySelector('[data-agent-wake-btn]');
   if (wakeBtn) wakeBtn.addEventListener('click', async function() {
-    var prompt = window.prompt('Wake prompt (leave blank for default):') || '';
+    var wakeText = await promptAction('Wake prompt (leave blank for default):') || '';
     wakeBtn.disabled = true; wakeBtn.textContent = 'waking...';
     var r = await fetch('/api/agents/' + wakeBtn.dataset.agentWakeBtn + '/wake', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({prompt: prompt})
+      body: JSON.stringify({prompt: wakeText})
     });
     wakeBtn.disabled = false; wakeBtn.textContent = '\u26a1 wake now';
     var pu = await ProviderErrors.fromResponse(r);
@@ -5819,7 +5819,7 @@ async function wireAgentDetail() {
   // Delete
   var delBtn = document.querySelector('[data-agent-del]');
   if (delBtn) delBtn.addEventListener('click', async function() {
-    if (!confirm('Delete this agent?')) return;
+    if (!await confirmAction('Delete this agent?')) return;
     var r = await fetch('/api/members/' + delBtn.dataset.agentDel, {method: 'DELETE'});
     if (r.ok) { _agentSelectedId = null; renderAgentsView(); }
     else notify('delete failed');

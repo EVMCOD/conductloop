@@ -96,7 +96,17 @@ def test_connectors_page_full_flow(site):
                   else None)
             pg.on("response", lambda r: errors.append(f"http {r.status} {r.url}")
                   if r.status >= 400 and not r.url.endswith("/favicon.ico") else None)
-            pg.on("dialog", lambda d: d.accept())
+
+            # A NATIVE dialog must never be raised any more: the question is
+            # asked in the page (web/confirm.js). In the desktop app the shell
+            # overrides window.confirm with an async call, so a truthiness
+            # guard sees a truthy Promise and the destructive action runs
+            # without asking; here the native dialog is recorded and the
+            # test fails, which is the same defect caught at the source.
+            def native_dialog(d):
+                errors.append(f"native dialog: {d.type} {d.message}")
+                d.dismiss()
+            pg.on("dialog", native_dialog)
 
             resp = pg.goto(base + "/connectors")
             policies = [h["value"] for h in resp.headers_array() if h["name"].lower() == "content-security-policy"]
@@ -146,7 +156,13 @@ def test_connectors_page_full_flow(site):
             # Downgrade, then disconnect (confirm dialog accepted).
             pg.click(f"{card} button:text-is('Pasar a solo lectura')")
             pg.wait_for_selector(f"{card} [data-testid=permission]:text-is('solo lectura')")
+            # The question is asked in the page (web/confirm.js): the
+            # in-page dialog opens, the connector is still connected while it
+            # is open, and only the click on "Confirmar" disconnects it.
             pg.click(f"{card} button:text-is('Desconectar')")
+            pg.wait_for_selector("#confirm-dialog[open]")
+            assert pg.text_content(f"{card} [data-testid=status]") == "conectado"
+            pg.click("#confirm-yes")
             pg.wait_for_selector(f"{card} [data-testid=status]:text-is('desconectado')")
             assert store.get_account("fakechat")["status"] == "disconnected"
             pg.click("#audit-refresh")
@@ -190,7 +206,6 @@ def test_mcp_servers_section(site, tmp_path):
             pg.on("console", lambda m: errors.append(f"console: {m.text}")
                   if "Content Security Policy" in m.text or (m.type == "error" and "Failed to load resource" not in m.text)
                   else None)
-            pg.on("dialog", lambda d: d.accept())
             pg.goto(base + "/connectors")
             pg.wait_for_selector("#mcp-list p.hint:text-is('No hay servidores MCP.')")
             pg.click("#mcp-add summary")
@@ -228,6 +243,8 @@ def test_mcp_servers_section(site, tmp_path):
             pg.wait_for_selector("#pending-empty:not([hidden])")
             assert out.exists()
             pg.click(f"{srv} button:text-is('Eliminar')")
+            pg.wait_for_selector("#confirm-dialog[open]")
+            pg.click("#confirm-yes")
             pg.wait_for_selector("#mcp-list p.hint:text-is('No hay servidores MCP.')")
         finally:
             browser.close()

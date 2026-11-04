@@ -375,6 +375,35 @@ code, kbd, pre { font-family: var(--cl-font-mono); }
 .cl-toast--error { border-color: var(--cl-danger); background: var(--cl-danger-soft); }
 .cl-toast--ok { border-color: var(--cl-ok); background: var(--cl-ok-soft); }
 
+/* Messages the user can see (toast.js). alert() is invisible in the
+   desktop app, so every message goes here instead. */
+#toast-root {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 480px;
+  pointer-events: none;
+}
+#toast-root .toast {
+  pointer-events: auto;
+  background: var(--cl-bg-3, #17181c);
+  color: var(--cl-ink, #e8e8ea);
+  border: 1px solid var(--cl-border-2, #33343a);
+  border-left: 3px solid var(--cl-accent, #5b8def);
+  border-radius: var(--cl-radius-md, 4px);
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: var(--cl-shadow-3, 0 6px 22px rgba(0, 0, 0, 0.45));
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+#toast-root .toast.error { border-left-color: var(--cl-danger, #e5484d); }
+
 .cl-divider { height: 1px; background: var(--cl-border); border: 0; margin: var(--cl-space-4) 0; }
 
 /* The app shell: rail on the left, status bar at the bottom. */

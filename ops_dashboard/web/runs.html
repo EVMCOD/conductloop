@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/toast.js"></script>
   <script src="/csrf.js" defer></script>
   <link rel="stylesheet" href="/theme.css">
   <meta charset="utf-8" />
@@ -81,10 +82,10 @@
       try{
         const r=await fetch('/api/agents/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:Number(id)})});
         const d=await r.json();
-        if(ProviderErrors.providerOf(d)){ alert(ProviderErrors.friendly(d)); await loadFeed(); return; }
+        if(ProviderErrors.providerOf(d)){ notifyError(ProviderErrors.friendly(d)); await loadFeed(); return; }
         if(!d.ok) throw new Error(d.error||'failed');
         await loadFeed();
-      }catch(e){ alert('Run failed: '+e.message); }
+      }catch(e){ notifyError('Run failed: '+e.message); }
       finally{ btn.disabled=false; btn.textContent=t; }
     }
 
@@ -133,7 +134,7 @@
         const r=await fetch('/api/approvals/'+Number(id)+'/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
         if(!r.ok) throw new Error('HTTP '+r.status);
         await loadApprovals(); await loadFeed();
-      }catch(e){ alert('Failed: '+e.message); btn.disabled=false; }
+      }catch(e){ notifyError('Failed: '+e.message); btn.disabled=false; }
     }
 
     loadAgents(); loadFeed(); loadApprovals();

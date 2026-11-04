@@ -18,6 +18,18 @@
     return root;
   }
 
+  // The validation error belongs to the form the user is looking at, so it
+  // goes into the card itself. alert() is invisible in the desktop app.
+  function showFieldError(card, msg) {
+    var e = card.querySelector('.dialog-error');
+    if (!e) {
+      e = document.createElement('div');
+      e.className = 'dialog-error';
+      card.insertBefore(e, card.firstChild);
+    }
+    e.textContent = msg;
+  }
+
   function close() {
     var root = ensureRoot();
     root.style.display = 'none';
@@ -83,7 +95,7 @@
         else data[f.key] = el.value.trim();
       });
       var err = (opts.validate ? opts.validate(data) : null);
-      if (err) { alert(err); return; }
+      if (err) { showFieldError(card, err); return; }
       close();
       if (opts.onSubmit) opts.onSubmit(data);
     });
@@ -92,6 +104,10 @@
     if (first) setTimeout(function(){ first.focus(); }, 50);
     // Enter to submit
     card.addEventListener('keydown', function(e) {
+      // The overlay is modal: it keeps its keystrokes. The dashboard's
+      // global Escape handler would navigate back while the user is only
+      // closing the dialog.
+      e.stopPropagation();
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         card.querySelector('[data-dialog-submit]').click();
       } else if (e.key === 'Escape') close();

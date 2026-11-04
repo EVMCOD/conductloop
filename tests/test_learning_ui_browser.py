@@ -115,7 +115,14 @@ def test_learning_page_full_flow(site, tmp_path):
             pg.on("response", lambda r: errors.append(f"http {r.status} {r.url}")
                   if r.status >= 400 and not r.url.endswith("/favicon.ico")
                   and not (r.status == 409 and r.url.endswith("/proposals/approve")) else None)
-            pg.on("dialog", lambda d: d.accept(""))
+
+            # A native dialog must never be raised: the question is asked in
+            # the page (web/confirm.js) and the message goes to the toast
+            # (web/toast.js). See the note in test_connectors_ui_browser.py.
+            def native_dialog(d):
+                errors.append(f"native dialog: {d.type} {d.message}")
+                d.dismiss()
+            pg.on("dialog", native_dialog)
 
             resp = pg.goto(base + "/learning")
             csp = resp.headers.get("content-security-policy", "")

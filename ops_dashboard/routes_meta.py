@@ -80,6 +80,16 @@ def app_js(handler) -> None:
     handler._send(200, body, "text/javascript; charset=utf-8")
 
 
+@router.get("/confirm.css")
+def confirm_css(handler) -> None:
+    """The in-page dialog styles (web/confirm.js): the confirmation and the
+    text prompt every page that asks the user something uses. A stylesheet
+    is served only by an explicit route, so it needs one of its own."""
+    with open(os.path.join(_WEB_DIR, "confirm.css"), "rb") as fh:
+        body = fh.read()
+    handler._send(200, body, "text/css; charset=utf-8")
+
+
 
 @router.get("/api/health")
 @router.get("/health")
