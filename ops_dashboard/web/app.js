@@ -3716,7 +3716,7 @@ async function renderTaskDetail(taskId) {
           html += '</div>';
         }
         if (r.status === 'needs_approval') {
-          html += '<button data-approve-run="' + r.id + '" style="background:var(--yellow);color:#000;border:0;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:500;margin-top:6px">Approve &amp; run write</button>';
+          html += '<button data-approve-run="' + r.id + '" title="Records your approval. The staged artifact is not written to the vault." style="background:var(--yellow);color:#000;border:0;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:500;margin-top:6px">Mark approved</button>';
         }
         html += '</div>';
       });
@@ -3732,9 +3732,17 @@ async function renderTaskDetail(taskId) {
     if (rerun) rerun.addEventListener('click', async function() {
       rerun.disabled = true; rerun.textContent = '⏳ re-running…';
       try {
-        await fetch('/api/tasks/' + t.id + '/run', { method: 'POST' });
+        var res = await fetch('/api/tasks/' + t.id + '/run', { method: 'POST' });
+        var body = {};
+        try { body = await res.json(); } catch (e2) { body = {}; }
+        if (!res.ok || body.ok === false) {
+          notify((body && (body.error || body.message)) || 're-run failed', 'error');
+          rerun.disabled = false;
+          rerun.textContent = '↻ re-run';
+          return;
+        }
         setTimeout(function() { renderTaskDetail(t.id); }, 6000);
-      } catch (e) { notify('rerun failed: ' + e.message); }
+      } catch (e) { notify('re-run failed: ' + e.message, 'error'); }
     });
     // Auto-start the live stream if the task is running
     if (t.status === 'running' || t.status === 'queued') {
@@ -3752,11 +3760,23 @@ async function renderTaskDetail(taskId) {
     }
     main.querySelectorAll('[data-approve-run]').forEach(function(btn) {
       btn.addEventListener('click', async function() {
-        var rid = parseInt(btn.dataset.approveRun);
+        var rid = parseInt(btn.dataset.approveRun, 10);
+        btn.disabled = true;
         try {
-          await fetch('/api/tasks/' + rid + '/approve', { method: 'POST' });
+          var res = await fetch('/api/tasks/' + t.id + '/approve', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({run_id: rid})
+          });
+          var body = {};
+          try { body = await res.json(); } catch (e2) { body = {}; }
+          if (!res.ok || body.ok === false) {
+            notify((body && (body.error || body.message)) || 'approve failed', 'error');
+            btn.disabled = false;
+            return;
+          }
           renderTaskDetail(t.id);
-        } catch (e) { notify('approve failed: ' + e.message); }
+        } catch (e) { notify('approve failed: ' + e.message, 'error'); btn.disabled = false; }
       });
     });
   } catch (e) {

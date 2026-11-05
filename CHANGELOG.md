@@ -2,6 +2,15 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased
+
+### A task run has one owner
+
+- **Approving a run now records the decision.** The Approve button sent the run's id to an address that expected a task id, and the server answered success without updating the row. The run stayed "needs approval". Approval now names the task and the run, and the screen says when it did not stick.
+- **Approval does not write the artifact.** The staged text is not kept, so a click cannot put it in the vault. The button says "Mark approved" and the run records that the write did not happen.
+- **One live attempt per task.** Starting a task that is already running is refused. A second attempt used to be able to start anyway, and whichever one finished last decided the task's status.
+- **A run left behind by a restart is reported as interrupted**, with no result, so the task can be started again. A run whose process is still alive is left alone.
+
 ## 1.2.14 — 2026-11-05 — First run that a stranger can finish
 
 Launch polish on top of 1.2.13: a stranger on a clean Mac can finish first

@@ -82,6 +82,21 @@ def _ts(ts: int | None) -> str:
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
 
 
+def _optional_run_id(raw: object) -> int | None:
+    """A JSON run id: absent, a non-negative int, or a string of digits."""
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, bool) or isinstance(raw, float):
+        raise ValueError
+    if isinstance(raw, int):
+        if raw < 0:
+            raise ValueError
+        return raw
+    if isinstance(raw, str) and raw.strip().isdigit():
+        return int(raw.strip())
+    raise ValueError
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Route the stdlib request log (method/path/status) through our logger
@@ -1337,11 +1352,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
             m = re.match(r"^/api/tasks/(\d+)/approve$", path)
             if m:
-                from . import orchestrator
-                task_id = int(m.group(1))
-                result = orchestrator.approve_run(task_id=task_id)
-                status = 200 if result.get("ok") else 400
-                self._send(status, _json(result).encode(), "application/json")
+                self._approve_task_run(int(m.group(1)))
             else:
                 self._send(404, b"not found")
         else:
@@ -1680,13 +1691,35 @@ class DashboardHandler(BaseHTTPRequestHandler):
         # already threaded, one request per thread). The handler blocks until
         # the LLM finishes, which is fine for local Ollama.
         try:
-            orchestrator.run_task(task_id, sync=True, on_event=_on_event)
+            result = orchestrator.run_task(task_id, sync=True, on_event=_on_event)
+            # A refused start (already running, unknown task) emits nothing,
+            # which used to leave the stream open with no explanation.
+            if not result.get("ok") and not done_event.is_set():
+                self.wfile.write(b"data: " + _json.dumps({
+                    "type": "error",
+                    "message": result.get("error") or result.get("message") or "task did not start",
+                }).encode() + b"\n\n")
+                self.wfile.flush()
         except Exception as e:
             try:
                 self.wfile.write(b"data: " + _json.dumps({"type": "error", "message": str(e)}).encode() + b"\n\n")
                 self.wfile.flush()
             except Exception: pass
         return
+
+    def _approve_task_run(self, task_id: int) -> None:
+        """Record approval of one run of this task. Does not write the artifact."""
+        from . import orchestrator
+        data = self._read_json()
+        try:
+            run_id = _optional_run_id(data.get("run_id"))
+        except ValueError:
+            self._send(400, _json({"ok": False, "error": "run_id must be an integer"}).encode(),
+                       "application/json")
+            return
+        result = orchestrator.approve_run(run_id=run_id, task_id=task_id)
+        status = 200 if result.get("ok") else 400
+        self._send(status, _json(result).encode(), "application/json")
 
     def do_POST(self) -> None:
         """POST handlers."""
@@ -2281,14 +2314,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 result = orchestrator.run_task(tid, sync=sync)
                 _pe.send_result(self, result, 200 if result.get("ok") else 400, _json(result).encode())
                 return
-            # POST /api/tasks/<id>/approve  (the <id> is a task_id, we resolve to latest run)
+            # POST /api/tasks/<id>/approve  (the <id> is a task_id; body may name the run)
             m = re.match(r"^/api/tasks/(\d+)/approve$", path)
             if m:
-                from . import orchestrator
-                task_id = int(m.group(1))
-                result = orchestrator.approve_run(task_id=task_id)
-                status_code = 200 if result.get("ok") else 400
-                self._send(status_code, _json(result).encode(), "application/json")
+                self._approve_task_run(int(m.group(1)))
                 return
             if path == "/api/tags":
                 self._tags_action()
