@@ -137,15 +137,14 @@ def test_migration_20_through_24_on_a_wal_safe_backup_copy(tmp_path, monkeypatch
     conn.close()
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="seatbelt profiles are for sandbox-exec on macOS")
 def test_seatbelt_profile_denies_network_and_sensitive_paths(tmp_path):
     prof = sandbox.seatbelt_profile(worktree=tmp_path, tmp=tmp_path)
     assert "(deny network*)" in prof
     assert "(deny file-write*" in prof
-    # Absolute, OS-native paths (backslashes on Windows).
-    ssh = str(Path.home() / ".ssh")
-    keychains = str(Path.home() / "Library" / "Keychains")
-    assert ssh in prof
-    assert keychains in prof
+    # Quoted absolute paths (_sb_quote doubles backslashes if any).
+    assert str(Path.home() / ".ssh") in prof
+    assert str(Path.home() / "Library" / "Keychains") in prof
 
 
 @pytest.mark.skipif(
