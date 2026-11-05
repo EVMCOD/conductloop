@@ -2,6 +2,31 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased — Links, downloads and drops work in the desktop window
+
+Checked in a packaged debug build: browser APIs that are fine in a browser
+did nothing in the desktop window, because wry only acts on them when the
+window has a handler, and the main window had none.
+
+- **Links to other sites open in your browser.** `window.open` and
+  `target="_blank"` links (chat answers, the status page, the sidebar URLs,
+  connector guides) did nothing at all. A plain link to another site
+  replaced the whole app with that site, with no way back. Other sites now
+  open in the system browser; the app's own pages stay in the window;
+  anything else (`file:`, other local ports) is refused.
+- **"↓ save" saves the conversation.** It used `window.open`, so it did
+  nothing in the app. It is now a download (`Content-Disposition:
+  attachment`), saved to the Downloads folder, and a toast says where.
+  Every `<a download>` and blob download works the same way.
+- **Dragging in the agents org chart drops.** Tauri's file-drop handler took
+  every drag, so the page never got its `drop`. It is off for the main
+  window; a file dropped on it is refused instead of opening.
+- **Copy in the note's AI panel** reports on its own button (it relabelled
+  the action button) and shows an error instead of throwing.
+- `tests/test_browser_apis_in_app.py` keeps the handlers, the download and
+  the bans on `Notification` (always "denied" in the app) and
+  `beforeunload` (never shown) in place.
+
 ## 1.2.13 — 2026-11-04 — The app asks before it deletes
 
 The desktop window is served over http by the local server, and Tauri v2
