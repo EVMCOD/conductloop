@@ -568,7 +568,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if not md:
                 self._send(404, b'{"error":"not found"}', "application/json")
                 return
-            self._send(200, md.encode("utf-8"), "text/markdown; charset=utf-8")
+            # An attachment, so the page can save it with <a download>: the
+            # desktop window has no tab to open it in (window.open did nothing).
+            self._send(200, md.encode("utf-8"), "text/markdown; charset=utf-8", headers={
+                "Content-Disposition": f'attachment; filename="conversation-{conv_id}.md"',
+            })
         elif path == "/api/brain/briefing":
             from . import brain
             self._send(200, _json({"text": brain.briefing()}).encode(), "application/json")

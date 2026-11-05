@@ -275,10 +275,17 @@ document.querySelectorAll('.ai-action').forEach(b => {
         updateMeta();
         scheduleAutoSave();
       });
-      $('ai-result').querySelector('[data-copy]').addEventListener('click', async () => {
-        await navigator.clipboard.writeText(d.result);
-        b.textContent = '✓ Copied';
-        setTimeout(() => b.textContent = 'Copy', 1500);
+      const copyBtn = $('ai-result').querySelector('[data-copy]');
+      copyBtn.addEventListener('click', async () => {
+        // The Copy button reports on itself (it used to relabel the AI
+        // action button), and a refused write says so instead of throwing.
+        try {
+          await navigator.clipboard.writeText(d.result);
+          copyBtn.textContent = '✓ Copied';
+        } catch (e) {
+          copyBtn.textContent = '✗ ' + (e && e.message ? e.message : 'Copy failed');
+        }
+        setTimeout(() => copyBtn.textContent = 'Copy', 1500);
       });
     } catch (e) {
       $('ai-result').innerHTML = '<div class="status error">' + escapeHtml(e.message) + '</div>';

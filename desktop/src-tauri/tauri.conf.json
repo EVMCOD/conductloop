@@ -25,6 +25,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "ConductLoop",
         "width": 1440,
         "height": 900,
@@ -36,7 +37,8 @@
         "visible": true,
         "decorations": true,
         "titleBarStyle": "Visible",
-        "acceptFirstMouse": true
+        "acceptFirstMouse": true,
+        "dragDropEnabled": false
       }
     ]
   },

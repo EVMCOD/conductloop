@@ -1724,7 +1724,15 @@ async function loadBriefing() { setView('briefing'); }
 async function exportCurrentChat() {
   if (!_convId) { try { var cs = await fetchJSON('/api/brain/conversations'); if (cs.length) _convId = cs[0].id; } catch (e) {} }
   if (!_convId) { notify('no conversations yet'); return; }
-  window.open('/api/brain/conversation/export?id=' + _convId, '_blank');
+  // A download, not a new tab: the desktop window cannot open tabs, and
+  // opening it in one did nothing. The app saves it to Downloads and says so.
+  var a = document.createElement('a');
+  a.href = '/api/brain/conversation/export?id=' + encodeURIComponent(_convId);
+  a.download = 'conversation-' + _convId + '.md';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 // Briefing view
