@@ -17,8 +17,11 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Pin 24.04: ubuntu-latest moved to 26.04 and apt for ffmpeg has been
+    # fetching at ~50 kB/s (~22 min), which burned the old 30m job budget
+    # before pytest could finish (run 42025737575).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
