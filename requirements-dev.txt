@@ -12,8 +12,8 @@ anthropic>=0.111.0     # the Anthropic SDK, so the MiniMax plan test can check
                         # the real signature of Messages.create() (not heavy)
 openai>=2.43.0         # the OpenAI SDK, for the same reason: the tool-calling
                         # loop is proven against the real client (not heavy)
-ruff==0.16.0           # lint + format (pinned: matches .pre-commit rev, avoids CI/local drift)
+ruff==0.17.3           # lint + format (pinned: matches .pre-commit rev, avoids CI/local drift)
 mypy>=1.11              # static type check
 pytest-cov>=5.0         # coverage reporting
-pre-commit>=4.6.1         # local git hooks (see .pre-commit-config.yaml)
+pre-commit>=4.7.0         # local git hooks (see .pre-commit-config.yaml)
 pip-audit>=2.10.1          # dependency vulnerability scan
