@@ -2,6 +2,22 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased — Connectors that need no account: end-to-end smoke
+
+- **`scripts/smoke-connectors.py`.** Drives a running server (dev or the
+  packaged sidecar) through the Conectores API: MCP client over stdio and over
+  Streamable HTTP (a fake server on a real loopback socket, JSON + SSE), and
+  optionally RSS against a public feed. Checks read tools run with untrusted
+  results, writes are refused while read-only and only run after
+  confirmation, and cleans up its `smoke-*` servers.
+- **`tests/test_connectors_no_account_smoke.py`.** The same flows in CI, no
+  network: real-socket HTTP MCP with a bearer token, a wrong token is not
+  reported as connected and never echoed, RSS sync through the routes with
+  recorded feeds.
+- **`docs/connectors/no-account-smoke.md`.** How to run it against the
+  packaged sidecar with temporary data, and which account each remaining
+  connector needs for manual verification.
+
 ## Unreleased — Mac checklist (#32): automate what needs no accounts
 
 Issue #32 asked for Mac-only release checks. Most of the non-account work is
