@@ -349,7 +349,7 @@ dependencies = [
 
 [[package]]
 name = "conductloop-desktop"
-version = "1.2.13"
+version = "1.2.14"
 dependencies = [
  "conductloop-url-policy",
  "getrandom 0.3.4",

@@ -2,7 +2,14 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
-## Unreleased — Connectors that need no account: end-to-end smoke
+## 1.2.14 — 2026-11-05 — First run that a stranger can finish
+
+Launch polish on top of 1.2.13: a stranger on a clean Mac can finish first
+run without the app hiding the key, the tour matches the product that ships,
+links and downloads work in the desktop window, the in-app browser is usable,
+and Mac / connector smoke checks cover what does not need an account.
+
+### Connectors that need no account: end-to-end smoke
 
 - **`scripts/smoke-connectors.py`.** Drives a running server (dev or the
   packaged sidecar) through the Conectores API: MCP client over stdio and over
@@ -18,7 +25,7 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
   packaged sidecar with temporary data, and which account each remaining
   connector needs for manual verification.
 
-## Unreleased — Mac checklist (#32): automate what needs no accounts
+### Mac checklist (#32): automate what needs no accounts
 
 Issue #32 asked for Mac-only release checks. Most of the non-account work is
 now a script and hermetic tests; Keychain, OAuth consoles and live L2 stay on
@@ -42,7 +49,7 @@ the issue as a manual list for Enrique.
   in sync by `tests/test_macos_minimum.py`). Confirming or revisiting that
   decision stays with Enrique on #32.
 
-## Unreleased — In-app browser: focus, tab clicks and Save page
+### In-app browser: focus, tab clicks and Save page
 
 Three leftovers from the in-app browser on a packaged debug build:
 
@@ -60,7 +67,7 @@ Three leftovers from the in-app browser on a packaged debug build:
 - `tests/test_browser_page.py` guards the label, the tab-strip click path and
   the blank-tab focus behaviour.
 
-## Unreleased — The quick tour describes the current product
+### The quick tour describes the current product
 
 - **`/tour` no longer promises retired features.** It talked about "13
   projects", revenue, GA4 traffic and Sentry errors. The five steps now cover
@@ -68,7 +75,7 @@ Three leftovers from the in-app browser on a packaged debug build:
   CEO, local Markdown notes and opt-in connectors. No invented numbers. A
   small test guards the copy.
 
-## Unreleased — First run without a keychain does not hide the key
+### First run without a keychain does not hide the key
 
 Walked a packaged debug build as a stranger (temporary HOME, data dir, no
 keychain, empty projects). The welcome page, the no-key answer and a few
@@ -96,7 +103,7 @@ error strings were lying to that person.
   encrypted-vault path, the related-notes mock answer and the English
   provider errors in place.
 
-## Unreleased — Links, downloads and drops work in the desktop window
+### Links, downloads and drops work in the desktop window
 
 Checked in a packaged debug build: browser APIs that are fine in a browser
 did nothing in the desktop window, because wry only acts on them when the
