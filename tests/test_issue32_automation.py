@@ -141,8 +141,11 @@ def test_seatbelt_profile_denies_network_and_sensitive_paths(tmp_path):
     prof = sandbox.seatbelt_profile(worktree=tmp_path, tmp=tmp_path)
     assert "(deny network*)" in prof
     assert "(deny file-write*" in prof
-    assert ".ssh" in prof
-    assert "Library/Keychains" in prof
+    # Absolute, OS-native paths (backslashes on Windows).
+    ssh = str(Path.home() / ".ssh")
+    keychains = str(Path.home() / "Library" / "Keychains")
+    assert ssh in prof
+    assert keychains in prof
 
 
 @pytest.mark.skipif(

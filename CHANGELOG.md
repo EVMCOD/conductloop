@@ -19,6 +19,9 @@ the issue as a manual list for Enrique.
   and integrity; on Darwin, `detect_backend()` is `sandbox-exec`, a broken
   Seatbelt profile fails closed, and network / outside-write / `~/.ssh` probes
   are blocked.
+- **Windows follow-up:** `test_seatbelt_profile_denies_network_and_sensitive_paths`
+  matches `Path.home() / …` (OS-native separators) so the non-required
+  `windows-python` job does not fail on backslashes.
 - Does **not** change `minimumSystemVersion` (already `13.0` on `main`, kept
   in sync by `tests/test_macos_minimum.py`). Confirming or revisiting that
   decision stays with Enrique on #32.
