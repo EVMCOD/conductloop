@@ -105,19 +105,21 @@ def serve_stdio() -> None:  # pragma: no cover - requires the mcp package + a cl
 
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
-    from mcp.types import TextContent, Tool
+    from mcp.types import CallToolResult, ListToolsResult, TextContent, Tool
 
     db.init_db()
-    server = Server("conductloop")
 
-    @server.list_tools()
-    async def _list():
-        return [Tool(name=t["name"], description=t["description"], inputSchema=t["inputSchema"]) for t in TOOLS]
+    # mcp >= 2.1: handlers are registered in the constructor (on_*), the
+    # @server.list_tools()/@server.call_tool() decorators are gone.
+    async def _list(_ctx, _params):
+        return ListToolsResult(tools=[Tool(name=t["name"], description=t["description"],
+                                           inputSchema=t["inputSchema"]) for t in TOOLS])
 
-    @server.call_tool()
-    async def _call(name: str, arguments: dict):
-        result = call_tool(name, arguments)
-        return [TextContent(type="text", text=json.dumps(result, default=str))]
+    async def _call(_ctx, params):
+        result = call_tool(params.name, params.arguments or {})
+        return CallToolResult(content=[TextContent(type="text", text=json.dumps(result, default=str))])
+
+    server = Server("conductloop", on_list_tools=_list, on_call_tool=_call)
 
     async def _run():
         async with stdio_server() as (r, w):
