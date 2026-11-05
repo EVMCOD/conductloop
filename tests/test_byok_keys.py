@@ -112,6 +112,9 @@ def test_new_key_without_keychain_goes_to_the_encrypted_vault(monkeypatch):
     assert byok_keys.status(_cfg())["keychain_available"] is False
     # And it really is in the vault.
     assert secret_vault.get("byok.openai.default") == FAKE
+    # get_api_key must resolve the vault-backed ref (not only keychain).
+    assert byok_keys.get_api_key("openai", _cfg()) == FAKE
+    assert byok_keys.key_storage("openai", _cfg()) == "vault"
 
 
 def test_unverified_keychain_write_falls_back_to_config(monkeypatch):

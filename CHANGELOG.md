@@ -13,6 +13,11 @@ error strings were lying to that person.
   into `config.json` and said "Key saved." It now asks for a passphrase on
   that page (or returns 423 so Credentials can open the vault) and stores the
   key only in the encrypted file.
+- **The brain reads keys from the encrypted vault.** After the welcome page
+  stored a key under a `*_api_key_ref` with no keychain, `get_api_key` only
+  looked in the OS keychain, so the brain could not call the provider even
+  with the vault unlocked. It now resolves keychain, then vault, then
+  plaintext.
 - **No-key answers no longer say "nothing matches" next to citations.** When
   retrieval found notes but no single line shared enough words with the
   question, the mock answer contradicted the [N] sources. It now lists the

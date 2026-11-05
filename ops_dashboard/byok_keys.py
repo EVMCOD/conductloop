@@ -8,7 +8,7 @@ Storage model
 * Keychain unavailable → historic behaviour: plaintext ``<provider>_api_key``
   in ``config.json`` (0600). The UI warns about it.
 
-Reads stay backward compatible: env var → keychain ref → legacy plaintext.
+Reads stay backward compatible: env var → keychain ref → encrypted vault → legacy plaintext.
 
 Existing plaintext keys are moved ONLY with the user's explicit consent
 (:func:`migrate_to_keychain`); each key is written, read back and compared
@@ -61,6 +61,33 @@ def _keychain_read(ref: str) -> str | None:
     return value
 
 
+def _vault_read(ref: str) -> str | None:
+    """Read a BYOK ref from the encrypted vault when the OS keychain has none.
+
+    Welcome / Credentials store keys here when ``OPS_DISABLE_KEYCHAIN=1`` (or
+    there is no keychain). ``get_api_key`` must resolve them the same way
+    ``store_api_key`` wrote them, or onboarding reports "Key saved" while the
+    brain cannot call the provider.
+    """
+    try:
+        from . import secret_vault
+
+        return secret_vault.get(ref)
+    except Exception:
+        return None
+
+
+def _resolve_ref(ref: str) -> tuple[str | None, str | None]:
+    """Return ``(value, backend)`` for a config ref: keychain, then vault."""
+    value = _keychain_read(ref)
+    if value:
+        return value, "keychain"
+    value = _vault_read(ref)
+    if value:
+        return value, "vault"
+    return None, None
+
+
 def _invalidate(ref: str | None = None) -> None:
     with _cache_lock:
         if ref is None:
@@ -70,27 +97,33 @@ def _invalidate(ref: str | None = None) -> None:
 
 
 def get_api_key(provider: str, cfg: dict) -> str:
-    """Resolve a provider key: env var, then keychain ref, then legacy plaintext."""
+    """Resolve a provider key: env var, then keychain/vault ref, then plaintext."""
     provider = _check(provider)
     env = os.environ.get(ENV_VAR[provider])
     if env:
         return env
     ref = cfg.get(REF_FIELD[provider])
     if ref:
-        value = _keychain_read(ref)
+        value, backend = _resolve_ref(ref)
         if value:
             return value
-        log.warning("BYOK key for %s not found in keychain (ref %s)", provider, ref)
+        log.warning(
+            "BYOK key for %s not found in keychain or vault (ref %s)",
+            provider, ref,
+        )
     return cfg.get(PLAINTEXT_FIELD[provider], "") or ""
 
 
 def key_storage(provider: str, cfg: dict) -> str | None:
-    """Where the effective key comes from: env | keychain | config | None."""
+    """Where the effective key comes from: env | keychain | vault | config | None."""
     provider = _check(provider)
     if os.environ.get(ENV_VAR[provider]):
         return "env"
-    if cfg.get(REF_FIELD[provider]) and _keychain_read(cfg[REF_FIELD[provider]]):
-        return "keychain"
+    ref = cfg.get(REF_FIELD[provider])
+    if ref:
+        _value, backend = _resolve_ref(ref)
+        if backend:
+            return backend
     if cfg.get(PLAINTEXT_FIELD[provider]):
         return "config"
     return None

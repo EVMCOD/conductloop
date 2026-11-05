@@ -30,6 +30,8 @@ def test_ui_key_save_refuses_plaintext_when_vault_locked(locked_home):
 
 
 def test_ui_key_save_goes_to_encrypted_vault_after_passphrase(locked_home):
+    from ops_dashboard import byok_keys
+
     assert secret_vault.unlock("stranger-passphrase") is True
     out = credentials.set_secret("byok.anthropic.default", "sk-ant-test-key")
     assert out["where"] in ("encrypted", "keychain")
@@ -37,6 +39,9 @@ def test_ui_key_save_goes_to_encrypted_vault_after_passphrase(locked_home):
     assert "anthropic_api_key" not in cfg
     assert cfg.get("anthropic_api_key_ref")
     assert secret_vault.get("byok.anthropic.default") == "sk-ant-test-key"
+    # The brain must resolve the same key it just saved (Codex P1 on #101).
+    assert byok_keys.get_api_key("anthropic", cfg) == "sk-ant-test-key"
+    assert byok_keys.key_storage("anthropic", cfg) == "vault"
 
 
 def test_mock_points_at_related_notes_instead_of_nothing_matches():
