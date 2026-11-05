@@ -17,8 +17,11 @@ concurrency:
 
 jobs:
   test:
+    # ubuntu-latest is 26.04; apt for ffmpeg has fetched at ~50 kB/s (~22 min)
+    # and burned the old 30m budget mid-pytest (run 42025737575). Keep the
+    # floating label (workflows_guard) but give the suite headroom.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
