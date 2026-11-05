@@ -76,7 +76,7 @@ def test_coding_plan_streams(fake_anthropic):
 
 def test_internal_errors_are_not_blamed_on_the_provider():
     err = brain._classify_provider_error(TypeError("create() got an unexpected keyword argument 'x'"), "minimax")
-    assert err.code == "internal" and "no llegó al provider" in err.message
+    assert err.code == "internal" and "never reached the provider" in err.message
 
 
 def test_pay_as_you_go_stays_openai_compatible(fake_anthropic):

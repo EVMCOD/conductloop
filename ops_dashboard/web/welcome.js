@@ -45,7 +45,15 @@
       failed: 'No se pudo completar. Inténtalo de nuevo.',
       nothing: 'No hay nada que guardar: escribe una carpeta.',
       choose: 'Elegir…',
-      choose_failed: 'No se pudo abrir el selector de carpetas: escribe la ruta.'
+      choose_failed: 'No se pudo abrir el selector de carpetas: escribe la ruta.',
+      pass_hint: 'En este ordenador no hay llavero del sistema. Elige una contraseña para guardar la clave en un archivo cifrado. Te la pediremos de nuevo la próxima vez que abras la app.',
+      pass_label: 'Contraseña del archivo cifrado',
+      save_pass: 'Crear archivo cifrado',
+      pass_empty: 'Escribe primero una contraseña.',
+      pass_ok: 'Archivo cifrado listo. Ya puedes pegar la clave.',
+      pass_bad: 'Esa contraseña no abre el archivo cifrado.',
+      pass_failed: 'No se pudo crear el archivo cifrado. Inténtalo de nuevo.',
+      saved_key_plaintext: 'Clave guardada en texto claro — ábrela en Credenciales para cifrarla.'
     },
     en: {
       write_env: 'This folder is set by an environment variable on this computer: it cannot be changed here.',
@@ -61,7 +69,15 @@
       failed: 'That did not work. Try again.',
       nothing: 'Nothing to save: type a folder.',
       choose: 'Choose…',
-      choose_failed: 'The folder picker could not open: type the path.'
+      choose_failed: 'The folder picker could not open: type the path.',
+      pass_hint: 'This computer has no system keychain available. Choose a passphrase so the key is stored in an encrypted file. You will be asked for it again next time you open the app.',
+      pass_label: 'Passphrase for the encrypted file',
+      save_pass: 'Create encrypted file',
+      pass_empty: 'Type a passphrase first.',
+      pass_ok: 'Encrypted file ready. You can paste the key now.',
+      pass_bad: 'That passphrase does not open the encrypted file.',
+      pass_failed: 'The encrypted file could not be created. Try again.',
+      saved_key_plaintext: 'Key saved in plain text — open Credentials to encrypt it.'
     }
   };
   function t(key) {
@@ -163,6 +179,44 @@
     }).then(function () { btn.disabled = false; });
   }
 
+  function showPassphrase(needed) {
+    var block = $('passphrase-block');
+    if (!block) return;
+    block.hidden = !needed;
+  }
+
+  function loadVaultState() {
+    return api('GET', '/api/credentials').then(function (r) {
+      if (r.status !== 200) return;
+      // No keychain and the encrypted vault is not open yet: ask for a
+      // passphrase here so the key never lands in config.json as plain text.
+      var need = r.data && r.data.keychain === false && r.data.open === false;
+      showPassphrase(!!need);
+    });
+  }
+
+  function savePassphrase() {
+    var field = $('passphrase');
+    var value = field.value;
+    if (!value) { say('pass-status', t('pass_empty'), 'bad'); return; }
+    var btn = $('save-passphrase');
+    btn.disabled = true;
+    say('pass-status', '');
+    api('POST', '/api/credentials/unlock', { passphrase: value }).then(function (r) {
+      field.value = '';
+      if (r.status === 200) {
+        say('pass-status', t('pass_ok'), 'ok');
+        showPassphrase(false);
+      } else if (r.status === 401) {
+        say('pass-status', t('pass_bad'), 'bad');
+      } else {
+        say('pass-status', t('pass_failed'), 'bad');
+      }
+    }).catch(function () {
+      say('pass-status', t('pass_failed'), 'bad');
+    }).then(function () { btn.disabled = false; });
+  }
+
   function saveKey() {
     var field = $('api-key');
     var value = field.value.trim();
@@ -179,9 +233,13 @@
       if (r.status === 200) {
         var where = r.data && r.data.where;
         say('key-status', where === 'keychain' ? t('saved_key_keychain')
-          : where === 'encrypted' ? t('saved_key_encrypted') : t('saved_key'), 'ok');
+          : where === 'encrypted' ? t('saved_key_encrypted')
+          : where === 'plaintext' ? t('saved_key_plaintext')
+          : t('saved_key'), where === 'plaintext' ? 'bad' : 'ok');
+        if (where === 'plaintext') $('key-link').hidden = false;
       } else if (r.status === 423) {
         say('key-status', t('key_locked'), 'bad');
+        showPassphrase(true);
         $('key-link').hidden = false;
       } else if (r.status === 400) {
         say('key-status', t('key_bad'), 'bad');
@@ -233,9 +291,11 @@
     addFolderPickers();
     $('save-folders').addEventListener('click', saveFolders);
     $('save-key').addEventListener('click', saveKey);
+    var passBtn = $('save-passphrase');
+    if (passBtn) passBtn.addEventListener('click', savePassphrase);
     $('finish').addEventListener('click', function () { leave('complete'); });
     $('skip').addEventListener('click', function () { leave('dismiss'); });
-    loadFolders().catch(function () {
+    loadFolders().then(loadVaultState).catch(function () {
       var e = $('global-error');
       e.textContent = t('failed');
       e.hidden = false;

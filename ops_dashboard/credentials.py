@@ -134,6 +134,10 @@ def set_secret(name: str, value: str) -> dict[str, Any]:
     The brain's keys and the media providers' keys each have their own
     way of being stored (one in the configuration, the other in the
     database), and both end up in the vault.
+
+    The UI (welcome page, Credentials) never writes a key in plain text:
+    when there is no keychain and the encrypted vault is not open, this
+    raises ``VaultLocked`` so the page can ask for a passphrase first.
     """
     value = (value or "").strip()
     if not value:
@@ -144,8 +148,23 @@ def set_secret(name: str, value: str) -> dict[str, Any]:
         provider = name.split(".")[1] if len(name.split(".")) > 1 else ""
         if not provider:
             raise ValueError(f"'{name}' is not a credential of the app")
+        # Refuse the silent plaintext fallback here: a stranger pasting a key
+        # on the welcome page must not find it in config.json afterwards.
+        if not secret_vault.keychain_available() and not secret_vault.is_open():
+            raise secret_vault.VaultLocked(
+                "there is no keychain on this machine: set a passphrase to keep "
+                "the keys encrypted")
         brain.set_provider_key(provider, api_key=value)
-        return {"name": name, "where": secret_vault.where(name)}
+        where = secret_vault.where(name)
+        if where == "nowhere":
+            # store_api_key may have labelled the place "vault"; map for the UI.
+            from . import byok_keys
+            cfg = brain._load_config()
+            if cfg.get(byok_keys.REF_FIELD.get(provider, "")):
+                where = "encrypted"
+            elif cfg.get(byok_keys.PLAINTEXT_FIELD.get(provider, "")):
+                where = "plaintext"
+        return {"name": name, "where": where}
     if name.startswith("media."):
         from . import media
 

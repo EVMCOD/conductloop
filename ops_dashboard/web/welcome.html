@@ -34,6 +34,15 @@
     <section class="card" id="step-key">
       <h2 data-i18n="key_title">2 · AI key (optional)</h2>
       <p class="hint" data-i18n="key_hint">Search and notes work without it. To chat and summarise, paste a key from your AI provider. It is stored in the system keychain (the Keychain on a Mac), or in an encrypted file if there is none, and it is never shown again.</p>
+      <div id="passphrase-block" hidden>
+        <p class="hint" data-i18n="pass_hint">This computer has no system keychain available. Choose a passphrase so the key is stored in an encrypted file. You will be asked for it again next time you open the app.</p>
+        <label for="passphrase" data-i18n="pass_label">Passphrase for the encrypted file</label>
+        <input id="passphrase" type="password" spellcheck="false" autocomplete="new-password" />
+        <div class="row">
+          <button id="save-passphrase" type="button" data-i18n="save_pass">Create encrypted file</button>
+          <span id="pass-status" class="status" role="status"></span>
+        </div>
+      </div>
       <label for="provider" data-i18n="provider_label">Provider</label>
       <select id="provider">
         <option value="anthropic">Anthropic</option>
