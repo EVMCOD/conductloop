@@ -342,6 +342,9 @@ fn tab_builder(app: &AppHandle, label: &str, url: Url, proxy: Url) -> WebviewBui
                     t.blocked = Some("new_site redirect".into());
                 }
             });
+            // A blank tab that just got a real URL must be shown (and the other
+            // way round); with_tab has released the lock.
+            let _ = apply_visibility(&app_load);
         })
         .on_document_title_changed(move |wv, title| {
             let title: String = title.chars().take(300).collect();
@@ -386,17 +389,35 @@ fn title_bar_offset(app: &AppHandle) -> f64 {
     app.state::<BrowserState>().inner.lock().unwrap().title_bar
 }
 
+/// Whether the native child webview for `t` should be on screen.
+/// Empty user tabs stay hidden so they cannot steal the keyboard from the URL bar
+/// (about:blank never reports a finished load, so a delayed set_focus is not enough).
+pub fn tab_should_show(visible: bool, active: Option<&str>, t: &TabInfo) -> bool {
+    if !visible || active != Some(t.id.as_str()) {
+        return false;
+    }
+    if t.agent.is_none() && (t.url.is_empty() || t.url == "about:blank") {
+        return false;
+    }
+    true
+}
+
+fn focus_ui(app: &AppHandle) {
+    if let Some(main) = app.get_webview(UI_WINDOW) {
+        let _ = main.set_focus();
+    }
+}
+
 fn apply_visibility(app: &AppHandle) -> Result<(), String> {
     let (tabs, active, bounds, visible) = {
         let state = app.state::<BrowserState>();
         let g = state.inner.lock().unwrap();
-        let ids: Vec<String> = g.tabs.iter().map(|t| t.id.clone()).collect();
-        (ids, g.active.clone(), g.bounds, g.visible)
+        (g.tabs.clone(), g.active.clone(), g.bounds, g.visible)
     };
     let dy = title_bar_offset(app);
-    for id in tabs {
-        let Some(wv) = app.get_webview(&id) else { continue };
-        if visible && active.as_deref() == Some(id.as_str()) {
+    for t in &tabs {
+        let Some(wv) = app.get_webview(&t.id) else { continue };
+        if tab_should_show(visible, active.as_deref(), t) {
             if let Some(b) = bounds {
                 wv.set_position(LogicalPosition::new(b.x, b.y + dy)).map_err(|e| e.to_string())?;
                 wv.set_size(LogicalSize::new(b.width, b.height)).map_err(|e| e.to_string())?;
@@ -515,17 +536,10 @@ pub fn open_tab(
         }
     }
     apply_visibility(app)?;
-    // A new webview takes the keyboard once it has loaded: for an empty tab,
-    // give it back to the URL bar afterwards, or what the user types next goes
-    // into the blank page. (Done right away, the tab took it back.)
+    // Empty user tabs are kept hidden (see tab_should_show); still hand the
+    // keyboard to the main UI so the URL bar can take focus from JS.
     if agent.is_none() && target.as_str() == "about:blank" {
-        let app = app.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(300));
-            if let Some(main) = app.get_webview(UI_WINDOW) {
-                let _ = main.set_focus();
-            }
-        });
+        focus_ui(app);
     }
     Ok(info)
 }
@@ -587,11 +601,15 @@ pub async fn browser_navigate(app: AppHandle, id: String, url: String) -> Result
     let target = normalize_input(&url)?;
     let wv = tab_webview(&app, &id)?;
     // The user typing in the URL bar of an agent tab takes control of it.
+    // Record the URL before the load so a previously hidden blank tab is shown.
     with_tab(&app, &id, |t| {
+        t.url = target.to_string();
+        t.loading = target.as_str() != "about:blank";
         if t.agent.is_some() {
             t.control = Some("human".into());
         }
     });
+    apply_visibility(&app)?;
     wv.navigate(target).map_err(|e| e.to_string())
 }
 
@@ -636,8 +654,25 @@ pub async fn browser_activate(
     id: String,
 ) -> Result<(), String> {
     tab_webview(&app, &id)?;
-    state.inner.lock().unwrap().active = Some(id);
-    apply_visibility(&app)
+    let blank = {
+        let mut g = state.inner.lock().unwrap();
+        g.active = Some(id.clone());
+        g.tabs.iter().find(|t| t.id == id).is_some_and(|t| {
+            t.agent.is_none() && (t.url.is_empty() || t.url == "about:blank")
+        })
+    };
+    apply_visibility(&app)?;
+    if blank {
+        focus_ui(&app);
+    }
+    Ok(())
+}
+
+/// Put the keyboard on the ConductLoop UI (URL bar / tab strip), not a tab page.
+#[tauri::command]
+pub async fn browser_focus_ui(app: AppHandle) -> Result<(), String> {
+    focus_ui(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -670,7 +705,7 @@ pub async fn browser_list(state: tauri::State<'_, BrowserState>) -> Result<Brows
     })
 }
 
-// ── "Send to vault" (browser design PR 6) ───────────────────────────────
+// ── "Save page" (browser design PR 6; was "Send to vault") ─────────────
 
 const READABILITY_JS: &str = include_str!("vendor/Readability.js");
 const EXTRACT_JS: &str = include_str!("browser_extract.js");
@@ -806,6 +841,24 @@ mod tests {
         for bad in ["main", "tab-", "tab-x", "tab-1/../main", "TAB-1", "tab-1 "] {
             assert!(!valid_tab_id(bad), "{bad}");
         }
+    }
+
+    #[test]
+    fn blank_user_tabs_stay_hidden() {
+        let blank = TabInfo { id: "tab-1".into(), url: "about:blank".into(), ..Default::default() };
+        let page = TabInfo { id: "tab-1".into(), url: "https://example.com/".into(), ..Default::default() };
+        let agent_blank = TabInfo {
+            id: "tab-2".into(),
+            url: "about:blank".into(),
+            agent: Some(1),
+            ..Default::default()
+        };
+        assert!(!tab_should_show(true, Some("tab-1"), &blank));
+        assert!(tab_should_show(true, Some("tab-1"), &page));
+        assert!(!tab_should_show(false, Some("tab-1"), &page));
+        assert!(!tab_should_show(true, Some("tab-9"), &page));
+        // Agent tabs still show while blank: the runner needs the webview.
+        assert!(tab_should_show(true, Some("tab-2"), &agent_blank));
     }
 
     #[test]

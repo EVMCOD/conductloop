@@ -23,6 +23,7 @@
     "allow-browser-set-visible",
     "allow-browser-list",
     "allow-browser-extract",
+    "allow-browser-focus-ui",
     "allow-browser-agent-control"
   ]
 }
