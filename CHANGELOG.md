@@ -2,6 +2,27 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased — Mac checklist (#32): automate what needs no accounts
+
+Issue #32 asked for Mac-only release checks. Most of the non-account work is
+now a script and hermetic tests; Keychain, OAuth consoles and live L2 stay on
+the issue as a manual list for Enrique.
+
+- **`scripts/mac-checks.sh` / `make mac-checks`.** Port :7777 free check,
+  pytest for the app-token guard / boot cookie / macOS minimum sync /
+  migration 20–24 / sandbox-exec, optional migration run on a *copy* passed
+  as `CONDUCTLOOP_DB_COPY` (refuses the live Application Support path), and a
+  printed leftover checklist.
+- **`tests/test_issue32_automation.py`.** Descriptions for migrations 20–24
+  must match `migrations.py` after apply; migration 20 refuses an unexpected
+  `agent_sessions` schema; a WAL-safe `sqlite3` backup copy keeps row counts
+  and integrity; on Darwin, `detect_backend()` is `sandbox-exec`, a broken
+  Seatbelt profile fails closed, and network / outside-write / `~/.ssh` probes
+  are blocked.
+- Does **not** change `minimumSystemVersion` (already `13.0` on `main`, kept
+  in sync by `tests/test_macos_minimum.py`). Confirming or revisiting that
+  decision stays with Enrique on #32.
+
 ## Unreleased — In-app browser: focus, tab clicks and Save page
 
 Three leftovers from the in-app browser on a packaged debug build:
