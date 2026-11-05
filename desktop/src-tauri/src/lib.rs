@@ -259,6 +259,7 @@ pub fn run() {
             browser::browser_set_visible,
             browser::browser_list,
             browser::browser_extract,
+            browser::browser_focus_ui,
             browser::browser_agent_control
         ])
         .menu(app_menu)

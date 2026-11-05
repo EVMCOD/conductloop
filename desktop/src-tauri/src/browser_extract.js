@@ -1,4 +1,4 @@
-// Browser design PR 6 — "Send to vault": extract the readable content of the
+// Browser design PR 6 — "Save page": extract the readable content of the
 // page open in a browser tab. Injected by browser_extract (Rust) with
 // eval_with_callback; the returned object is JSON-serialised by Tauri.
 //

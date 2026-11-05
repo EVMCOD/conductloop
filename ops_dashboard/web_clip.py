@@ -1,4 +1,4 @@
-"""«Enviar al vault» — save the page open in a browser tab (browser design PR 6).
+"""Save page — store the page open in a browser tab (browser design PR 6).
 
 The desktop app extracts the readable part of the page (Readability, hidden
 nodes dropped) and the UI posts it here. Everything is re-validated: the

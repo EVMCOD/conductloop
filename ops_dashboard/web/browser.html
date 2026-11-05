@@ -58,7 +58,7 @@
     <button id="newtab" title="New tab">＋</button>
     <button id="agenttoggle" title="Start a browsing agent">Agent…</button>
     <button id="asktoggle" title="Ask the Brain about this page">Ask</button>
-    <button id="clip" title="Save the readable part of this page to your vault (marked as untrusted web content)">Send to vault</button>
+    <button id="clip" title="Save the readable part of this page into ConductLoop (marked as untrusted web content; not written into your notes folder)">Save page</button>
   </div>
   <div id="msg" role="status"></div>
   <div id="agentbar" hidden>
@@ -176,27 +176,42 @@
   function hostOf(v) {
     try { return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : "https://" + v).hostname; } catch (e) { return ""; }
   }
+  // Rebuild the tab strip only when something visible changed. A rebuild that
+  // lands between mousedown and click removes the target and macOS/WebKit
+  // drops the click — that was the "first click on the tab bar does nothing".
+  var tabsSig = "";
   function render() {
-    var box = $("tabs"); box.textContent = "";
-    state.tabs.forEach(function (t) {
-      var el = document.createElement("div");
-      el.className = "tab" + (t.id === state.active ? " active" : "") + (t.agent ? " agent" : "");
-      var s = document.createElement("span"); s.className = "t";
-      var blank = !t.url || t.url === "about:blank";
-      s.textContent = (t.agent ? "Agent #" + t.agent + " · " : "") + (t.loading && !blank ? "… " : "") +
-        (t.title || (blank ? "New tab" : t.url));
-      s.title = t.url;
-      var x = document.createElement("button"); x.textContent = "×"; x.title = "Close tab";
-      x.onclick = function (ev) { ev.stopPropagation(); inv("browser_close", { id: t.id }).then(refresh).catch(err); };
-      el.onclick = function () { editing = false; inv("browser_activate", { id: t.id }).then(refresh).catch(err); };
-      el.appendChild(s); el.appendChild(x); box.appendChild(el);
-    });
+    var box = $("tabs");
+    var sig = state.tabs.map(function (t) {
+      return [t.id, t.id === state.active ? "1" : "0", t.agent || "", t.loading ? "1" : "0",
+        t.title || "", t.url || "", t.control || ""].join("\x1f");
+    }).join("\x1e");
+    if (sig !== tabsSig) {
+      tabsSig = sig;
+      box.textContent = "";
+      state.tabs.forEach(function (t) {
+        var el = document.createElement("div");
+        el.className = "tab" + (t.id === state.active ? " active" : "") + (t.agent ? " agent" : "");
+        el.setAttribute("data-id", t.id);
+        var s = document.createElement("span"); s.className = "t";
+        var blank = !t.url || t.url === "about:blank";
+        s.textContent = (t.agent ? "Agent #" + t.agent + " · " : "") + (t.loading && !blank ? "… " : "") +
+          (t.title || (blank ? "New tab" : t.url));
+        s.title = t.url;
+        var x = document.createElement("button"); x.textContent = "×"; x.title = "Close tab";
+        x.setAttribute("data-close", "1");
+        el.appendChild(s); el.appendChild(x); box.appendChild(el);
+      });
+    }
     var cur = state.tabs.filter(function (t) { return t.id === state.active; })[0];
     if (cur && !editing) $("url").value = cur.url === "about:blank" ? "" : cur.url;
     var blocked = (cur && cur.blocked) || "";
     if (blocked && blocked !== lastBlocked) say("Navigation blocked (" + blocked.split(" ")[0] + "): " + blocked.split(" ").slice(1).join(" "));
     lastBlocked = blocked;
-    empty.textContent = state.tabs.length ? "" : "No tabs. Type a URL above.";
+    var blankActive = cur && (!cur.url || cur.url === "about:blank") && !cur.agent;
+    empty.textContent = !state.tabs.length
+      ? "No tabs. Type a URL above."
+      : (blankActive ? "New tab — type a URL above." : "");
     // PR 8: agent tab controls (pause / take control / give back).
     var ab = $("agentbar");
     ab.hidden = !(cur && cur.agent);
@@ -265,17 +280,54 @@
     if (!state.active) { inv("browser_open", { url: v }).then(refresh).catch(err); return; }
     inv("browser_navigate", { id: state.active, url: v }).then(refresh).catch(err);
   }
+  // Act on pointerdown so a refresh cannot eat the gesture (see tabsSig).
+  $("tabs").addEventListener("pointerdown", function (ev) {
+    var tab = ev.target.closest(".tab");
+    if (!tab || !$("tabs").contains(tab)) return;
+    var id = tab.getAttribute("data-id");
+    if (!id) return;
+    if (ev.target.closest("[data-close]")) {
+      inv("browser_close", { id: id }).then(refresh).catch(err);
+      return;
+    }
+    editing = false;
+    inv("browser_activate", { id: id }).then(refresh).then(function () {
+      var cur = state.tabs.filter(function (t) { return t.id === state.active; })[0];
+      if (cur && (!cur.url || cur.url === "about:blank") && !cur.agent) {
+        try { $("url").focus(); } catch (e) {}
+      }
+    }).catch(err);
+  });
+  // When the pointer enters the chrome, take the keyboard back from the page
+  // webview so the next click is not spent only on focus.
+  ["tabs", "bar", "msg", "agentbar", "approvals"].forEach(function (id) {
+    var el = $(id);
+    if (!el) return;
+    el.addEventListener("pointerenter", function () {
+      inv("browser_focus_ui").catch(function () {});
+    });
+  });
   $("url").addEventListener("input", function () { editing = true; });
   $("url").addEventListener("blur", function () { editing = false; });
   $("url").addEventListener("keydown", function (e) {
     if (e.key === "Enter") go();
     if (e.key === "Escape") { editing = false; $("url").blur(); render(); }
   });
+  function focusUrlBar() {
+    try { $("url").focus(); $("url").select(); } catch (e) {}
+  }
   $("newtab").onclick = function () {
     say(""); editing = false;
-    inv("browser_open", { url: "" }).then(refresh).then(function () { $("url").focus(); }).catch(err);
+    inv("browser_open", { url: "" }).then(refresh).then(function () {
+      focusUrlBar();
+      inv("browser_focus_ui").then(focusUrlBar).catch(focusUrlBar);
+      // A few retries: the new child webview can grab focus after create.
+      setTimeout(focusUrlBar, 50);
+      setTimeout(focusUrlBar, 200);
+      setTimeout(focusUrlBar, 400);
+    }).catch(err);
   };
-  // PR 6: «Enviar al vault». Extraction runs in the tab (Readability, hidden
+  // PR 6: Save page. Extraction runs in the tab (Readability, hidden
   // nodes dropped); the backend re-validates and stores it as source="web".
   $("clip").onclick = function () {
     if (!state.active) { say("Open a page first."); return; }
@@ -286,7 +338,7 @@
         headers: { "Content-Type": "application/json" }, body: JSON.stringify(page)
       }).then(function (r) { return r.json().then(function (j) { if (!r.ok || !j.ok) throw (j.error || r.status); return j; }); });
     }).then(function (j) {
-      say("Saved to vault: " + j.title + (j.truncated ? " (truncated)" : ""));
+      say("Saved: " + j.title + (j.truncated ? " (truncated)" : ""));
     }).catch(err).then(function () { btn.disabled = false; });
   };
   // PR 7: ask the Brain about the open page. The answer is plain text

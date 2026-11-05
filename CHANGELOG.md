@@ -2,6 +2,24 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased — In-app browser: focus, tab clicks and Save page
+
+Three leftovers from the in-app browser on a packaged debug build:
+
+- **Keyboard focus after «+».** A new blank tab's webview took the keyboard, so
+  the next keystrokes went into an empty page instead of the URL bar. Blank
+  user tabs now stay hidden until they have a real URL, and «+» focuses the
+  URL bar (with `browser_focus_ui`).
+- **First click on the tab strip was lost.** `setInterval(refresh)` rebuilt the
+  tab DOM between mousedown and click, so WebKit dropped the gesture. The strip
+  now acts on `pointerdown`, skips identical rebuilds, and takes focus when the
+  pointer enters the chrome.
+- **"Send to vault" renamed to "Save page".** Clips are stored in ConductLoop's
+  index as untrusted `source=web` documents — they are not written into the
+  notes folder. The button, tooltip and success toast say so.
+- `tests/test_browser_page.py` guards the label, the tab-strip click path and
+  the blank-tab focus behaviour.
+
 ## Unreleased — The quick tour describes the current product
 
 - **`/tour` no longer promises retired features.** It talked about "13

@@ -1,4 +1,4 @@
-"""«Enviar al vault» (browser design PR 6): validation, HTML → Markdown
+"""Save page (browser design PR 6): validation, HTML → Markdown
 sanitising, storage as untrusted source="web" documents, and the route."""
 from __future__ import annotations
 
