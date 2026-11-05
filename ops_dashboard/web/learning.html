@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Aprendizaje — ConductLoop</title>
   <link rel="stylesheet" href="/learning.css" />
+  <link rel="stylesheet" href="/confirm.css" />
+  <script src="/confirm.js" defer></script>
+  <script src="/toast.js" defer></script>
   <script src="/learning.js" defer></script>
 </head>
 <body>
@@ -121,8 +124,8 @@
         <ul id="skills-list" class="feed"></ul>
         <p class="hint" id="skills-empty" data-i18n="no_skills" hidden>No hay skills indexadas.</p>
         <p class="hint mono" id="skills-msg" hidden></p>
-        <h2 class="sub2" data-i18n="trusted_repos">Repos de confianza (skills de proyecto)</h2>
-        <p class="hint" data-i18n="trusted_hint">Las skills de &lt;repo&gt;/.agents/skills solo se usan en repos que marques aquí. Desactivado por defecto.</p>
+        <h2 class="sub2" data-i18n="trusted_repos">Repos de confianza</h2>
+        <p class="hint" data-i18n="trusted_hint">Marcar un repo como de confianza le da al agente que trabaja en él las skills de &lt;repo&gt;/.agents/skills y el acceso a tus apps conectadas (Gmail, GitHub, Slack…). Desactivado por defecto.</p>
         <div class="row">
           <input type="text" id="trust-path" class="grow" data-i18n-ph="trust_ph" placeholder="/ruta/al/repo" />
           <button type="button" class="small" id="trust-add" data-i18n="trust_add">Confiar</button>

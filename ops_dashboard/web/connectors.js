@@ -24,6 +24,16 @@
       legacy: 'Tienes {0} conexión(es) con token en la vista «Conexiones».',
       pending: 'Pendiente de confirmar', no_pending: 'No hay escrituras pendientes.',
       connectors: 'Conectores',
+      catalog_title: 'Tus apps',
+      catalog_search: 'Buscar apps…',
+      catalog_connect: 'Conectar',
+      catalog_connected: 'Conectado',
+      catalog_settings: 'Ajustes de conexión',
+      catalog_no_results: 'Ninguna app coincide con la búsqueda.',
+      catalog_section_productivity: 'Productividad',
+      catalog_section_work: 'Trabajo',
+      catalog_section_reading: 'Lectura',
+      catalog_section_other: 'Otras',
       no_connectors: 'Aún no hay conectores instalados. El marco está listo; los conectores (Google, Microsoft, Slack, Notion…) llegarán en próximas versiones.',
       audit: 'Registro de auditoría (local)', refresh: 'Actualizar',
       when: 'Cuándo', connector: 'Conector', event: 'Evento', detail: 'Detalle',
@@ -47,6 +57,7 @@
       connected_ok: 'Conectado.', flow_failed: 'No se pudo conectar: {0}',
       confirm: 'Confirmar y ejecutar', reject: 'Rechazar', expires: 'caduca {0}',
       confirm_disconnect: '¿Desconectar {0}? Se borrará el token del llavero.',
+      dlg_confirm: 'Confirmar', dlg_cancel: 'Cancelar', dlg_ok: 'Aceptar',
       account: 'Cuenta: {0}', error: 'Error: {0}', byok_needed: 'Necesitas tu propio client ID para conectar.',
       mcp_title: 'Servidores MCP',
       mcp_hint: 'Las herramientas son de solo lectura por defecto. Las que escriben o tienen efectos esperan tu confirmación. Lo que devuelven se trata como contenido no confiable.',
@@ -74,6 +85,16 @@
       legacy: 'You have {0} token connection(s) in the \u201cConnections\u201d view.',
       pending: 'Waiting for confirmation', no_pending: 'No pending writes.',
       connectors: 'Connectors',
+      catalog_title: 'Your apps',
+      catalog_search: 'Search apps…',
+      catalog_connect: 'Connect',
+      catalog_connected: 'Connected',
+      catalog_settings: 'Connection settings',
+      catalog_no_results: 'No app matches the search.',
+      catalog_section_productivity: 'Productivity',
+      catalog_section_work: 'Work',
+      catalog_section_reading: 'Reading',
+      catalog_section_other: 'Other',
       no_connectors: 'No connectors installed yet. The framework is ready; connectors (Google, Microsoft, Slack, Notion…) ship in upcoming releases.',
       audit: 'Audit log (local)', refresh: 'Refresh',
       when: 'When', connector: 'Connector', event: 'Event', detail: 'Detail',
@@ -97,6 +118,7 @@
       connected_ok: 'Connected.', flow_failed: 'Could not connect: {0}',
       confirm: 'Confirm and run', reject: 'Reject', expires: 'expires {0}',
       confirm_disconnect: 'Disconnect {0}? The token will be removed from the keychain.',
+      dlg_confirm: 'Confirm', dlg_cancel: 'Cancel', dlg_ok: 'Accept',
       account: 'Account: {0}', error: 'Error: {0}', byok_needed: 'You need your own client ID to connect.',
       mcp_title: 'MCP servers',
       mcp_hint: 'Tools are read-only by default. Tools that write or have side effects wait for your confirmation. What they return is treated as untrusted content.',
@@ -132,12 +154,21 @@
 
   function api(path, body) {
     var opts = { credentials: 'same-origin', headers: { 'Accept': 'application/json' } };
+
     if (body !== undefined) {
       opts.method = 'POST';
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
     }
     return fetch(path, opts).then(function (r) {
+      if (r.status === 403) {
+        // The session token in the cookie no longer matches. Reloading does
+        // not help — the page needs a token too, and handing one out to any
+        // browser that asks for it would give the session away. The way out
+        // is to reopen the app.
+        throw new Error(
+          'Your session expired. Quit and reopen ConductLoop to continue.');
+      }
       return r.json().catch(function () { return {}; }).then(function (j) {
         if (!r.ok || j.ok === false) throw new Error((j && (j.message || j.error)) || ('HTTP ' + r.status));
         return j;
@@ -150,6 +181,8 @@
     document.title = t('title') + ' — ConductLoop';
     var nodes = document.querySelectorAll('[data-i18n]');
     for (var i = 0; i < nodes.length; i++) nodes[i].textContent = t(nodes[i].getAttribute('data-i18n'));
+    var phs = document.querySelectorAll('[data-i18n-ph]');
+    for (var j = 0; j < phs.length; j++) phs[j].setAttribute('placeholder', t(phs[j].getAttribute('data-i18n-ph')));
   }
 
   function scopeList(label, scopes) {
@@ -246,6 +279,134 @@
     return node;
   }
 
+  var catalogItems = [];
+
+  function rememberSettings(det) {
+    // The catalogue is what the page opens with, so the settings start
+    // folded. But a reload — a sync finishing, a write confirmed — must not
+    // fold them again under the user's hands. Whatever was open stays open.
+    var key = 'cl-settings-open';
+    var wasOpen = false;
+    try { wasOpen = sessionStorage.getItem(key) === '1'; } catch (e) { wasOpen = false; }
+    if (wasOpen) det.open = true;
+    det.addEventListener('toggle', function () {
+      try { sessionStorage.setItem(key, det.open ? '1' : '0'); } catch (e) { /* private mode */ }
+    });
+  }
+
+  function openSettings(connectorId) {
+    // The settings live below the catalogue, collapsed. Opening one from a
+    // tile means opening the disclosure too, or the scroll goes nowhere.
+    var det = $('settings-details');
+    if (det) det.open = true;
+    if (!/^[a-z0-9_-]+$/i.test(String(connectorId))) return;
+    var card = document.querySelector('[data-connector="' + connectorId + '"]');
+    if (card && card.scrollIntoView) card.scrollIntoView({ block: 'center' });
+  }
+
+  function renderCatalog(list) {
+    // The catalogue answers "what does this app do", which the settings
+    // never did. Every tile carries the app's own line, its mark and the
+    // way in.
+    var box = $('catalog-list');
+    if (!box) return;
+    clear(box);
+    catalogItems = list || [];
+    var query = String(($('catalog-search') && $('catalog-search').value) || '').trim().toLowerCase();
+    var items = catalogItems.filter(function (c) {
+      if (!query) return true;
+      var desc = ES ? (c.description_es || c.description) : (c.description || c.description_es);
+      return ((c.name || '') + ' ' + (desc || '')).toLowerCase().indexOf(query) >= 0;
+    });
+    if (!items.length) {
+      box.appendChild(el('p', 'hint', t('catalog_no_results')));
+      return;
+    }
+
+    var order = ['productivity', 'work', 'reading', 'other'];
+    var groups = {};
+    items.forEach(function (c) {
+      var key = c.category || 'other';
+      if (order.indexOf(key) < 0) key = 'other';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(c);
+    });
+
+    order.forEach(function (key) {
+      var group = groups[key];
+      if (!group || !group.length) return;
+      var section = el('section', 'catalog-group');
+      section.appendChild(el('h3', 'catalog-group-title', t('catalog_section_' + key)));
+      var grid = el('div', 'catalog-grid');
+      group.forEach(function (c) {
+        var tile = el('div', 'app-card');
+        // "data-app" and not "data-connector": the settings card below uses
+        // data-connector, and one id with two meanings makes every selector
+        // on this page ambiguous.
+        tile.setAttribute('data-app', c.id);
+
+        var mark = el('div', 'app-mark', (String(c.name || '?').charAt(0)).toUpperCase());
+        if (c.brand) mark.style.setProperty('--brand', c.brand);
+        tile.appendChild(mark);
+
+        var info = el('div', 'app-info');
+        var name = el('div', 'app-name');
+        name.appendChild(el('span', null, c.name));
+        if (c.status === 'connected') {
+          var badge = el('span', 'badge connected', t('catalog_connected'));
+          badge.setAttribute('data-testid', 'catalog-status');
+          name.appendChild(badge);
+        }
+        info.appendChild(name);
+        info.appendChild(el('div', 'app-desc',
+          ES ? (c.description_es || c.description) : (c.description || c.description_es)));
+        tile.appendChild(info);
+
+        var action = el('div', 'app-action');
+        if (c.status === 'connected') {
+          action.appendChild(button(t('catalog_settings'), 'ghost small', function () {
+            openSettings(c.id);
+          }));
+        } else {
+          var plus = button('+', 'app-add', function () {
+            var status = el('div', 'app-status');
+            tile.appendChild(status);
+            if (c.auth === 'token') {
+              // A token connector has its own flow (its own endpoint, its own
+              // details). Reuse it: a form that posts to the wrong route
+              // looks like it works and does not.
+              if (!window.CLToken || !window.CLToken.connectForm) {
+                status.textContent = t('flow_failed', c.id);
+                return;
+              }
+              var H = { el: el, button: button, api: api, t: t, load: load,
+                        showError: showError, clear: clear, scopeList: scopeList, ES: ES };
+              window.CLToken.connectForm(c, H).then(function (form) {
+                status.appendChild(form);
+              }).catch(function (e) {
+                status.textContent = (e && e.message) ? e.message : String(e);
+              });
+              return;
+            }
+            if (!c.client_id_set) {
+              openSettings(c.id);
+              status.textContent = t('byok_needed');
+              return;
+            }
+            startConnect(c, 'read', status);
+          });
+          plus.setAttribute('data-testid', 'catalog-connect');
+          plus.setAttribute('aria-label', t('catalog_connect') + ': ' + c.name);
+          action.appendChild(plus);
+        }
+        tile.appendChild(action);
+        grid.appendChild(tile);
+      });
+      section.appendChild(grid);
+      box.appendChild(section);
+    });
+  }
+
   function renderConnector(c) {
     if (c.auth === 'token' && window.CLToken) return window.CLToken.render(c, { el: el, button: button, api: api, t: t, load: load, showError: showError, clear: clear, scopeList: scopeList, ES: ES });
     var card = el('div', 'conn');
@@ -326,8 +487,8 @@
       } else if (c.write_scopes && c.write_scopes.length) {
         actions.appendChild(button(t('connect_write'), 'ghost small', function () { startConnect(c, 'write', statusNode); }));
       }
-      actions.appendChild(button(t('disconnect'), 'danger small', function () {
-        if (!window.confirm(t('confirm_disconnect', c.name))) return;
+      actions.appendChild(button(t('disconnect'), 'danger small', async function () {
+        if (!await confirmAction(t('confirm_disconnect', c.name), { confirm: t('dlg_confirm'), cancel: t('dlg_cancel') })) return;
         api('/api/connectors/' + encodeURIComponent(c.id) + '/disconnect', {}).then(load).catch(function (e) { showError(e.message); });
       }));
     }
@@ -432,8 +593,8 @@
     row.appendChild(button(sv.permission === 'write' ? t('mcp_read_only') : t('mcp_allow_write'), 'ghost small', function () {
       api(mcpUrl(sv.name, '/permission'), { permission: sv.permission === 'write' ? 'read' : 'write' }).then(load).catch(function (e) { showError(e.message); });
     }));
-    row.appendChild(button(t('mcp_remove'), 'danger small', function () {
-      if (!window.confirm(t('mcp_confirm_remove', sv.name))) return;
+    row.appendChild(button(t('mcp_remove'), 'danger small', async function () {
+      if (!await confirmAction(t('mcp_confirm_remove', sv.name), { confirm: t('dlg_confirm'), cancel: t('dlg_cancel') })) return;
       api(mcpUrl(sv.name, '/remove'), {}).then(load).catch(function (e) { showError(e.message); });
     }));
     card.appendChild(row);
@@ -493,6 +654,7 @@
       var list = $('connectors-list'); clear(list);
       $('connectors-empty').hidden = data.connectors.length > 0;
       data.connectors.forEach(function (c) { list.appendChild(renderConnector(c)); });
+      renderCatalog(data.connectors);
       renderPending(res[1].actions || []);
       renderAudit(res[2].events || []);
     }).catch(function (e) { showError(e.message); });
@@ -501,6 +663,9 @@
   document.addEventListener('DOMContentLoaded', function () {
     applyStatic();
     $('audit-refresh').addEventListener('click', load);
+    $('catalog-search').addEventListener('input', function () { renderCatalog(catalogItems); });
+    var det = $('settings-details');
+    if (det) rememberSettings(det);
     $('mcp-transport').addEventListener('change', syncTransport);
     $('mcp-save').addEventListener('click', saveMcp);
     syncTransport();

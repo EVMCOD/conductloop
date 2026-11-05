@@ -76,6 +76,9 @@ def test_sync_button_in_browser(tmp_path, monkeypatch):
             pg.on("pageerror", lambda e: errors.append(str(e)))
             pg.on("console", lambda m: errors.append(m.text) if m.type == "error" and "favicon" not in m.text else None)
             pg.goto(f"http://127.0.0.1:{srv.server_address[1]}/connectors")
+            # The catalogue is what the page opens with; the connection
+            # settings live below it, folded. Open them before driving them.
+            pg.eval_on_selector("#settings-details", "e => { e.open = true; }")
             card = '[data-connector="google_calendar"]'
             pg.wait_for_selector(f"{card} [data-testid=sync]")
             pg.click(f"{card} [data-testid=sync]")
@@ -127,6 +130,9 @@ def test_share_google_app_in_browser(tmp_path, monkeypatch):
             pg = browser.new_context(locale="es-ES").new_page()
             pg.on("pageerror", lambda e: errors.append(str(e)))
             pg.goto(f"http://127.0.0.1:{srv.server_address[1]}/connectors")
+            # The catalogue is what the page opens with; the connection
+            # settings live below it, folded. Open them before driving them.
+            pg.eval_on_selector("#settings-details", "e => { e.open = true; }")
             card = '[data-connector="gmail"]'
             pg.wait_for_selector(f"{card} [data-testid=share-client]")
             assert "Google Calendar" in (pg.text_content(f"{card} [data-testid=share-client]") or "")

@@ -4,6 +4,10 @@
 
 pytest>=8.0
 requests>=2.31          # collection of the live-worker test module
+pyinstaller>=6.10       # the bundle guard imports the real collector: without
+                        # it, the test that checks the frozen app really
+                        # contains every connector cannot run in CI (and was
+                        # failing there while passing locally)
 anthropic>=0.111.0     # the Anthropic SDK, so the MiniMax plan test can check
                         # the real signature of Messages.create() (not heavy)
 openai>=2.43.0         # the OpenAI SDK, for the same reason: the tool-calling

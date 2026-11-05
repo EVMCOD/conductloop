@@ -31,6 +31,7 @@ fn main() {
             "browser_set_visible",
             "browser_list",
             "browser_extract",
+            "browser_focus_ui",
             "browser_agent_control",
         ])),
     )

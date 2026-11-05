@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/toast.js"></script>
   <script src="/csrf.js" defer></script>
   <link rel="stylesheet" href="/theme.css">
   <meta charset="utf-8" />
@@ -95,15 +96,15 @@
           trigger_cron: document.getElementById('cron').value.trim()||null,
           prompt: document.getElementById('prompt').value.trim()||null,
         };
-        if(!body.name){ alert('Name required'); return; }
+        if(!body.name){ notifyError('Name required'); return; }
         const r=await fetch('/api/agents/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         const d=await r.json();
         if(!d.ok) throw new Error(d.error||'failed');
         document.getElementById('name').value=''; document.getElementById('capabilities').value='';
         document.getElementById('cron').value=''; document.getElementById('prompt').value='';
         await load();
-        alert('Agent created.');
-      }catch(e){ alert('Error: '+e.message); }
+        notify('Agent created.');
+      }catch(e){ notifyError('Error: '+e.message); }
       finally{ btn.disabled=false; btn.textContent='Create agent'; }
     };
     load();

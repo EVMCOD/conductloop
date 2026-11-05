@@ -733,3 +733,7 @@
   .nh-list a:hover { text-decoration: underline; }
   .nh-excerpt { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .nh-empty { color: var(--muted); }
+  /* A field the user got wrong: the message belongs to the form. */
+  .dialog-error { color: var(--red, #e5484d); font-size: 12px; margin: 0 0 10px; }
+
+

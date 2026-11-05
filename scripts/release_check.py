@@ -153,7 +153,10 @@ VERSION_SOURCES = [
     ("desktop/src-tauri/tauri.conf.json", "desktop/src-tauri/tauri.conf.json", _version_tauri, True, FAIL),
     ("desktop/src-tauri/Cargo.toml", "desktop/src-tauri/Cargo.toml", _version_cargo, True, FAIL),
     ("desktop/package.json", "desktop/package.json", _version_package_json, False, FAIL),
-    ("desktop/src-tauri/Cargo.lock", "desktop/src-tauri/Cargo.lock", _version_cargo_lock, False, WARN),
+    # The cargo lockfile is built with --locked in three workflows, so a
+    # stale one is not a note: `cargo check --locked` refuses to run and the
+    # release that shipped it broke the Windows job.
+    ("desktop/src-tauri/Cargo.lock", "desktop/src-tauri/Cargo.lock", _version_cargo_lock, True, FAIL),
     ("desktop/package-lock.json", "desktop/package-lock.json", _version_package_lock, False, WARN),
 ]
 

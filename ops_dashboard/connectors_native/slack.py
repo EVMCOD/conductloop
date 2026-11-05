@@ -295,6 +295,9 @@ _SCHEMA_SLACK = {
 
 SPEC = registry.register(registry.ConnectorSpec(
     id=ID, name="Slack", auth="oauth_pkce",
+    description="Channels, messages and team notices",
+    description_es="Canales, mensajes y avisos del equipo",
+    category="work", brand="#611F69",
     # Slack expires a PKCE refresh token after 30 days of inactivity.
     credential_lifetime_days=30,
     # A personal token (xoxb-/xoxp-) does not expire on Slack's schedule,

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/toast.js"></script>
   <script src="/csrf.js" defer></script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -191,10 +192,10 @@
           // Reload the whole recap to get fresh data + the new synthesis
           await load();
         } else {
-          alert('Refresh failed');
+          notifyError('Refresh failed');
         }
       } catch (e) {
-        alert('Refresh error: ' + e.message);
+        notifyError('Refresh error: ' + e.message);
       } finally {
         $('refreshBtn').disabled = false;
         $('refreshBtn').textContent = '↻ Regenerate';

@@ -72,8 +72,23 @@ echo ""
 echo "▸ Updating version to $VERSION"
 sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
 sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" tauri.conf.json
+# The lockfile carries the crate's own version. `cargo check --locked` (three
+# workflows) refuses to build when it disagrees with Cargo.toml, so bumping
+# the crate without the lock breaks CI on the next push.
+sed -i '' '/^name = "conductloop-desktop"$/,/^$/ s/^version = ".*"$/version = "'"$VERSION"'"/' Cargo.lock
+# The Python side carries the version too, and the pre-flight checks both
+# (they are FAIL, not WARN). Bumping them here means the release is one
+# command and nothing is left at the previous version.
+REPO_ROOT="$(cd "$TAURI_DIR/../.." && pwd)"
+sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" "$REPO_ROOT/pyproject.toml"
+sed -i '' "s/^__version__ = \".*\"/__version__ = \"$VERSION\"/" "$REPO_ROOT/ops_dashboard/__init__.py"
+sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" "$REPO_ROOT/desktop/package.json"
 grep -E "^version" Cargo.toml | head -1
 grep -E "\"version\"" tauri.conf.json | head -1
+grep -A 1 'name = "conductloop-desktop"' Cargo.lock | grep version | head -1
+grep -E "^version" "$REPO_ROOT/pyproject.toml" | head -1
+grep -E "^__version__" "$REPO_ROOT/ops_dashboard/__init__.py" | head -1
+grep -E "\"version\"" "$REPO_ROOT/desktop/package.json" | head -1
 echo ""
 
 # ── 2. Build sidecar ─────────────────────────────────────────────────────────
@@ -92,6 +107,15 @@ ls -la "$SIDECAR_DEST"
 echo ""
 
 # ── 3. Build app + bundles ───────────────────────────────────────────────────
+# The DMG step asks the Finder to dress the volume, and a Finder that is
+# stuck answers "El Finder está en uso (-15260)" and the build dies there.
+# It has happened on three releases out of four. Restarting it is cheap and
+# reversible (macOS relaunches it); the windows the user had open are
+# closed, which is the price of a release that finishes.
+echo "▸ Restarting Finder (it gets stuck before the DMG step)"
+killall Finder 2>/dev/null || true
+sleep 3
+
 echo "▸ Building .app + DMG + updater artifacts"
 cd "$TAURI_DIR"
 # Panic locations embed absolute source paths (~/.cargo/registry/…, ~/.rustup/…),

@@ -498,6 +498,9 @@ _SCHEMA_MS = {
 
 SPEC = registry.register(registry.ConnectorSpec(
     id=ID, name="Microsoft 365 (Outlook)", auth="oauth_pkce",
+    description="Outlook mail and calendar events",
+    description_es="Correo de Outlook y eventos de calendario",
+    category="productivity", brand="#0078D4",
     # Microsoft expires a PKCE refresh token after 30 days of inactivity.
     credential_lifetime_days=30,
     # A personal token does not expire on Microsoft's schedule, so the user

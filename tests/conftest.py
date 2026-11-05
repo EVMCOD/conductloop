@@ -24,6 +24,11 @@ atexit.register(shutil.rmtree, _SANDBOX, ignore_errors=True)
 
 os.environ["OPS_DATA_DIR"] = str(_SANDBOX / "data")
 os.environ["OPS_CONFIG_PATH"] = str(_SANDBOX / "config.json")
+# Pin the vault/file-secrets dir too: a leftover OPS_SECRETS_DIR from a
+# packaged stranger-run (or any other shell) would point unlock() at a vault
+# encrypted with a different passphrase, leave the session locked, and make
+# every BYOK-into-vault test fall back to plaintext.
+os.environ["OPS_SECRETS_DIR"] = str(_SANDBOX / "secrets")
 # An empty registry, so a local projects.local.json in the checkout is not read.
 (_SANDBOX / "projects.local.json").write_text("[]")
 os.environ["OPS_PROJECTS_FILE"] = str(_SANDBOX / "projects.local.json")

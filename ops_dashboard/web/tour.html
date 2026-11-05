@@ -41,7 +41,7 @@
 <div class="container">
   <div class="hero">
     <h1>ConductLoop</h1>
-    <p class="tagline">Your AI-native second brain. 5 minutes to value.</p>
+    <p class="tagline">An AI team on your own machine, run with your own key.</p>
     <div class="progress-summary" id="progress-summary">Step 0 of 5 complete</div>
     <div class="progress" id="progress">
       <div class="step-dot active" data-step="1"></div>
@@ -54,61 +54,54 @@
 
   <div class="step" data-step="1">
     <div class="step-num">1</div>
-    <h2 class="step-title">📊 Open the dashboard</h2>
-    <p class="step-desc">See all your projects, agents, and live data in one place. The dashboard unifies your Obsidian vault, git repos, live URLs, revenue, GA4 traffic, and Sentry errors.</p>
-    <div class="feature-list">
-      <div class="feature"><strong>13 projects</strong>tracked automatically</div>
-      <div class="feature"><strong>Live alerts</strong>for any service going down</div>
-      <div class="feature"><strong>Revenue + traffic</strong>in real time</div>
-    </div>
-    <a href="/" class="step-action" data-link="dashboard">Open dashboard →</a>
+    <h2 class="step-title">🔑 Bring your own AI key</h2>
+    <p class="step-desc">ConductLoop uses your own provider key (BYOK). It is stored in your system keychain, or in an encrypted local vault if there is no keychain. Without a key the app still opens; agents just cannot answer yet.</p>
+    <a href="/credentials" class="step-action" data-link="credentials">Add a key →</a>
     <button class="step-skip" data-skip="1">Skip</button>
-    <div class="step-done" data-done="1">✓ Done — welcome to your dashboard</div>
+    <div class="step-done" data-done="1">✓ Done — your key stays on this machine</div>
   </div>
 
   <div class="step hidden" data-step="2">
     <div class="step-num">2</div>
-    <h2 class="step-title">🤖 Ask the brain anything</h2>
-    <p class="step-desc">The brain has context about all your projects, recent activity, anomalies, and revenue. Ask anything in plain English. It can cite sources from your vault.</p>
-    <div class="code-block">How much did I earn this month?<br>Are there any new errors in my project?<br>What anomalies are active?</div>
-    <a href="/?view=brain" class="step-action" data-link="brain">Open brain →</a>
+    <h2 class="step-title">🧑‍💼 Meet your team</h2>
+    <p class="step-desc">Your workspace is a small team of AI agents led by a CEO agent. Give the CEO a goal; it plans the work, hands tasks to the other agents and reports back for your approval.</p>
+    <a href="/boardroom" class="step-action" data-link="boardroom">Open the boardroom →</a>
     <button class="step-skip" data-skip="2">Skip</button>
-    <div class="step-done" data-done="2">✓ Done — your first AI question awaits</div>
+    <div class="step-done" data-done="2">✓ Done — the CEO is waiting for a goal</div>
   </div>
 
   <div class="step hidden" data-step="3">
     <div class="step-num">3</div>
-    <h2 class="step-title">🧠 Edit a note with AI inline</h2>
-    <p class="step-desc">Open any note and use the right sidebar to summarize, translate (ES↔EN), extract action items, suggest titles. The AI reads your actual note content.</p>
-    <a href="/?view=notes" class="step-action" data-link="note">Try with one of your notes →</a>
+    <h2 class="step-title">📝 Keep your notes local</h2>
+    <p class="step-desc">Notes are plain Markdown files on your disk. Your agents can read them for context, and you can use the AI actions in the sidebar on any note.</p>
+    <a href="/?view=notes" class="step-action" data-link="note">Open your notes →</a>
     <button class="step-skip" data-skip="3">Skip</button>
-    <div class="step-done" data-done="3">✓ Done — AI actions are in the right sidebar</div>
+    <div class="step-done" data-done="3">✓ Done — your notes never leave this machine unless you send them</div>
   </div>
 
   <div class="step hidden" data-step="4">
     <div class="step-num">4</div>
-    <h2 class="step-title">⚡ Set up your daily digest</h2>
-    <p class="step-desc">At 8am every day, you get a markdown digest with yesterday's revenue, traffic, anomalies, and an AI-written exec summary. Saved to your vault + sent to Slack/Discord/Telegram if configured.</p>
-    <div class="code-block">curl http://localhost:7777/api/digest<br>curl http://localhost:7777/api/digest/ai-summary</div>
-    <a href="/setup" class="step-action" data-link="setup">Configure notifications →</a>
+    <h2 class="step-title">🔌 Connect your tools</h2>
+    <p class="step-desc">Connectors let your agents read from and act on the services you choose, such as RSS feeds or any MCP server. Nothing is connected until you turn it on, and actions that change something ask you first.</p>
+    <a href="/connectors" class="step-action" data-link="connectors">Browse connectors →</a>
     <button class="step-skip" data-skip="4">Skip</button>
-    <div class="step-done" data-done="4">✓ Done — your first digest arrives tomorrow</div>
+    <div class="step-done" data-done="4">✓ Done — connect more whenever you need them</div>
   </div>
 
   <div class="step hidden" data-step="5">
     <div class="step-num">5</div>
     <h2 class="step-title">🎉 You're set up</h2>
-    <p class="step-desc">That's the 60-second tour. You now have: a unified dashboard, an AI brain that knows your business, inline AI editing on every note, and a daily exec summary.</p>
+    <p class="step-desc">That's the quick tour: your own key, a team led by a CEO, local notes and the connectors you pick.</p>
     <div class="feature-list">
-      <div class="feature"><strong>5 features</strong>you've now seen working</div>
-      <div class="feature"><strong>0 vendors</strong>locked in</div>
-      <div class="feature"><strong>1 source of truth</strong>—your vault + dashboard</div>
+      <div class="feature"><strong>Your key</strong>your provider, your bill</div>
+      <div class="feature"><strong>Local first</strong>data stays on this machine</div>
+      <div class="feature"><strong>You approve</strong>before agents act</div>
     </div>
 
     <div class="final-cta">
       <h2>Ready to go deeper?</h2>
-      <p>ConductLoop is 100% free — every feature unlocked. Optional cloud-only add-ons (cross-device sync, AI hosting, team workspaces) are coming later as paid extras; the desktop app itself stays free.</p>
-      <a href="/" class="step-action" data-link="dashboard">Open ConductLoop →</a>
+      <p>Give your CEO a first goal and see how the team splits the work.</p>
+      <a href="/boardroom" class="step-action" data-link="boardroom">Open the boardroom →</a>
     </div>
   </div>
 </div>

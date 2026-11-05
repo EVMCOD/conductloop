@@ -134,6 +134,30 @@ def test_gitleaks_command_matches_secret_scan():
     assert _tokens(m.group(1)) == _tokens(ci_cmd)
 
 
+def test_the_secret_scan_covers_what_would_be_published():
+    """The scan must cover the published history AND the branch being published.
+
+    `--all` would also cover branches that only exist on the developer's
+    machine. A finding in one of those is not something a release would ever
+    ship, and it makes the local gate fail on a repository whose published
+    history is clean.
+
+    What must not happen is the opposite mistake: a scan that covers only the
+    remote and misses the branch being published, because then a secret
+    committed on the branch would only be found after it is pushed.
+    """
+    m = re.search(r"^GITLEAKS_CMD='(.+)'$", VERIFY.read_text(encoding="utf-8"), re.M)
+    assert m, "GITLEAKS_CMD not found in scripts/verify.sh"
+    cmd = m.group(1)
+    assert "--all" not in cmd, (
+        "the scan covers branches that only exist on this machine")
+    assert "--remotes=origin" in cmd, (
+        "the published history is not scanned")
+    assert "HEAD" in cmd, (
+        "the branch being published is not scanned, so a secret on it would "
+        "only be found after pushing it")
+
+
 def test_mypy_ratchet_list_is_shared_and_valid():
     ci = {_ci_key(s): s for s in _ci_steps()}
     step = ci["Type check (mypy) — blocking (typed-module ratchet)"]

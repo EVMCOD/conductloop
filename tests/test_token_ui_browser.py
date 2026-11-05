@@ -73,8 +73,16 @@ def test_native_connector_cards(site):
             pg.on("console", lambda m: errors.append(f"console: {m.text}")
                   if "Content Security Policy" in m.text or (m.type == "error" and "Failed to load resource" not in m.text)
                   else None)
-            pg.on("dialog", lambda d: d.accept())
+
+            # A native dialog must never be raised: the question is asked in
+            # the page. See the note in test_connectors_ui_browser.py.
+            def native_dialog(d):
+                errors.append(f"native dialog: {d.type} {d.message}")
+                d.dismiss()
+            pg.on("dialog", native_dialog)
             pg.goto(base_url + "/connectors")
+            # The connection settings live below the catalogue, folded.
+            pg.eval_on_selector("#settings-details", "e => { e.open = true; }")
             card = '[data-connector="fakenotes"]'
             pg.wait_for_selector(f"{card} [data-testid=token-details] input[type=password]")
             assert pg.text_content(f"{card} [data-testid=status]") == "desconectado"
@@ -114,9 +122,16 @@ def test_native_connector_cards(site):
             pg.wait_for_selector("#pending-empty:not([hidden])")
             assert env["rec"].writes()[0]["body"] == {"title": "desde el agente"}
 
+            # "Olvidar" asks in the page: the documents are still there while
+            # the dialog is open, and only "Confirmar" forgets them.
             pg.click(f"{card} button:text-is('Olvidar datos importados')")
+            pg.wait_for_selector("#confirm-dialog[open]")
+            assert "2 documentos en el vault" in (pg.text_content(card) or "")
+            pg.click("#confirm-yes")
             pg.wait_for_selector(f"{card} :text('0 documentos en el vault')")
             pg.click(f"{card} button:text-is('Desconectar')")
+            pg.wait_for_selector("#confirm-dialog[open]")
+            pg.click("#confirm-yes")
             pg.wait_for_selector(f"{card} [data-testid=status]:text-is('desconectado')")
 
             gh = '[data-connector="fakegh"]'
@@ -129,6 +144,8 @@ def test_native_connector_cards(site):
 
             en = browser.new_context(locale="en-US").new_page()
             en.goto(base_url + "/connectors")
+            # The connection settings live below the catalogue, folded.
+            en.eval_on_selector("#settings-details", "e => { e.open = true; }")
             en.wait_for_selector(f"{gh} [data-testid=token-source]")
             assert "Connections" in (en.text_content(f"{gh} [data-testid=token-source]") or "")
             assert en.is_visible(f"{gh} button:text-is('Sync now')")

@@ -370,7 +370,11 @@ def generate_ceo_reply(member_id: int, trigger_msg_id: int | None = None) -> dic
                     )
                     provider_name = "mock"
                 else:
-                    reply_text = configured.ask(system_prompt, [{"role": "user", "content": user_prompt}])
+                    # The agent may reach the connectors the user connected
+                    # (L8b). The prompt says what it has; the tool results
+                    # come back as data, and a write waits for the user.
+                    reply_text, _used = brain.ask_with_connector_tools(
+                        configured, system_prompt, [{"role": "user", "content": user_prompt}])
                     provider_name = configured.name
             except Exception as e_first:
                 # Try ollama as a graceful fallback so the CEO doesn't go silent.
@@ -1144,7 +1148,10 @@ def chat_with_holding_ceo(prompt: str) -> str:
                 f"{len(blocked)} blocked, {len(waiting)} waiting. "
                 "Set BRAIN_PROVIDER + BYOK key for richer replies."
             )
-        answer = provider.ask(system_prompt, [{"role": "user", "content": user_prompt}])
+        # The chairman's quick question can be answered from a connector the
+        # user connected, the same as any other answer.
+        answer, _used = brain.ask_with_connector_tools(
+            provider, system_prompt, [{"role": "user", "content": user_prompt}])
         out = (answer or "").strip()
         return out or "(no answer)"
     except Exception as e:

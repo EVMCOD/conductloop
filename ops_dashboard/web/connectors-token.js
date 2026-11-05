@@ -60,6 +60,42 @@
       .catch(function (e) { H.showError(e.message); H.load(); });
   }
 
+  function tokenForm(H, c, d) {
+    // The token form, on its own. The settings card puts it in a card; the
+    // catalogue puts it in the tile. One implementation, so the tile can
+    // never post to an endpoint this connector does not use.
+    var wrap = H.el('div', 'token-form');
+    var row2 = H.el('div', 'row');
+    if (d.token_mode === 'none') {
+      row2.appendChild(H.button(tr(H, 'n_enable'), 'small', function () { post(H, c, '/token', {}); }));
+    } else {
+      var lab2 = H.el('label', 'hint', tr(H, 'n_token'));
+      var inp = H.el('input'); inp.type = 'password'; inp.autocomplete = 'off';
+      inp.setAttribute('aria-label', tr(H, 'n_token'));
+      inp.setAttribute('data-testid', 'token-input');
+      lab2.appendChild(document.createElement('br')); lab2.appendChild(inp); row2.appendChild(lab2);
+      var submit = H.button(tr(H, 'n_connect'), 'small', function () {
+        var v = inp.value; inp.value = '';
+        post(H, c, '/token', { token: v });
+      });
+      submit.setAttribute('data-testid', 'token-submit');
+      row2.appendChild(submit);
+    }
+    wrap.appendChild(row2);
+    if (d.token_mode === 'connections') wrap.appendChild(H.el('div', 'hint', tr(H, 'n_conn_note')));
+    return wrap;
+  }
+
+  function connectForm(c, H) {
+    // The form for a token connector, built from the connector's own details
+    // (its mode: a token to paste, a stored one, or one to enable).
+    return details(H).then(function (r) {
+      var d = r.connectors && r.connectors[c.id];
+      if (!d) throw new Error('connector details unavailable');
+      return tokenForm(H, c, d);
+    });
+  }
+
   function fill(H, c, box, d) {
     H.clear(box);
     var help = d.token_help ? (H.ES ? d.token_help.es : d.token_help.en) : '';
@@ -82,20 +118,7 @@
         }));
         box.appendChild(row1);
       }
-      var row2 = H.el('div', 'row');
-      if (d.token_mode === 'none') {
-        row2.appendChild(H.button(tr(H, 'n_enable'), 'small', function () { post(H, c, '/token', {}); }));
-      } else {
-        var lab2 = H.el('label', 'hint', tr(H, 'n_token'));
-        var inp = H.el('input'); inp.type = 'password'; inp.autocomplete = 'off'; inp.setAttribute('aria-label', tr(H, 'n_token'));
-        lab2.appendChild(document.createElement('br')); lab2.appendChild(inp); row2.appendChild(lab2);
-        row2.appendChild(H.button(tr(H, 'n_connect'), 'small', function () {
-          var v = inp.value; inp.value = '';
-          post(H, c, '/token', { token: v });
-        }));
-      }
-      box.appendChild(row2);
-      if (d.token_mode === 'connections') box.appendChild(H.el('div', 'hint', tr(H, 'n_conn_note')));
+      box.appendChild(tokenForm(H, c, d));
     }
 
     if (d.config_fields && d.config_fields.length) {
@@ -133,8 +156,8 @@
         post(H, c, '/sync', {}, function (r) { flow.textContent = tr(H, 'n_sync_ok', (r.sync && r.sync.fetched) || 0); });
       }));
       if (d.documents) {
-        row3.appendChild(H.button(tr(H, 'n_forget'), 'ghost small', function () {
-          if (!window.confirm(tr(H, 'n_confirm_forget', c.name))) return;
+        row3.appendChild(H.button(tr(H, 'n_forget'), 'ghost small', async function () {
+          if (!await confirmAction(tr(H, 'n_confirm_forget', c.name), { confirm: H.t('dlg_confirm'), cancel: H.t('dlg_cancel') })) return;
           post(H, c, '/forget', {});
         }));
       }
@@ -145,8 +168,8 @@
           row3.appendChild(H.button(tr(H, 'n_grant'), 'ghost small', function () { post(H, c, '/permission', { permission: 'write' }); }));
         }
       }
-      row3.appendChild(H.button(H.t('disconnect'), 'danger small', function () {
-        if (!window.confirm(H.t('confirm_disconnect', c.name))) return;
+      row3.appendChild(H.button(H.t('disconnect'), 'danger small', async function () {
+        if (!await confirmAction(H.t('confirm_disconnect', c.name), { confirm: H.t('dlg_confirm'), cancel: H.t('dlg_cancel') })) return;
         H.api('/api/connectors/' + encodeURIComponent(c.id) + '/disconnect', {}).then(H.load).catch(function (e) { H.showError(e.message); });
       }));
       box.appendChild(row3);
@@ -184,5 +207,5 @@
     return card;
   }
 
-  window.CLToken = { render: render, L: L };
+  window.CLToken = { render: render, connectForm: connectForm, L: L };
 })();

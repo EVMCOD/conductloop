@@ -28,6 +28,7 @@ import re
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,6 +43,42 @@ log = logging.getLogger(__name__)
 # but generous — the user is actively waiting on brain chat. Env override:
 # BRAIN_LLM_TIMEOUT (seconds).
 LLM_TIMEOUT = float(os.environ.get("BRAIN_LLM_TIMEOUT", "90"))
+
+
+def ask_with_connector_tools(provider, system: str, messages: list[dict], *,
+                             on_tool_call: Callable[..., None] | None = None) -> tuple[str, bool]:
+    """Ask a provider, offering it the connected connectors' tools.
+
+    Returns ``(answer, used_tools)``. When the provider cannot do tool
+    calling, the question is asked the plain way and the answer is the same
+    one it always was — the tools are an addition, never a requirement.
+
+    The system prompt gains the block that says what the agent can reach and
+    that what comes back is data. A tool the prompt never mentions is a tool
+    the model does not reach for.
+    """
+    from . import tools as brain_tools
+    try:
+        supported = bool(provider.supports_tools())
+    except Exception:
+        supported = False
+    if not supported:
+        return provider.ask(system, messages), False
+
+    prov_tools = (brain_tools.tools_for_anthropic() if provider.name == "anthropic"
+                  else brain_tools.tools_for_openai())
+    connector_tools = [t for t in prov_tools
+                       if t.get("function", {}).get("name", "").startswith("connector_")]
+    if not connector_tools:
+        # Nothing connected: do not pay for an empty tool list.
+        return provider.ask(system, messages), False
+
+    from .connector_tools import prompt_block
+    block = prompt_block()
+    if block:
+        system = system + block
+    answer = provider.ask_with_tools(system, messages, prov_tools, on_tool_call=on_tool_call)
+    return answer, True
 
 
 def ask_with_deadline(provider, system: str, messages: list[dict],
@@ -96,7 +133,7 @@ def _classify_provider_error(e: Exception, provider_name: str) -> ProviderError:
     if s is None and isinstance(e, (TypeError, AttributeError)):
         return ProviderError(
             "internal",
-            f"Error interno de ConductLoop al llamar a '{provider_name}' (no llegó al provider): {type(e).__name__}: {raw[:160]}",
+            f"ConductLoop hit an internal error calling '{provider_name}' (it never reached the provider): {type(e).__name__}: {raw[:160]}",
             500,
         )
     # also look inside the message
@@ -110,31 +147,31 @@ def _classify_provider_error(e: Exception, provider_name: str) -> ProviderError:
         model = f" «{m.group(1)}»" if m else ""
         return ProviderError(
             "model_unavailable",
-            f"El provider '{provider_name}' ya no ofrece el modelo{model}. Elige otro modelo o provider en Connect AI.",
+            f"The provider '{provider_name}' no longer offers the model{model}. Pick another model or provider in Connect AI.",
             404,
         )
     if s == 402 or "insufficient_balance" in raw or "payment_required" in raw.lower():
         return ProviderError(
             "insufficient_credit",
-            f"El provider '{provider_name}' ha rechazado la llamada: tu cuenta no tiene saldo. Recargar crédito o cambiar de provider en Settings.",
+            f"The provider '{provider_name}' rejected the call: your account has no credit left. Top up or switch provider in Credentials.",
             402,
         )
     if s == 401 or "invalid_api_key" in raw or "authentication" in raw.lower():
         return ProviderError(
             "invalid_key",
-            f"El provider '{provider_name}' ha rechazado la llamada: la API key es inválida o está revocada. Configurar una nueva en Settings.",
+            f"The provider '{provider_name}' rejected the call: the API key is invalid or revoked. Paste a new one in Credentials.",
             401,
         )
     if s == 429 or "rate_limit" in raw.lower():
         return ProviderError(
             "rate_limited",
-            f"El provider '{provider_name}' está limitado por tasa (rate limit). Espera unos segundos y reintenta.",
+            f"The provider '{provider_name}' is rate-limited. Wait a few seconds and try again.",
             429,
         )
     if s in (500, 502, 503, 504) or "internal server" in raw.lower():
         return ProviderError(
             "provider_down",
-            f"El provider '{provider_name}' está caído o inestable ({s}). Reintenta en un rato o usa otro provider.",
+            f"The provider '{provider_name}' is down or unstable ({s}). Try again shortly, or use another provider.",
             500,
         )
     # Connection-level errors
@@ -142,14 +179,14 @@ def _classify_provider_error(e: Exception, provider_name: str) -> ProviderError:
     if "connection" in name or "timeout" in name or "connect" in raw.lower():
         return ProviderError(
             "unreachable",
-            f"No se puede conectar con el provider '{provider_name}'. Comprueba la red o que el servicio esté accesible.",
+            f"Cannot reach the provider '{provider_name}'. Check the network, or that the service is up.",
             None,
         )
     # unknown
     log.warning("unclassified provider error (provider=%s): %s", provider_name, raw[:300])
     return ProviderError(
         "unknown",
-        f"Error inesperado del provider '{provider_name}': {raw[:200]}",
+        f"Unexpected error from the provider '{provider_name}': {raw[:200]}",
         500,
     )
 
@@ -395,6 +432,21 @@ class MockProvider(Provider):
                 + "\n\n".join(found)
                 + f"\n\n{_NO_KEY_TIP}"
             )
+        # Retrieval may have put notes in the context (citations [N]) even when
+        # no single line shares enough words with the question. Saying
+        # "nothing matches" next to those citations confuses a first run.
+        related = [
+            label for label in _context_note_labels(system)
+            if _terms(label) & _terms(last)
+        ]
+        if related:
+            return (
+                "No AI key is set up, so ConductLoop cannot write an answer yet. "
+                "These notes look related to your question — open them for the "
+                "detail:\n\n"
+                + "\n".join(related)
+                + f"\n\n{_NO_KEY_TIP}"
+            )
         return (
             f"No AI key is set up, so ConductLoop cannot write an answer yet, "
             f"and nothing in your notes matches “{last[:200]}”.\n\n{_NO_KEY_TIP}"
@@ -402,13 +454,30 @@ class MockProvider(Provider):
 
 
 _NO_KEY_TIP = (
-    "To get written answers, add a key in Credentials (Anthropic, OpenAI, "
-    "MiniMax...) or point Connect AI at a local Ollama. From a terminal, "
-    "BRAIN_PROVIDER=anthropic with ANTHROPIC_API_KEY works too."
+    "To get written answers, add a key on the welcome page or in Credentials "
+    "(Anthropic, OpenAI, MiniMax…), or point Connect AI at a local Ollama."
 )
 
-# The context block written by _format_context: "[N] (source) title", then
-# "path: ..." (or "content:" for web clips), then "content:" and the text.
+
+def _context_note_labels(system: str, *, limit: int = 5) -> list[str]:
+    """Titles of the notes in the prompt's context block, as "**Title** [N]"."""
+    starts = list(_CONTEXT_START.finditer(system or ""))
+    if not starts:
+        return []
+    out: list[str] = []
+    for line in system[starts[-1].end():].splitlines():
+        if line.startswith(_CONTEXT_END):
+            break
+        head = _CONTEXT_DOC.match(line)
+        if not head:
+            continue
+        title = (head.group(3) or head.group(2) or "").strip() or "note"
+        out.append(f"**{title}** [{head.group(1)}]")
+        if len(out) >= limit:
+            break
+    return out
+
+
 _CONTEXT_START = re.compile(r"^Relevant context\b.*:$", re.M)
 _CONTEXT_DOC = re.compile(r"^\[(\d+)\] \(([^)\n]*)\)(?: (.*))?$")
 # What the prompt builders append after the last document.
@@ -1878,6 +1947,10 @@ def ask(question: str, *, conversation_id: int | None = None,
         prov_tools = brain_tools.tools_for_anthropic() if provider.name == "anthropic" else brain_tools.tools_for_openai()
         # L5: catalog of enabled skills (name + description); empty when none.
         system += skills_catalog.catalog_prompt()
+        # L8: the connected apps, so the model knows what it can reach and
+        # that what comes back is data rather than instructions.
+        from .connector_tools import prompt_block as _connector_prompt
+        system += _connector_prompt()
         # Capture on_tool_call for system-prompt-level tool log
         tool_log: list[dict] = []
         def _on_call(name, args, result):

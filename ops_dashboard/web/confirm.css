@@ -1,0 +1,54 @@
+/* The dialogs web/confirm.js opens (confirmAction, promptAction).
+ *
+ * Self-contained on purpose: the helper has to render on every page that
+ * asks, and the pages do not share one stylesheet -- the legacy pages do
+ * not even use the same token names. So every value carries its own
+ * fallback and the dialog looks right even where --cl-* is not defined.
+ */
+dialog.confirm {
+  background: var(--cl-bg-soft, #f6f7f9);
+  color: var(--cl-ink, #14161a);
+  border: 1px solid var(--cl-border, #e5e8ee);
+  border-radius: 12px;
+  max-width: 460px;
+  padding: 18px;
+}
+dialog.confirm::backdrop { background: rgba(0, 0, 0, 0.55); }
+dialog.confirm p { margin: 0 0 14px; white-space: pre-wrap; }
+dialog.confirm .confirm__message { max-height: 40vh; overflow-y: auto; }
+dialog.confirm .confirm__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+dialog.confirm button {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--cl-border, #e5e8ee);
+  background: transparent;
+  color: var(--cl-ink, #14161a);
+  cursor: pointer;
+}
+dialog.confirm button.confirm__btn--primary {
+  background: var(--cl-accent, #6d28d9);
+  border-color: transparent;
+  color: #fff;
+}
+dialog.confirm .confirm__input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--cl-border, #e5e8ee);
+  background: var(--cl-bg, #fff);
+  color: var(--cl-ink, #14161a);
+}
+dialog.confirm .confirm__input:focus {
+  outline: 2px solid var(--cl-focus, #2563eb);
+  outline-offset: 1px;
+}

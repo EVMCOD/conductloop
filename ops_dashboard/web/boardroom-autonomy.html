@@ -43,6 +43,7 @@
     button:disabled{opacity:.5}
     .toast{display:none;background:var(--cl-ok-soft);color:var(--cl-ok);padding:10px 14px;border-radius:8px;margin-top:10px;font-size:13px;border:1px solid var(--cl-ok)}
     .toast.show{display:block}
+        .toast.err{background:var(--cl-danger-soft);color:var(--cl-danger);border-color:var(--cl-danger)}
   </style>
 </head>
 <body>
@@ -180,6 +181,12 @@
     document.getElementById('require').onchange = (e) => { state.require_chairman = e.target.checked ? 1 : 0; };
     document.getElementById('cancel').onclick = () => load();
     document.getElementById('reset').onclick = () => { state.tier = 2; state.maturity = 'traction'; state.per_action = {}; state.require_chairman = 0; document.getElementById('require').checked = false; render(); };
+    function showToast(msg, isErr) {
+      const t = $('toast');
+      t.textContent = msg;
+      t.className = 'toast' + (isErr ? ' err' : '') + ' show';
+      setTimeout(() => { t.className = 'toast'; }, 2500);
+    }
     document.getElementById('save').onclick = async () => {
       document.getElementById('save').disabled = true;
       try {
@@ -195,14 +202,12 @@
         });
         const d = await r.json();
         if (d.ok) {
-          $('toast').textContent = 'Saved · audit log updated';
-          $('toast').classList.add('show');
-          setTimeout(() => $('toast').classList.remove('show'), 2500);
+          showToast('Saved · audit log updated');
         } else {
-          alert('Save failed: ' + (d.error || 'unknown'));
+          showToast('Save failed: ' + (d.error || 'unknown'), true);
         }
       } catch (e) {
-        alert('Save error: ' + e.message);
+        showToast('Save error: ' + e.message, true);
       } finally {
         document.getElementById('save').disabled = false;
       }

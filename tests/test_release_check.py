@@ -163,16 +163,68 @@ def test_a_missing_required_file_fails(tmp_path):
     assert rc.FAIL in levels(results(r), "version")
 
 
-def test_stale_lock_files_only_warn(tmp_path):
+def test_a_stale_package_lock_only_warns(tmp_path):
+    """The npm lockfile is not built with --locked, so a stale one is a note,
+    not a broken release."""
     r = make_repo(tmp_path)
-    lock = r / "desktop" / "src-tauri" / "Cargo.lock"
-    lock.write_text(lock.read_text().replace(VERSION, "1.2.0"))
     (r / "desktop" / "package-lock.json").write_text(json.dumps({"version": "1.0.0", "packages": {"": {"version": "1.0.0"}}}))
     commit_all(r)
     res = results(r)
     assert levels(res, "version") == {rc.OK, rc.WARN}
     assert rc.exit_code(res) == 0
     assert rc.exit_code(res, strict=True) == 1
+
+
+def test_a_stale_cargo_lock_fails(tmp_path):
+    """The cargo lockfile IS built with --locked, in three workflows.
+
+    A lockfile that says 1.2.0 while the crate says 1.2.1 does not warn:
+    `cargo check --locked` refuses to run, and the release that shipped it
+    broke the Windows job. This is the check that says so before the tag,
+    not after.
+    """
+    r = make_repo(tmp_path)
+    lock = r / "desktop" / "src-tauri" / "Cargo.lock"
+    lock.write_text(lock.read_text().replace(VERSION, "1.2.0"))
+    commit_all(r)
+    res = results(r)
+    bad = [x for x in by(res, "version") if x.level == rc.FAIL]
+    assert len(bad) == 1 and "Cargo.lock" in bad[0].message, bad
+    assert rc.exit_code(res) == 1
+
+
+def test_the_release_script_updates_the_cargo_lock():
+    """Bumping the crate without the lockfile is what broke it. The script
+    that bumps the crate bumps the lock too."""
+    script = (ROOT / "scripts" / "release-desktop.sh").read_text(encoding="utf-8")
+    assert "Cargo.lock" in script, "the release script never touches the lockfile"
+    block = script.split("Updating version")[1]
+    block = block.split("▸")[0]
+    assert "Cargo.lock" in block, (
+        "the version bump does not update Cargo.lock, so the lockfile is left "
+        "at the previous version and `cargo check --locked` fails")
+
+
+@pytest.mark.parametrize("rel", [
+    "pyproject.toml",
+    "ops_dashboard/__init__.py",
+    "desktop/src-tauri/Cargo.toml",
+    "desktop/src-tauri/tauri.conf.json",
+    "desktop/src-tauri/Cargo.lock",
+    "desktop/package.json",
+])
+def test_the_release_script_bumps_every_version(rel):
+    """One command, no version left behind.
+
+    Every version the pre-flight checks as FAIL has to be moved by the
+    script. The ones bumped by hand are the ones that get forgotten: the
+    1.2.6 release bumped the crate and left the lockfile at 1.2.5, and
+    `cargo check --locked` broke the Windows job on the next push.
+    """
+    script = (ROOT / "scripts" / "release-desktop.sh").read_text(encoding="utf-8")
+    block = script.split("Updating version")[1].split("▸")[0]
+    name = rel.rsplit("/", 1)[-1]
+    assert name in block, f"the release script never bumps {rel}"
 
 
 def test_unreadable_version_file_is_reported_not_raised(tmp_path):

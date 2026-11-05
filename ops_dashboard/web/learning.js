@@ -77,8 +77,8 @@
       skills_vault: 'Carpeta: {0}', enabled_lbl: 'activa', invalid: 'no válida', activations: '{0} usos',
       export_skill: 'Exportar a ~/.agents/skills', exported_skill: 'Exportada a {0}',
       reindexed: 'Reindexadas: {0}',
-      trusted_repos: 'Repos de confianza (skills de proyecto)',
-      trusted_hint: 'Las skills de <repo>/.agents/skills solo se usan en repos que marques aquí. Desactivado por defecto.',
+      trusted_repos: 'Repos de confianza',
+      trusted_hint: 'Marcar un repo como de confianza le da al agente que trabaja en él dos cosas: las skills de <repo>/.agents/skills y el acceso a tus apps conectadas (Gmail, GitHub, Slack…). Puede leerlas; para escribir necesita tu confirmación. Desactivado por defecto.',
       trust_ph: '/ruta/al/repo', trust_add: 'Confiar', untrust: 'Quitar', no_trusted: 'Ningún repo marcado.',
       s_vault: 'vault', s_agents_dir: '~/.agents', s_claude_dir: '~/.claude', s_project: 'proyecto',
       title: 'Aprendizaje',
@@ -96,6 +96,7 @@
       provider: 'Proveedor', model: 'Modelo', no_failures: 'Sin fallos registrados.',
       failures_off: 'El registro de fallos está desactivado.',
       confirm_clear: '¿Borrar todo el registro de fallos?', error: 'Error: {0}',
+      dlg_confirm: 'Confirmar', dlg_cancel: 'Cancelar', dlg_ok: 'Aceptar',
       r_wrong: 'incorrecta', r_missing_citation: 'falta cita', r_bad_citation: 'cita errónea',
       r_outdated: 'desactualizada', r_style: 'estilo', r_unsafe: 'insegura', r_other: 'otro',
       k_provider_error: 'proveedor', k_timeout: 'tiempo agotado', k_broken_citation: 'cita rota',
@@ -167,8 +168,8 @@
       skills_vault: 'Folder: {0}', enabled_lbl: 'enabled', invalid: 'invalid', activations: '{0} uses',
       export_skill: 'Export to ~/.agents/skills', exported_skill: 'Exported to {0}',
       reindexed: 'Reindexed: {0}',
-      trusted_repos: 'Trusted repos (project skills)',
-      trusted_hint: 'Skills in <repo>/.agents/skills are only used for repos you mark here. Off by default.',
+      trusted_repos: 'Trusted repos',
+      trusted_hint: 'Marking a repo as trusted gives the agent working in it two things: the skills in <repo>/.agents/skills, and access to your connected apps (Gmail, GitHub, Slack…). It can read them; to write it needs your confirmation. Off by default.',
       trust_ph: '/path/to/repo', trust_add: 'Trust', untrust: 'Remove', no_trusted: 'No repo marked.',
       s_vault: 'vault', s_agents_dir: '~/.agents', s_claude_dir: '~/.claude', s_project: 'project',
       title: 'Learning',
@@ -186,6 +187,7 @@
       provider: 'Provider', model: 'Model', no_failures: 'No failures logged.',
       failures_off: 'The failure log is off.',
       confirm_clear: 'Delete the whole failure log?', error: 'Error: {0}',
+      dlg_confirm: 'Confirm', dlg_cancel: 'Cancel', dlg_ok: 'Accept',
       r_wrong: 'wrong', r_missing_citation: 'missing citation', r_bad_citation: 'bad citation',
       r_outdated: 'outdated', r_style: 'style', r_unsafe: 'unsafe', r_other: 'other',
       k_provider_error: 'provider', k_timeout: 'timeout', k_broken_citation: 'broken citation',
@@ -296,7 +298,7 @@
     var row = el('div', 'row');
     function go(mode) {
       api('POST', '/api/learning/lessons/propose', { feedback_id: f.id, mode: mode })
-        .then(function () { refresh(); window.alert(t('proposed_ok')); })
+        .then(function () { refresh(); notify(t('proposed_ok')); })
         .catch(function (e) { showError(e.message); });
     }
     row.appendChild(btn(t('propose_h'), null, function () { go('heuristic'); }));
@@ -305,7 +307,7 @@
     if (f.conversation_id) {
       row.appendChild(btn(t('find_corrections'), null, function () {
         api('POST', '/api/learning/lessons/propose-corrections', { conversation_id: f.conversation_id })
-          .then(function (d) { refresh(); window.alert(d.lessons.length ? t('proposed_ok') : t('no_corrections')); })
+          .then(function (d) { refresh(); notify(d.lessons.length ? t('proposed_ok') : t('no_corrections')); })
           .catch(function (e) { showError(e.message); });
       }));
     }
@@ -588,12 +590,13 @@
   var SP = { budget: 0.05, skills: [], agent: [] };
 
   function spConfirm(mode) {
-    return window.confirm(t('sp_send_warn', mode === 'ollama' ? 'Ollama' : t('sp_same_model'), SP.budget));
+    return confirmAction(t('sp_send_warn', mode === 'ollama' ? 'Ollama' : t('sp_same_model'), SP.budget),
+                         { confirm: t('dlg_confirm'), cancel: t('dlg_cancel') });
   }
-  function spGo(path, body, mode) {
-    if (mode && mode !== 'heuristic' && !spConfirm(mode)) return Promise.resolve();
+  async function spGo(path, body, mode) {
+    if (mode && mode !== 'heuristic' && !(await spConfirm(mode))) return;
     return api('POST', path, body)
-      .then(function (d) { refresh(); window.alert(d.proposal && d.proposal.duplicate ? t('sp_dup') : t('sp_made', 1)); })
+      .then(function (d) { refresh(); notify(d.proposal && d.proposal.duplicate ? t('sp_dup') : t('sp_made', 1)); })
       .catch(function (e) { showError(e.message); });
   }
 
@@ -644,11 +647,11 @@
       if (ta) row.appendChild(btn(t('sp_save'), null, function () { act('/api/learning/skills/proposals/edit', { id: p.id, content: ta.value }); }));
       row.appendChild(btn(t('approve'), 'small', function () {
         api('POST', '/api/learning/skills/proposals/approve', ta ? { id: p.id, content: ta.value } : { id: p.id })
-          .then(function (d) { refresh(); if (d.proposal.review_note) window.alert(t('sp_written', d.proposal.review_note)); })
+          .then(function (d) { refresh(); if (d.proposal.review_note) notify(t('sp_written', d.proposal.review_note)); })
           .catch(function (e) { refresh(); showError(e.message); });
       }));
-      row.appendChild(btn(t('reject'), 'danger small', function () {
-        var why = window.prompt(t('sp_reject_why'), '');
+      row.appendChild(btn(t('reject'), 'danger small', async function () {
+        var why = await promptAction(t('sp_reject_why'), { defaultValue: '', ok: t('dlg_ok'), cancel: t('dlg_cancel') });
         if (why === null) return;
         act('/api/learning/skills/proposals/reject', { id: p.id, note: why });
       }));
@@ -683,8 +686,8 @@
       api('POST', '/api/learning/settings', { failure_log_enabled: !!ev.target.checked })
         .then(refresh).catch(function (e) { showError(e.message); });
     });
-    $('clear-failures').addEventListener('click', function () {
-      if (!window.confirm(t('confirm_clear'))) return;
+    $('clear-failures').addEventListener('click', async function () {
+      if (!await confirmAction(t('confirm_clear'), { confirm: t('dlg_confirm'), cancel: t('dlg_cancel') })) return;
       api('POST', '/api/learning/failures/clear', {}).then(refresh).catch(function (e) { showError(e.message); });
     });
     $('lessons-enabled').addEventListener('change', function (ev) {
@@ -729,7 +732,7 @@
     });
     $('sp-curator').addEventListener('click', function () {
       api('POST', '/api/learning/skills/proposals/curator', {})
-        .then(function (d) { refresh(); window.alert(d.proposals.length ? t('sp_made', d.proposals.length) : t('sp_none_made', 60)); })
+        .then(function (d) { refresh(); notify(d.proposals.length ? t('sp_made', d.proposals.length) : t('sp_none_made', 60)); })
         .catch(function (e) { showError(e.message); });
     });
     $('sp-create').addEventListener('click', function () {

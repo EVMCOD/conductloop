@@ -17,11 +17,27 @@ from __future__ import annotations
 
 import importlib
 import logging
-import pkgutil
 from typing import Any
 
 log = logging.getLogger("conductloop.connectors.native")
 _LOADED: list[str] = []
+
+# The modules are named here on purpose. A frozen build does not ship the
+# package as files: its modules live inside the PYZ archive, so walking the
+# folder finds nothing there. The connectors used to register themselves by
+# walking it, and in the frozen app the walk came back empty — no connector
+# registered itself, the page showed zero connectors, and nothing raised.
+# The app that ships is the app the user runs.
+#
+# A test walks the folder and fails when this list and the folder drift
+# apart, so a connector added later is not forgotten here.
+_MODULES = (
+    "gmail",
+    "google_calendar",
+    "google_drive",
+    "microsoft365",
+    "slack",
+)
 # Connectors that may share one BYOK OAuth app (same client ID/secret) while
 # keeping one token per connector, e.g. {"google": ["google_calendar", "gmail", …]}.
 CLIENT_GROUPS: dict[str, list[str]] = {}
@@ -71,14 +87,14 @@ def share_client(group: str, source_id: str) -> list[str]:
 
 def load_all() -> list[str]:
     """Import (and so register) every connector module in this package."""
-    for m in pkgutil.iter_modules(__path__):
-        if m.name.startswith("_") or m.name in _LOADED:
+    for name in _MODULES:
+        if name in _LOADED:
             continue
         try:
-            importlib.import_module(f"{__name__}.{m.name}")
-            _LOADED.append(m.name)
+            importlib.import_module(f"{__name__}.{name}")
+            _LOADED.append(name)
         except Exception as e:  # one broken connector must not take the page down
-            log.warning("connector module %s failed to load: %s", m.name, type(e).__name__)
+            log.warning("connector module %s failed to load: %s", name, type(e).__name__)
     return list(_LOADED)
 
 

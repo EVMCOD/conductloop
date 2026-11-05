@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/confirm.js"></script>
   <script src="/csrf.js" defer></script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Media · ConductLoop</title>
   <link rel="stylesheet" href="/theme.css">
+  <link rel="stylesheet" href="/confirm.css" />
   <style>
   /* Page-only layout. Everything else comes from theme.css, so this page
      speaks the same design language as the rest of the product. */
@@ -760,7 +762,7 @@
   }
 
   async function removeAsset(asset) {
-    if (!window.confirm("Delete this asset and its file?\n\n"
+    if (!await confirmAction("Delete this asset and its file?\n\n"
       + (asset.prompt || "").slice(0, 120))) return;
     try {
       await api("/api/media/assets/" + asset.id, undefined, "DELETE");

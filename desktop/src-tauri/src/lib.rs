@@ -8,6 +8,7 @@ use std::sync::Mutex;
 
 mod agent_bridge;
 mod browser;
+mod main_window;
 mod updates;
 
 use tauri::menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
@@ -258,6 +259,7 @@ pub fn run() {
             browser::browser_set_visible,
             browser::browser_list,
             browser::browser_extract,
+            browser::browser_focus_ui,
             browser::browser_agent_control
         ])
         .menu(app_menu)
@@ -329,6 +331,10 @@ pub fn run() {
             }
             // 0. In-app browser state + filtering proxy (browser design PR 4/5).
             app.manage(browser::BrowserState::new(browser::start_proxy()));
+            // The window is built here, not from tauri.conf.json ("create":
+            // false), so it gets its new-window, navigation and download
+            // handlers (main_window.rs).
+            main_window::build(app, BACKEND_URL)?;
             if let Some(win) = app.get_window("main") {
                 browser::refresh_title_bar(&win);
             }

@@ -357,6 +357,9 @@ _SCHEMA_SEND = {
 
 SPEC = registry.register(registry.ConnectorSpec(
     id=ID, name="Gmail",
+    description="Read and search your mail, and send messages",
+    description_es="Lee y busca en tu correo, y envía mensajes",
+    category="productivity", brand="#EA4335",
     allowed_hosts=(*_google.AUTH_HOSTS, "gmail.googleapis.com"),
     read_scopes=READ_SCOPES,
     write_scopes=WRITE_SCOPES,

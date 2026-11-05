@@ -32,6 +32,7 @@ from __future__ import annotations
 import hmac
 import os
 import threading
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -55,7 +56,73 @@ def _env(name: str) -> str:
     return v if len(v) >= MIN_LEN else ""
 
 
+# Where the token is kept between launches. Tests point it elsewhere.
+_DATA_DIR: Path | None = None
+
+
+def _token_path() -> Path:
+    base = _DATA_DIR
+    if base is None:
+        from .app_paths import data_dir
+        base = data_dir()
+    return base / "app-token"
+
+
+def resolve_token() -> str:
+    """The session token, persisted so a restart does not break the app.
+
+    The desktop app hands a token to the server in the environment, once per
+    launch. The browser keeps that token as a cookie, and every request from
+    the window has to carry it. If the token changed on every launch, a
+    server restart — an update, a crash, the scheduler — would leave the open
+    window holding a cookie that no longer matches: every request would
+    answer 403 and the app would look broken.
+
+    So the token is kept next to the data, and the copy on disk is the one
+    that is used: it is the one the window that is already open has.
+
+    With no token in the environment there is nothing to persist, and the
+    guard stays off — that is the development server, which must keep
+    working without a cookie.
+    """
+    path = _token_path()
+    try:
+        stored = path.read_text(encoding="utf-8").strip()
+        if len(stored) >= MIN_LEN:
+            return stored
+    except OSError:
+        pass
+    token = _env(TOKEN_ENV)
+    if not token:
+        # No token in the environment: the guard is off (the development
+        # server), and there is nothing worth persisting.
+        return ""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(token, encoding="utf-8")
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return token
+
+
+def session_token() -> str:
+    """The token the window gets as a cookie, and the one the server checks.
+
+    They have to be the same token. The boot hands this out and the server
+    compares against it; if the boot handed out the token from the
+    environment — a new one on every launch — while the server checked the
+    persisted one, the window would be left holding a cookie that answers
+    403 to everything.
+    """
+    return resolve_token()
+
+
 def enabled() -> bool:
+    # The environment decides whether the guard is on at all. The file on
+    # disk only chooses WHICH token is used. That distinction matters: a
+    # file left behind by an earlier run must not silently turn the guard
+    # on for a development server that never asked for it.
     return bool(_env(TOKEN_ENV))
 
 
@@ -81,7 +148,12 @@ def _cookie_value(headers: Any) -> str:
 
 
 def has_valid_cookie(headers: Any) -> bool:
-    token = _env(TOKEN_ENV)
+    # With the guard off there is no valid cookie: the token is only there
+    # for the desktop window, and a server that was never asked to check one
+    # must not treat one as a pass.
+    if not enabled():
+        return False
+    token = resolve_token()
     got = _cookie_value(headers)
     return bool(token and got) and hmac.compare_digest(got.encode(), token.encode())
 
@@ -131,7 +203,7 @@ def check(handler: Any) -> bool:
         # cross-site under schemeful same-site) and must carry the cookie.
         # SameSite is not the boundary here anyway: browser tabs have a
         # separate cookie store.
-        cookie = f"{COOKIE}={_env(TOKEN_ENV)}; Path=/; HttpOnly; SameSite=Lax"
+        cookie = f"{COOKIE}={session_token()}; Path=/; HttpOnly; SameSite=Lax"
         handler._send(302, b"", "text/html", {"Location": "/", "Set-Cookie": cookie})
         return False
     if path in EXEMPT_PATHS:

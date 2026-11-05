@@ -42,7 +42,7 @@ def _provider():
     if ok:
         return True, f"provider: {p.name}"
     # No environment variables and no files to edit: the key goes in the app.
-    return False, "no AI provider yet — add your key in Credentials"
+    return False, "no AI provider yet — add your key on the welcome page or in Credentials"
 
 
 def _embeddings():

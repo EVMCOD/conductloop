@@ -37,6 +37,15 @@ let _ideasSummary = { new: 0, in_progress: 0, done: 0, total: 0 };
 // ---- HTTP / utils ----
 async function fetchJSON(url) {
   const r = await fetch(url);
+  if (r.status === 403) {
+    // The session token in the cookie no longer matches. Reloading does not
+    // help: the page needs a token too, and handing one out to any browser
+    // that asks for the page would give the session away. The token is kept
+    // between launches, so this only happens if the app was updated under a
+    // window that stayed open — and the way out is to reopen the app.
+    throw new Error(
+      'Your session expired. Quit and reopen ConductLoop to continue.');
+  }
   if (!r.ok) throw new Error(url + ' HTTP ' + r.status);
   return r.json();
 }
@@ -933,7 +942,7 @@ async function openDocByPath(path, projectKey) {
     }
     openDocEditor(doc, doc, projectKey);
   } catch (e) {
-    alert('Failed to open doc: ' + e.message);
+    notify('Failed to open doc: ' + e.message);
   }
 }
 
@@ -953,12 +962,12 @@ async function openDocEditor(doc, fallbackMeta, projectKey) {
       });
       var j = await r.json();
       if (!r.ok || !j.ok) {
-        alert('Failed to create doc: ' + (j.error || r.status));
+        notify('Failed to create doc: ' + (j.error || r.status));
         return;
       }
       docId = j.id;
     } catch (e) {
-      alert('Failed to create doc: ' + e.message);
+      notify('Failed to create doc: ' + e.message);
       return;
     }
   }
@@ -1054,12 +1063,12 @@ function showDocEditorModal(docId, title, path, source, content, projectKey) {
     }
   });
   document.getElementById('doc-edit-delete').addEventListener('click', async function() {
-    if (!confirm('Delete this document from the index? (Original file on disk is not touched.)')) return;
+    if (!await confirmAction('Delete this document from the index? (Original file on disk is not touched.)')) return;
     try {
       var r = await fetch('/api/docs/delete?doc_id=' + docId, { method: 'DELETE' });
       if (!r.ok) {
         var j = await r.json().catch(function() { return {}; });
-        alert('Delete failed: ' + (j.error || r.status));
+        notify('Delete failed: ' + (j.error || r.status));
         return;
       }
       close();
@@ -1067,7 +1076,7 @@ function showDocEditorModal(docId, title, path, source, content, projectKey) {
         renderProject(projectKey);
       }
     } catch (e) {
-      alert('Delete error: ' + e.message);
+      notify('Delete error: ' + e.message);
     }
   });
   // Save on Cmd/Ctrl+S
@@ -1714,8 +1723,16 @@ function clearChat() { _convId = null; var c = document.getElementById('brain-ch
 async function loadBriefing() { setView('briefing'); }
 async function exportCurrentChat() {
   if (!_convId) { try { var cs = await fetchJSON('/api/brain/conversations'); if (cs.length) _convId = cs[0].id; } catch (e) {} }
-  if (!_convId) { alert('no conversations yet'); return; }
-  window.open('/api/brain/conversation/export?id=' + _convId, '_blank');
+  if (!_convId) { notify('no conversations yet'); return; }
+  // A download, not a new tab: the desktop window cannot open tabs, and
+  // opening it in one did nothing. The app saves it to Downloads and says so.
+  var a = document.createElement('a');
+  a.href = '/api/brain/conversation/export?id=' + encodeURIComponent(_convId);
+  a.download = 'conversation-' + _convId + '.md';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 // Briefing view
@@ -1939,7 +1956,7 @@ async function refreshMembers() {
 
 async function assignTodoPrompt(todoId) {
   if (!_members || !_members.length) { await refreshMembers(); }
-  var choice = prompt('Assign to (type id or partial name):\n\n' + _members.map(function(m){ return m.id + '. ' + (m.type === 'ai_agent' ? '🤖' : '👤') + ' ' + m.name + (m.workload ? ' (' + m.workload + ' todos)' : ''); }).join('\n'));
+  var choice = await promptAction('Assign to (type id or partial name):\n\n' + _members.map(function(m){ return m.id + '. ' + (m.type === 'ai_agent' ? '🤖' : '👤') + ' ' + m.name + (m.workload ? ' (' + m.workload + ' todos)' : ''); }).join('\n'));
   if (choice === null) return;
   choice = choice.trim();
   if (!choice) return;
@@ -1950,7 +1967,7 @@ async function assignTodoPrompt(todoId) {
     var q = choice.toLowerCase();
     member = _members.find(function(m) { return m.name.toLowerCase().includes(q); });
   }
-  if (!member) { alert('not found: ' + choice); return; }
+  if (!member) { notify('not found: ' + choice); return; }
   try {
     var r = await fetch('/api/user_todos/' + todoId, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -1959,7 +1976,7 @@ async function assignTodoPrompt(todoId) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     await refreshMembers();
     renderTodoView();
-  } catch (e) { alert('assign failed: ' + e.message); }
+  } catch (e) { notify('assign failed: ' + e.message); }
 }
 
 async function assignTodoInline(todoId, anchor) {
@@ -1995,7 +2012,7 @@ async function assignTodoInline(todoId, anchor) {
         await refreshMembers();
         await refreshUserTodos();
         renderTodoView();
-      } catch (err) { alert('assign failed: ' + err.message); }
+      } catch (err) { notify('assign failed: ' + err.message); }
     });
   });
   var clearBtn = pop.querySelector('[data-todo-assign-clear]');
@@ -2008,7 +2025,7 @@ async function assignTodoInline(todoId, anchor) {
       await refreshMembers();
       await refreshUserTodos();
       renderTodoView();
-    } catch (err) { alert('clear failed: ' + err.message); }
+    } catch (err) { notify('clear failed: ' + err.message); }
   });
   setTimeout(function() {
     var closeFn = function(ev) { if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener('click', closeFn); } };
@@ -2145,7 +2162,7 @@ async function addUserTodo() {
     input.value = '';
     await renderTodoView();
     renderSidebar();
-  } catch (e) { alert('error: ' + e.message); }
+  } catch (e) { notify('error: ' + e.message); }
 }
 
 async function toggleUserTodo(id) {
@@ -2168,24 +2185,24 @@ async function toggleUserTodo(id) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     await renderTodoView();
     renderSidebar();
-  } catch (e) { alert('error: ' + e.message); }
+  } catch (e) { notify('error: ' + e.message); }
 }
 
 async function deleteUserTodo(id) {
-  if (!confirm('Delete this todo?')) return;
+  if (!await confirmAction('Delete this todo?')) return;
   try {
     var r = await fetch('/api/user_todos/' + id, { method: 'DELETE' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     await renderTodoView();
     renderSidebar();
-  } catch (e) { alert('error: ' + e.message); }
+  } catch (e) { notify('error: ' + e.message); }
 }
 
-function editUserTodo(id) {
-  // Simple inline: prompt for new text
+async function editUserTodo(id) {
+  // In-page dialog: a native prompt does not work in the desktop app.
   var d = _userTodos.find(function(x) { return x.id === id; });
   if (!d) return;
-  var nv = prompt('Edit todo:', d.content);
+  var nv = await promptAction('Edit todo:', { defaultValue: d.content });
   if (nv == null) return;
   fetch('/api/user_todos/' + id, {
     method: 'PUT',
@@ -2319,7 +2336,7 @@ async function addIdea() {
     input.value = '';
     await renderIdeasView();
     renderSidebar();
-  } catch (e) { alert('error: ' + e.message); }
+  } catch (e) { notify('error: ' + e.message); }
 }
 
 async function updateIdeaStatus(id, status) {
@@ -2332,17 +2349,17 @@ async function updateIdeaStatus(id, status) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     await renderIdeasView();
     renderSidebar();
-  } catch (e) { alert('error: ' + e.message); }
+  } catch (e) { notify('error: ' + e.message); }
 }
 
 async function deleteIdea(id) {
-  if (!confirm('Delete this idea?')) return;
+  if (!await confirmAction('Delete this idea?')) return;
   try {
     var r = await fetch('/api/ideas/' + id, { method: 'DELETE' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     await renderIdeasView();
     renderSidebar();
-  } catch (e) { alert('error: ' + e.message); }
+  } catch (e) { notify('error: ' + e.message); }
 }
 
 async function promoteIdea(id) {
@@ -2364,8 +2381,8 @@ async function promoteIdea(id) {
     });
     await renderIdeasView();
     renderSidebar();
-    alert('Idea promoted to todo ✓');
-  } catch (e) { alert('error: ' + e.message); }
+    notify('Idea promoted to todo ✓');
+  } catch (e) { notify('error: ' + e.message); }
 }
 
 // ---- Briefing view ----
@@ -2575,7 +2592,7 @@ function toggleVoice() {
   var btn = document.getElementById('brain-mic');
   if (_recognition) { _recognition.stop(); _recognition = null; btn.classList.remove('recording'); return; }
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { alert('Web Speech API not supported'); return; }
+  if (!SR) { notify('Web Speech API not supported'); return; }
   _recognition = new SR();
   _recognition.lang = 'es-ES';
   btn.classList.add('recording');
@@ -2588,7 +2605,7 @@ function toggleVoice() {
       var content = transcript.replace(/^(a\u00f1ade todo|a\u00f1adir todo|nuevo todo)[\s:]*/i, '').trim();
       if (content) {
         fetch('/api/user_todos', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ content: content }) });
-        alert('✓ todo created: ' + content);
+        notify('✓ todo created: ' + content);
         return;
       }
     }
@@ -2596,7 +2613,7 @@ function toggleVoice() {
       var content2 = transcript.replace(/^(a\u00f1ade idea|nueva idea)[\s:]*/i, '').trim();
       if (content2) {
         fetch('/api/ideas', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ content: content2 }) });
-        alert('✓ idea captured: ' + content2);
+        notify('✓ idea captured: ' + content2);
         return;
       }
     }
@@ -2648,7 +2665,7 @@ function openPaletteResult() {
   if (!_palette.results[_palette.selected]) return;
   var r = _palette.results[_palette.selected];
   closePalette();
-  alert(r.path + '\n\n' + (r.excerpt || ''));
+  notify(r.path + '\n\n' + (r.excerpt || ''));
 }
 var paletteTimer = null;
 document.getElementById('palette-q').addEventListener('input', function(e) {
@@ -2786,7 +2803,7 @@ async function qcSubmit() {
       // Write to vault daily notes
       var notePath = '<vault>/daily/' + new Date().toISOString().slice(0, 10) + '.md';
       // We don't have an endpoint yet; just alert
-      alert('note saved: ' + content);
+      notify('note saved: ' + content);
     }
     document.getElementById('qc-input').value = '';
     closeQuickCapture();
@@ -2795,7 +2812,7 @@ async function qcSubmit() {
     else if (_view === 'ideas') renderIdeasView();
     else renderMain();
     renderSidebar();
-  } catch (e) { alert('error: ' + e.message); }
+  } catch (e) { notify('error: ' + e.message); }
 }
 function qcSwitchTab(kind) {
   _qcTab = kind;
@@ -2837,7 +2854,7 @@ var installBtn = document.getElementById('install-btn');
 if (installBtn) {
   installBtn.addEventListener('click', async function() {
     if (!_deferredInstall) {
-      alert('To install as an app:\n\niPhone/iPad: tap share → "Add to Home Screen"\n\nMac/Windows/Linux: in Chrome, menu → "Install ops-dashboard..."');
+      notify('To install as an app:\n\niPhone/iPad: tap share → "Add to Home Screen"\n\nMac/Windows/Linux: in Chrome, menu → "Install ops-dashboard..."');
       return;
     }
     _deferredInstall.prompt();
@@ -3017,7 +3034,7 @@ function renderCalendar(mount, data) {
       fetch('/api/calendar?month=' + targetMonth)
         .then(function(r) { return r.json(); })
         .then(function(d) { renderCalendar(mount, d); })
-        .catch(function(e) { alert('nav failed: ' + e.message); });
+        .catch(function(e) { notify('nav failed: ' + e.message); });
     });
   });
   // Day click -> jump to todo
@@ -3115,7 +3132,7 @@ async function renderTasksView() {
         // Poll once after 6s to show the result
         setTimeout(renderTasksView, 6000);
         renderTasksView();
-      } catch (e) { alert('Failed to create task: ' + e.message); }
+      } catch (e) { notify('Failed to create task: ' + e.message); }
     });
 
     // Wire task click -> show runs
@@ -3717,7 +3734,7 @@ async function renderTaskDetail(taskId) {
       try {
         await fetch('/api/tasks/' + t.id + '/run', { method: 'POST' });
         setTimeout(function() { renderTaskDetail(t.id); }, 6000);
-      } catch (e) { alert('rerun failed: ' + e.message); }
+      } catch (e) { notify('rerun failed: ' + e.message); }
     });
     // Auto-start the live stream if the task is running
     if (t.status === 'running' || t.status === 'queued') {
@@ -3739,7 +3756,7 @@ async function renderTaskDetail(taskId) {
         try {
           await fetch('/api/tasks/' + rid + '/approve', { method: 'POST' });
           renderTaskDetail(t.id);
-        } catch (e) { alert('approve failed: ' + e.message); }
+        } catch (e) { notify('approve failed: ' + e.message); }
       });
     });
   } catch (e) {
@@ -3965,7 +3982,7 @@ async function renderApprovalsView() {
     });
     main.querySelectorAll('[data-approval-reject]').forEach(function(b) {
       b.addEventListener('click', async function() {
-        if (!confirm('Reject this proposal?')) return;
+        if (!await confirmAction('Reject this proposal?')) return;
         await fetch('/api/approvals/' + b.dataset.approvalReject + '/reject', {method:'POST'});
         renderApprovalsView();
         refreshApprovalsBadge();
@@ -4107,7 +4124,7 @@ async function renderConnectionsView() {
       b.addEventListener('click', async function() {
         var r = await fetch('/api/connections/' + b.dataset.connTest + '/test', {method: 'POST'});
         var d = await r.json();
-        alert(d.ok ? '\u2713 OK\n' + JSON.stringify(d.info, null, 2) : '\u2717 ' + d.error);
+        notify(d.ok ? '\u2713 OK\n' + JSON.stringify(d.info, null, 2) : '\u2717 ' + d.error);
         renderConnectionsView();
       });
     });
@@ -4125,7 +4142,7 @@ async function renderConnectionsView() {
         var r = await fetch('/api/mcp/servers/' + b.dataset.mcpDiscover + '/discover', {method: 'POST'});
         var d = await r.json();
         b.disabled = false; b.textContent = 'discover';
-        alert(d.ok ? '\u2713 found ' + d.tools.length + ' tools' : '\u2717 ' + d.error);
+        notify(d.ok ? '\u2713 found ' + d.tools.length + ' tools' : '\u2717 ' + d.error);
         renderConnectionsView();
       });
     });
@@ -4195,7 +4212,7 @@ async function showConnAddDialog(providerId) {
         body: JSON.stringify({provider: prov.id, name: d.name, credentials: creds})
       });
       var data = await r.json();
-      if (data.error) { alert('error: ' + data.error); return; }
+      if (data.error) { notify('error: ' + data.error); return; }
       renderConnectionsView();
     }
   });
@@ -4257,7 +4274,7 @@ async function showMcpAddDialog() {
         body: JSON.stringify(payload)
       });
       var data = await r.json();
-      if (data.error) { alert('error: ' + data.error); return; }
+      if (data.error) { notify('error: ' + data.error); return; }
       renderConnectionsView();
     }
   });
@@ -4374,16 +4391,16 @@ async function renderDecisionsView() {
     }
     main.innerHTML = html;
     renderOutline();
-    document.getElementById('add-decision').addEventListener('click', function() {
-      var t = prompt('Decision title:');
+    document.getElementById('add-decision').addEventListener('click', async function() {
+      var t = await promptAction('Decision title:');
       if (!t) return;
-      var d = prompt('What was decided:');
+      var d = await promptAction('What was decided:');
       if (!d) return;
       fetch('/api/decision', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title: t, decision: d})}).then(function(){renderDecisionsView();});
     });
     main.querySelectorAll('[data-decision-del]').forEach(function(b) {
-      b.addEventListener('click', function() {
-        if (!confirm('Delete this decision?')) return;
+      b.addEventListener('click', async function() {
+        if (!await confirmAction('Delete this decision?')) return;
         fetch('/api/decision/' + b.dataset.decisionDel, {method:'DELETE'}).then(function(){renderDecisionsView();});
       });
     });
@@ -4434,13 +4451,13 @@ async function renderCostsView() {
     }
     main.innerHTML = html;
     renderOutline();
-    document.getElementById('add-cost').addEventListener('click', function() {
-      var provider = prompt('Provider (cloudflare, anthropic, vercel…):');
+    document.getElementById('add-cost').addEventListener('click', async function() {
+      var provider = await promptAction('Provider (cloudflare, anthropic, vercel…):');
       if (!provider) return;
-      var amount = prompt('Amount (e.g. 5.0):');
+      var amount = await promptAction('Amount (e.g. 5.0):');
       if (!amount) return;
-      var currency = prompt('Currency (EUR / USD / GBP):', 'EUR') || 'EUR';
-      var desc = prompt('Description (optional):') || '';
+      var currency = await promptAction('Currency (EUR / USD / GBP):', { defaultValue: 'EUR' }) || 'EUR';
+      var desc = await promptAction('Description (optional):') || '';
       fetch('/api/cost', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({provider: provider, amount: parseFloat(amount), currency: currency, description: desc})}).then(function(){renderCostsView();});
     });
   } catch (e) { main.innerHTML = '<div class="empty-state">error: ' + esc(e.message) + '</div>'; }
@@ -4618,7 +4635,7 @@ async function renderRevenueView() {
       b.addEventListener('click', async function() {
         var r = await fetch('/api/revenue/sources/' + b.dataset.revTest + '/test', {method:'POST'});
         var d = await r.json();
-        alert(d.ok ? '✓ ' + d.message : '✗ ' + d.message);
+        notify(d.ok ? '✓ ' + d.message : '✗ ' + d.message);
       });
     });
     main.querySelectorAll('[data-rev-poll]').forEach(function(b) {
@@ -4779,7 +4796,7 @@ async function renderGaView() {
       b.addEventListener('click', async function() {
         var r = await fetch('/api/ga/sites/' + b.dataset.gaTest + '/test', {method:'POST'});
         var d = await r.json();
-        alert(d.ok ? '✓ ' + d.message : '✗ ' + d.message);
+        notify(d.ok ? '✓ ' + d.message : '✗ ' + d.message);
       });
     });
     main.querySelectorAll('[data-ga-poll]').forEach(function(b) {
@@ -5005,7 +5022,7 @@ async function renderSentryView() {
       b.addEventListener('click', async function() {
         var r = await fetch('/api/sentry/projects/' + b.dataset.sentryTest + '/test', {method:'POST'});
         var d = await r.json();
-        alert(d.ok ? '✓ ' + d.message : '✗ ' + d.message);
+        notify(d.ok ? '✓ ' + d.message : '✗ ' + d.message);
       });
     });
     main.querySelectorAll('[data-sentry-poll]').forEach(function(b) {
@@ -5204,11 +5221,11 @@ async function renderTemplatesView() {
     main.innerHTML = html;
     renderOutline();
     main.querySelectorAll('[data-tpl-run]').forEach(function(b) {
-      b.addEventListener('click', function() {
-        var proj = prompt('Attach todos to which project? (leave empty for none)');
+      b.addEventListener('click', async function() {
+        var proj = await promptAction('Attach todos to which project? (leave empty for none)');
         fetch('/api/templates/by-key/' + b.dataset.tplRun + '/instantiate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({project_key: proj || null})})
           .then(function(r){return r.json();})
-          .then(function(d){alert('created ' + d.ids.length + ' todos');});
+          .then(function(d){notify('created ' + d.ids.length + ' todos');});
       });
     });
   } catch (e) { main.innerHTML = '<div class="empty-state">error: ' + esc(e.message) + '</div>'; }
@@ -5365,11 +5382,11 @@ function renderAgentsMount(mount, data) {
   });
 
   // New agent button
-  document.getElementById('agent-add-btn').addEventListener('click', function() {
-    var name = prompt('Agent name:');
+  document.getElementById('agent-add-btn').addEventListener('click', async function() {
+    var name = await promptAction('Agent name:');
     if (!name) return;
-    var teamId = prompt('Team ID (numeric, or leave blank for 1):') || '1';
-    var type = prompt('Type (human | ai_agent | system):', 'ai_agent') || 'ai_agent';
+    var teamId = await promptAction('Team ID (numeric, or leave blank for 1):') || '1';
+    var type = await promptAction('Type (human | ai_agent | system):', { defaultValue: 'ai_agent' }) || 'ai_agent';
     fetch('/api/members', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({team_id: parseInt(teamId), name: name.trim(), type: type.trim()})
@@ -5378,7 +5395,7 @@ function renderAgentsMount(mount, data) {
         _agentSelectedId = d.id;
         _agentEditing = false;
         renderAgentsView();
-      } else alert('error: ' + (d.error || 'unknown'));
+      } else notify('error: ' + (d.error || 'unknown'));
     });
   });
 
@@ -5387,20 +5404,20 @@ function renderAgentsMount(mount, data) {
 }
 
 // Global drop handler — reparent a member to another member
-window._agentDrop = function(targetMemberId, ev) {
+window._agentDrop = async function(targetMemberId, ev) {
   ev.preventDefault();
   ev.currentTarget.style.background = '';
   var sourceId = window._agentDragId;
   window._agentDragId = null;
   if (!sourceId || sourceId === targetMemberId) return;
-  if (!_agentEditing) { alert('enable edit mode to reparent'); return; }
-  if (!confirm('Make ' + sourceId + ' report to ' + targetMemberId + '?')) return;
+  if (!_agentEditing) { notify('enable edit mode to reparent'); return; }
+  if (!await confirmAction('Make ' + sourceId + ' report to ' + targetMemberId + '?')) return;
   fetch('/api/members/' + sourceId, {
     method: 'PUT', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({manager_id: targetMemberId})
   }).then(function(r) {
     if (r.ok) renderAgentsView();
-    else alert('reparent failed');
+    else notify('reparent failed');
   });
 };
 
@@ -5618,7 +5635,7 @@ async function loadAgentMemory(mid) {
       var imp = parseInt(document.getElementById('mem-imp').value) || 5;
       var r = await fetch('/api/agents/' + mid + '/memory', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({content: content, tags: tags, importance: imp})});
       if (r.ok) loadAgentMemory(mid);
-      else alert('add failed');
+      else notify('add failed');
     });
     var searchInput = document.getElementById('mem-search');
     if (searchInput) searchInput.addEventListener('input', function() {
@@ -5632,7 +5649,7 @@ async function loadAgentMemory(mid) {
     });
     mount.querySelectorAll('[data-mem-del]').forEach(function(b) {
       b.addEventListener('click', async function() {
-        if (!confirm('Delete memory?')) return;
+        if (!await confirmAction('Delete memory?')) return;
         var r = await fetch('/api/agents/' + mid + '/memory/' + b.dataset.memDel, {method:'DELETE'});
         if (r.ok) loadAgentMemory(mid);
       });
@@ -5679,7 +5696,7 @@ async function loadAgentTriggers(mid) {
       var kind = document.getElementById('trig-kind').value;
       var spec = document.getElementById('trig-spec').value.trim();
       var prompt = document.getElementById('trig-prompt').value.trim();
-      if (!kind || !spec) { alert('kind and spec required'); return; }
+      if (!kind || !spec) { notify('kind and spec required'); return; }
       var r = await fetch('/api/agents/' + mid + '/triggers', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({kind: kind, spec: spec, prompt: prompt})});
       if (r.ok) loadAgentTriggers(mid);
     });
@@ -5692,7 +5709,7 @@ async function loadAgentTriggers(mid) {
     });
     mount.querySelectorAll('[data-trig-del]').forEach(function(b) {
       b.addEventListener('click', async function() {
-        if (!confirm('Delete trigger?')) return;
+        if (!await confirmAction('Delete trigger?')) return;
         var r = await fetch('/api/agents/' + mid + '/triggers/' + b.dataset.trigDel, {method:'DELETE'});
         if (r.ok) loadAgentTriggers(mid);
       });
@@ -5789,31 +5806,31 @@ async function wireAgentDetail() {
   // Wake button
   var wakeBtn = document.querySelector('[data-agent-wake-btn]');
   if (wakeBtn) wakeBtn.addEventListener('click', async function() {
-    var prompt = window.prompt('Wake prompt (leave blank for default):') || '';
+    var wakeText = await promptAction('Wake prompt (leave blank for default):') || '';
     wakeBtn.disabled = true; wakeBtn.textContent = 'waking...';
     var r = await fetch('/api/agents/' + wakeBtn.dataset.agentWakeBtn + '/wake', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({prompt: prompt})
+      body: JSON.stringify({prompt: wakeText})
     });
     wakeBtn.disabled = false; wakeBtn.textContent = '\u26a1 wake now';
     var pu = await ProviderErrors.fromResponse(r);
-    if (pu) { alert(ProviderErrors.friendly(pu)); if (_agentTab === 'logs') loadAgentLogs(_agentSelectedId); return; }
+    if (pu) { notify(ProviderErrors.friendly(pu)); if (_agentTab === 'logs') loadAgentLogs(_agentSelectedId); return; }
     if (r.ok) {
       var d = await r.json();
-      alert('agent response:\n\n' + (d.response || '(empty)'));
+      notify('agent response:\n\n' + (d.response || '(empty)'));
       if (_agentTab === 'logs') loadAgentLogs(_agentSelectedId);
     } else {
-      alert('wake failed');
+      notify('wake failed');
     }
   });
 
   // Delete
   var delBtn = document.querySelector('[data-agent-del]');
   if (delBtn) delBtn.addEventListener('click', async function() {
-    if (!confirm('Delete this agent?')) return;
+    if (!await confirmAction('Delete this agent?')) return;
     var r = await fetch('/api/members/' + delBtn.dataset.agentDel, {method: 'DELETE'});
     if (r.ok) { _agentSelectedId = null; renderAgentsView(); }
-    else alert('delete failed');
+    else notify('delete failed');
   });
 
   // Edit form submit
@@ -5837,7 +5854,7 @@ async function wireAgentDetail() {
         renderAgentsView();
       } else {
         var err = await r.text();
-        alert('save failed: ' + err);
+        notify('save failed: ' + err);
       }
     });
   }

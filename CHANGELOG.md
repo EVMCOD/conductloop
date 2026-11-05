@@ -2,6 +2,328 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased — Connectors that need no account: end-to-end smoke
+
+- **`scripts/smoke-connectors.py`.** Drives a running server (dev or the
+  packaged sidecar) through the Conectores API: MCP client over stdio and over
+  Streamable HTTP (a fake server on a real loopback socket, JSON + SSE), and
+  optionally RSS against a public feed. Checks read tools run with untrusted
+  results, writes are refused while read-only and only run after
+  confirmation, and cleans up its `smoke-*` servers.
+- **`tests/test_connectors_no_account_smoke.py`.** The same flows in CI, no
+  network: real-socket HTTP MCP with a bearer token, a wrong token is not
+  reported as connected and never echoed, RSS sync through the routes with
+  recorded feeds.
+- **`docs/connectors/no-account-smoke.md`.** How to run it against the
+  packaged sidecar with temporary data, and which account each remaining
+  connector needs for manual verification.
+
+## Unreleased — Mac checklist (#32): automate what needs no accounts
+
+Issue #32 asked for Mac-only release checks. Most of the non-account work is
+now a script and hermetic tests; Keychain, OAuth consoles and live L2 stay on
+the issue as a manual list for Enrique.
+
+- **`scripts/mac-checks.sh` / `make mac-checks`.** Port :7777 free check,
+  pytest for the app-token guard / boot cookie / macOS minimum sync /
+  migration 20–24 / sandbox-exec, optional migration run on a *copy* passed
+  as `CONDUCTLOOP_DB_COPY` (refuses the live Application Support path), and a
+  printed leftover checklist.
+- **`tests/test_issue32_automation.py`.** Descriptions for migrations 20–24
+  must match `migrations.py` after apply; migration 20 refuses an unexpected
+  `agent_sessions` schema; a WAL-safe `sqlite3` backup copy keeps row counts
+  and integrity; on Darwin, `detect_backend()` is `sandbox-exec`, a broken
+  Seatbelt profile fails closed, and network / outside-write / `~/.ssh` probes
+  are blocked.
+- **Windows follow-up:** `test_seatbelt_profile_denies_network_and_sensitive_paths`
+  skips the Seatbelt profile content assert off macOS (sandbox-exec only),
+  so the non-required `windows-python` job is not tripped by quoted paths.
+- Does **not** change `minimumSystemVersion` (already `13.0` on `main`, kept
+  in sync by `tests/test_macos_minimum.py`). Confirming or revisiting that
+  decision stays with Enrique on #32.
+
+## Unreleased — In-app browser: focus, tab clicks and Save page
+
+Three leftovers from the in-app browser on a packaged debug build:
+
+- **Keyboard focus after «+».** A new blank tab's webview took the keyboard, so
+  the next keystrokes went into an empty page instead of the URL bar. Blank
+  user tabs now stay hidden until they have a real URL, and «+» focuses the
+  URL bar (with `browser_focus_ui`).
+- **First click on the tab strip was lost.** `setInterval(refresh)` rebuilt the
+  tab DOM between mousedown and click, so WebKit dropped the gesture. The strip
+  now acts on `pointerdown`, skips identical rebuilds, and takes focus when the
+  pointer enters the chrome.
+- **"Send to vault" renamed to "Save page".** Clips are stored in ConductLoop's
+  index as untrusted `source=web` documents — they are not written into the
+  notes folder. The button, tooltip and success toast say so.
+- `tests/test_browser_page.py` guards the label, the tab-strip click path and
+  the blank-tab focus behaviour.
+
+## Unreleased — The quick tour describes the current product
+
+- **`/tour` no longer promises retired features.** It talked about "13
+  projects", revenue, GA4 traffic and Sentry errors. The five steps now cover
+  what ConductLoop is today: bring your own AI key, a team of agents led by a
+  CEO, local Markdown notes and opt-in connectors. No invented numbers. A
+  small test guards the copy.
+
+## Unreleased — First run without a keychain does not hide the key
+
+Walked a packaged debug build as a stranger (temporary HOME, data dir, no
+keychain, empty projects). The welcome page, the no-key answer and a few
+error strings were lying to that person.
+
+- **Welcome no longer saves the AI key in plain text.** With no system
+  keychain and no passphrase yet, pasting a key on the welcome page wrote it
+  into `config.json` and said "Key saved." It now asks for a passphrase on
+  that page (or returns 423 so Credentials can open the vault) and stores the
+  key only in the encrypted file.
+- **The brain reads keys from the encrypted vault.** After the welcome page
+  stored a key under a `*_api_key_ref` with no keychain, `get_api_key` only
+  looked in the OS keychain, so the brain could not call the provider even
+  with the vault unlocked. It now resolves keychain, then vault, then
+  plaintext.
+- **No-key answers no longer say "nothing matches" next to citations.** When
+  retrieval found notes but no single line shared enough words with the
+  question, the mock answer contradicted the [N] sources. It now lists the
+  related notes and points at the welcome page / Credentials — not at a
+  terminal environment variable.
+- **Provider errors are in English and point at Credentials**, not at
+  "Settings". Setup and Credentials say "this computer" / "system keychain"
+  instead of "your Mac" only.
+- `tests/test_first_run_friction.py` keeps the refusal of plaintext, the
+  encrypted-vault path, the related-notes mock answer and the English
+  provider errors in place.
+
+## Unreleased — Links, downloads and drops work in the desktop window
+
+Checked in a packaged debug build: browser APIs that are fine in a browser
+did nothing in the desktop window, because wry only acts on them when the
+window has a handler, and the main window had none.
+
+- **Links to other sites open in your browser.** `window.open` and
+  `target="_blank"` links (chat answers, the status page, the sidebar URLs,
+  connector guides) did nothing at all. A plain link to another site
+  replaced the whole app with that site, with no way back. Other sites now
+  open in the system browser; the app's own pages stay in the window;
+  anything else (`file:`, other local ports) is refused.
+- **"↓ save" saves the conversation.** It used `window.open`, so it did
+  nothing in the app. It is now a download (`Content-Disposition:
+  attachment`), saved to the Downloads folder, and a toast says where.
+  Every `<a download>` and blob download works the same way.
+- **Dragging in the agents org chart drops.** Tauri's file-drop handler took
+  every drag, so the page never got its `drop`. It is off for the main
+  window; a file dropped on it is refused instead of opening.
+- **Copy in the note's AI panel** reports on its own button (it relabelled
+  the action button) and shows an error instead of throwing.
+- `tests/test_browser_apis_in_app.py` keeps the handlers, the download and
+  the bans on `Notification` (always "denied" in the app) and
+  `beforeunload` (never shown) in place.
+
+## 1.2.13 — 2026-11-04 — The app asks before it deletes
+
+The desktop window is served over http by the local server, and Tauri v2
+overrides `window.confirm` with an **async** call to the dialog plugin. So in
+the app `confirm()` returns a **Promise**, not a boolean — and a guard like
+`if (!confirm(...)) return;` sees a truthy promise, never fires, and the
+destructive action runs **without asking**.
+
+Awaiting the global is not the fix either: the plugin's `message` command
+needs the `dialog:allow-message` permission, which this repo grants to
+**nobody** on purpose. Without it the awaited promise rejects with an ACL
+error instead of resolving `false`.
+
+There were **21 confirmations** in the shell — deleting a todo, an idea, a
+document, a memory, a trigger, an agent, a decision, a cost, an approval, a
+session task, a claim, a connector, a token, an MCP server, a skill
+proposal, a backup restore, a device pairing, a media asset, a channel
+binding. Every one of them was a "delete" that the app performed silently in
+the desktop app, while the browser asked correctly.
+
+- **Every question is now asked in the page**: a `<dialog>` opened with
+  `showModal()`, the same shape `web/sessions.js` already used. No
+  permission, no IPC, no capability — and the same behaviour in the browser
+  and in the app.
+- **`prompt()` is gone too**. The shell does not override it, but wry ships
+  no text-input panel at all, so a prompt comes back as an empty string and
+  the flow stops without the user ever being asked — a failure nobody
+  reports. Text input is a dialog with a field.
+- **`alert()` was already a toast**; the pages that had no feedback facility
+  of their own now share `web/toast.js`, so a message there is visible too.
+- Two tests guard it: no page may ask through a browser global again, and
+  the browser tests now fail if a **native** dialog is ever raised — the
+  defect is caught at the source instead of in the desktop app.
+
+## 1.2.12 — 2026-11-02 — The app tells you what went wrong
+
+The desktop window is served over http by the local server, and Tauri v2
+overrides `window.alert` with an IPC call to the dialog plugin. Without the
+permission for that call the message went nowhere: the action appeared to do
+nothing and the app looked broken.
+
+There were **47 `alert()`** calls in the shell, so this was not one bad
+message but **every** message the app can show — the error of a connection
+that cannot be added, a document that cannot be created, a delete that
+failed. The desktop app swallowed all of them.
+
+- **Every message the app reports is now visible**: a toast in the page, in
+  the app and in a browser, with no dependency on Tauri. An error is marked
+  as an error.
+- Two tests guard it: the shell must not use `alert()` again, and it must
+  stay valid JavaScript (a syntax error there is a blank app, and nothing
+  says so).
+
+## 1.2.11 — 2026-11-02 — The window keeps its session
+
+The window gets its session cookie from the boot, and every request it makes
+afterwards carries that cookie. The server checks it against the token it
+accepts.
+
+Those were **two different tokens**. The boot handed out the one from the
+environment — a new one on every launch — while the server checked the
+persisted one, which does not change. So from the second launch onwards the
+window held a cookie that answered **403 to everything**: the page loaded
+with no data, no buttons, nothing.
+
+The session was kept, but the cookie carrying it was the wrong one. The same
+failure as before the token was persisted, in another place.
+
+- **The boot hands out the token the server accepts**, so the session
+  survives a restart and a fresh launch gets a cookie that works.
+- The cookie is still only handed out by the boot, which needs the nonce only
+  the app has: no other browser on this computer can get one.
+
+## 1.2.10 — 2026-11-01 — The app survives its own restart
+
+The window keeps its session token in a cookie, and the app handed the
+server a **new** token every time it launched. So whenever the server
+restarted — an update, a crash, the scheduler — the cookie in the open
+window stopped matching and **every request answered 403**.
+
+The frontend turned that into an error, and the page stopped working: no
+data, no buttons, nothing. The only way out was to quit the app and open it
+again. Reloading was worse: the main page answered 403 too, so the app came
+back as a **blank page**.
+
+- **The token is kept between launches** (next to the data, readable only by
+  you), so the window that is already open keeps working after the server
+  restarts under it.
+- **If the session is really lost** — the app was updated under a window
+  that stayed open — the app says so instead of failing silently, and tells
+  you to reopen it (which boots with a one-time nonce).
+
+The token is what separates the desktop window from any other browser on the
+machine, so it is never handed out: a browser that opens the local address
+is refused, exactly as before. And the window no longer reloads itself on a
+403, because a reload cannot repair it and would end in a blank page.
+
+## 1.2.9 — 2026-11-01 — Your apps are back
+
+The Conectores page showed an empty catalogue in the installed app. Not a bug
+in the connectors: **the connectors were never in the binary**.
+
+PyInstaller builds the bundled server with the spec's own directory at the
+front of the import path, not the repository root. So the step that collects
+the app's modules found **nothing — and returned an empty list without
+raising**. The build succeeded, the app shipped, and every module that is
+only reached by importing it by name was missing. The connectors register
+themselves that way, so all eleven were missing: the app you run had no
+connectors at all, and nothing said so.
+
+- **The 11 apps are in the app now**, with their catalogue, their
+  descriptions and their section.
+- **The build fails instead of shipping a broken app.** If the package
+  cannot be found, the build stops there.
+- **The connectors no longer register by walking a folder.** A frozen build
+  has no folder to walk: the modules live inside the archive.
+
+Nothing else changes: the catalogue, the C-suite agents, the session agent
+and the token sign-in work as they did in 1.2.8.
+
+## 1.2.8 — 2026-11-01 — The agent that works in your repo can use your apps
+
+The agent that works in a repository — the one that reads files, runs the test
+suite and writes code — had its own tool protocol: the model replies with one
+JSON object, `{"tool": ..., "args": {...}}`. That protocol knew nothing about
+the connectors. An agent doing research could not look up an issue in GitHub,
+even with the connector connected and working. It could only work from what
+was in the worktree.
+
+- **It can read from your apps now**, and write to them with your
+  confirmation. The write is queued and shows up in the Conectores page.
+- **The app's answer is data, not instructions.** An issue title is
+  attacker-controlled text, so the result comes back fenced, like everywhere
+  else.
+- **A repository has to be marked as trusted.** The same mark that already
+  guards the repo's own skills: a repository is not necessarily your code,
+  and a README that says "read my inbox" is an instruction from the
+  repository. The page that asks for the trust now says what trusting one
+  hands over.
+
+Nothing else changes: the catalogue, the C-suite agents, the playbooks and the
+token sign-in all work as they did in 1.2.7.
+
+## 1.2.7 — 2026-11-01 — Your apps, in a catalogue
+
+The Connectors page used to be a list of connection settings: a client id, a
+set of permissions, a credential line, an audit table. It answered "how do I
+wire this" and never "what does this app do for me" — so choosing one was
+guesswork.
+
+Now it opens like a catalogue.
+
+- **Every app says what it is for.** Under the name, one line: "Issues, pull
+  requests and releases" for GitHub, "Lee y busca en tu correo, y envía
+  mensajes" for Gmail. In your language.
+- **The apps are in sections.** Productivity (mail, calendar, files, tasks),
+  Work (issues, notes, messages), Reading (highlights, feeds).
+- **A search box**, so you can find the app by what it does and not by the
+  name you half-remember.
+- **Each app has its own colour and a "+" to connect it.** The "+" opens the
+  connection that app already uses — the token form for the ones that take a
+  token, the consent screen for the ones that use OAuth, and the settings (with
+  the reason why) for the ones that need your own client id first.
+- **The settings are still there, folded below.** The client id, the scopes,
+  the credential and the audit log did not go anywhere: they are one click
+  away, and they remember whether you had them open, so a reload does not
+  fold them under your hands.
+
+Nothing else changes: the connectors, the playbooks, the token sign-in and the
+write confirmations all work as they did in 1.2.6.
+
+## 1.2.6 — 2026-11-01 — The agents can use the apps you connected
+
+On the Mac it installs from the app ("Check for Updates…", or the quiet check
+a little after start-up). One thing changes, and it is the thing that was
+missing: the agents that answer you can now reach the connectors you have
+connected.
+
+- **The Boardroom's CEOs can use your connectors.** Until now the connector
+  tools worked in the chat and in the task runner, but the twelve CEOs — the
+  ones that have their role playbooks — answered with no tools at all. A CFO
+  with a pricing playbook could not look at an issue in GitHub, because the
+  CEO's reply never offered to look. It does now.
+- **Talking to one agent works too.** The agent you are talking to in the team
+  chat can check a connected app, and so can the Holding CEO when you ask it
+  a quick question over Telegram or Discord.
+- **The agent is told what it has.** A tool the model is offered but never
+  told about is a tool it does not reach for. Every one of these answers now
+  says which apps it can read, and it says the two things that keep it
+  honest: what an app returns is data, not instructions (an issue can carry
+  text that tries to steer the agent), and a write waits for you to confirm it.
+- **The chat still streams when there is nothing to look up.** Reading from a
+  connected app is a round trip, so when one is involved the answer arrives
+  in one piece. With no app connected, nothing changes: the text still arrives
+  as it is written.
+- **A guard so this does not slip again.** The paths where you are waiting
+  for an answer are listed in a test, and it fails if one of them cannot
+  reach your apps, or if a new piece of the app answers you without saying
+  whether somebody is waiting.
+
+Nothing else changes: the playbooks, the connectors, the token sign-in and the
+credential warnings all work as they did in 1.2.5.
+
 ## 1.2.5 — 2026-11-01 — Agents with their own playbooks, and connectors the agent can use
 
 On the Mac it installs from the app ("Check for Updates…", or the quiet check

@@ -46,3 +46,32 @@ def test_hides_tabs_when_leaving():
     # history cache and delivered on the way back, hiding the tabs again.
     assert '"pagehide"' not in HTML and '"visibilitychange"' not in HTML
     assert '"pageshow"' in HTML
+
+
+def test_save_page_not_send_to_vault():
+    """Clips go into ConductLoop's index (source=web), not the notes folder.
+    The old label "Send to vault" sounded like writing into the Obsidian vault."""
+    assert "Send to vault" not in HTML
+    assert "Saved to vault" not in HTML
+    assert 'id="clip"' in HTML and ">Save page<" in HTML
+    assert "not written into your notes folder" in HTML
+    assert "Saved: " in HTML
+
+
+def test_tab_strip_survives_a_refresh_during_a_click():
+    # setInterval(refresh) used to rebuild #tabs between mousedown and click,
+    # which drops the gesture. Act on pointerdown and skip identical rebuilds.
+    assert 'addEventListener("pointerdown"' in HTML
+    assert "tabsSig" in HTML
+    assert "data-id" in HTML
+    assert "browser_focus_ui" in HTML
+
+
+def test_blank_tabs_do_not_steal_the_keyboard():
+    rs = (Path(__file__).resolve().parent.parent / "desktop" / "src-tauri" / "src" / "browser.rs").read_text()
+    assert "fn tab_should_show" in rs
+    assert "blank_user_tabs_stay_hidden" in rs
+    assert "browser_focus_ui" in rs
+    # The old 300ms sleep-then-focus race is gone; blank tabs stay hidden instead.
+    assert "from_millis(300)" not in rs
+    assert "focus_ui(app)" in rs

@@ -136,6 +136,9 @@ def _sum_close(p: dict) -> str:
 CONNECTOR = base.register_connector(base.TokenConnector(
     spec=registry.ConnectorSpec(
         id="todoist", name="Todoist", auth="token", allowed_hosts=("api.todoist.com",),
+        description="Tasks and reminders",
+        description_es="Tareas y recordatorios",
+        category="work", brand="#E44332",
         docs_url="https://app.todoist.com/app/settings/integrations/developer",
         actions={
             "sync": registry.ActionSpec("sync", "read", "Import active tasks into the vault",

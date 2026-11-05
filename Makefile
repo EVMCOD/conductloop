@@ -1,4 +1,4 @@
-.PHONY: help install index serve app open stop clean status verify verify-fast
+.PHONY: help install index serve app open stop clean status verify verify-fast mac-checks
 
 PY := .venv/bin/python
 PORT := 7777
@@ -65,3 +65,6 @@ verify:  ## Run the same checks as CI (ruff, mypy ratchet, pytest, evals, ...) b
 
 verify-fast:  ## Quick verify: skip slow/browser tests, coverage, pip-audit and whole-tree mypy
 	./scripts/verify.sh --fast $(VERIFY_ARGS)
+
+mac-checks:  ## Issue #32 automatable Mac checks (no accounts/Keychain/OAuth)
+	./scripts/mac-checks.sh

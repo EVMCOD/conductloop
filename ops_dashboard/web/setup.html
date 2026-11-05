@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/confirm.js"></script>
   <script src="/csrf.js" defer></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Setup — ConductLoop</title>
   <link rel="icon" href="data:," />
   <link rel="stylesheet" href="/theme.css" />
+  <link rel="stylesheet" href="/confirm.css" />
   <style>
     /* Legacy tokens are aliases of the shared design system in /theme.css. */
     :root{--bg: var(--cl-bg);--card: var(--cl-bg-soft);--border: var(--cl-border);--ink: var(--cl-ink);--muted: var(--cl-ink-muted);--green: var(--cl-ok);--red: var(--cl-danger);--blue: var(--cl-info)}
@@ -60,7 +62,7 @@
 
     <div id="steps"></div>
 
-    <p class="sub" style="margin-top:16px">🔑 <a href="/credentials">Credentials</a> — every key this app holds, and where it keeps them. Paste a key there and it goes into the keychain of your Mac; the app never shows it again.</p>
+    <p class="sub" style="margin-top:16px">🔑 <a href="/credentials">Credentials</a> — every key this app holds, and where it keeps them. Paste a key there and it goes into the system keychain (or an encrypted file if there is none); the app never shows it again.</p>
 
     <div class="section">
       <h2>📚 Library</h2>
@@ -301,7 +303,7 @@
     }
     async function restoreBackup(b) {
       const when = new Date(b.mtime * 1000).toLocaleString();
-      if (!window.confirm('Restore the backup of ' + when + '?\n\nEverything stored in the app since then is replaced. ' +
+      if (!await confirmAction('Restore the backup of ' + when + '?\n\nEverything stored in the app since then is replaced. ' +
                           'The current database is backed up first, so you can go back to it.')) return;
       const note = document.getElementById('bk-note');
       note.textContent = 'Restoring…';
@@ -584,7 +586,7 @@
             });
             const preview = await r.json();
             if (!preview.ok) throw new Error(preview.message || 'failed');
-            const shown = window.confirm(
+            const shown = await confirmAction(
               'This adds ' + preview.added.length + ' link(s) to:\n' + preview.path +
               '\n\n' + preview.added.join('\n') + '\n\nApply?');
             if (!shown) { link.disabled = false; return; }
@@ -641,7 +643,7 @@
         });
         const preview = await r.json();
         if (!preview.ok) throw new Error(preview.message || 'failed');
-        const shown = window.confirm(
+        const shown = await confirmAction(
           'This adds ' + preview.added.length + ' line(s) to:\n' +
           preview.path + '\n\n' + preview.added.join('\n') +
           '\n\nThe counts are updated too. Apply?');

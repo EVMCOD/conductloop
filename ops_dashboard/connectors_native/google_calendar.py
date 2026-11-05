@@ -350,6 +350,9 @@ _SCHEMA_CAL = {
 
 SPEC = registry.register(registry.ConnectorSpec(
     id=ID, name="Google Calendar",
+    description="Calendars, events and appointments",
+    description_es="Calendarios, eventos y citas",
+    category="productivity", brand="#4285F4",
     allowed_hosts=(*_google.AUTH_HOSTS, "www.googleapis.com"),
     read_scopes=READ_SCOPES,
     write_scopes=WRITE_SCOPES,
