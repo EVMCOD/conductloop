@@ -2,6 +2,14 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased — The quick tour describes the current product
+
+- **`/tour` no longer promises retired features.** It talked about "13
+  projects", revenue, GA4 traffic and Sentry errors. The five steps now cover
+  what ConductLoop is today: bring your own AI key, a team of agents led by a
+  CEO, local Markdown notes and opt-in connectors. No invented numbers. A
+  small test guards the copy.
+
 ## Unreleased — First run without a keychain does not hide the key
 
 Walked a packaged debug build as a stranger (temporary HOME, data dir, no
