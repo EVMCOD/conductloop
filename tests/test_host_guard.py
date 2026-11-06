@@ -123,7 +123,7 @@ def test_remote_requests_are_unchanged(srv):
 def test_webhooks_through_a_tunnel_still_arrive(srv):
     call = srv["call"]
     tunnel = {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "hooks.example.com"}
-    st, _, _ = call("POST", "/api/telegram/webhook", "hooks.example.com", {"update_id": 1}, tunnel)
+    st, _, _ = call("POST", "/api/slack/webhook", "hooks.example.com", {"type": "event_callback"}, tunnel)
     assert st != 421
 
 

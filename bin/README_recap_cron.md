@@ -7,8 +7,8 @@ local time and:
 2. Calls `boardroom.recap_synthesis()` directly (no http), so it works even
    when the dev web server isn't running.
 3. Pipes the synthesis to the Discord channel if `DISCORD_WEBHOOK_URL` is set.
-4. Telegram push is wired in code but currently log-only — needs a chat_ids
-   table (planned v1.2).
+4. No Telegram push: the Telegram channel (Channels → Telegram) sends only
+   run results to paired chats.
 
 ## Files
 
@@ -61,7 +61,6 @@ APScheduler as a dependency.
 
 ## What this cron does NOT do (v1.2 candidates)
 
-- Push to Telegram DM (need a `telegram_chats` table tied to `users.id`).
 - Cross-project revenue snapshot.
 - "CEO blocked > 2h" escalation message.
 - Weekly summary digest.

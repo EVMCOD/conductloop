@@ -107,7 +107,7 @@ Dependency sets:
 #### Configuration
 A fresh install is empty: no projects, teams or URLs. Point it at your content with environment variables (see `.env.example`), e.g. `OPS_VAULT_ROOT`, `OPS_WORKSPACE`, `OPS_SKILLS_DIR`, `OPS_REPOS`, `OPS_PROJECTS_FILE`, `OPS_LIVE_URLS_FILE`. Set `CONDUCTLOOP_DEMO=1` (with a throwaway `CONDUCTLOOP_DB_PATH` and `OPS_DATA_DIR`) to load fictional demo data instead; see [`docs/FIRST-5-MINUTES.md`](docs/FIRST-5-MINUTES.md).
 
-Optional notification webhooks (Slack / Discord / Telegram) are described in `config.example.json`. Remote access from a phone is documented in [`docs/REMOTE.md`](docs/REMOTE.md) (Tailscale; nothing is exposed publicly by default).
+Optional notification webhooks (Slack / Discord) are described in `config.example.json`; Telegram is a chat channel (Channels page, [`docs/CHANNELS.md`](docs/CHANNELS.md)). Remote access from a phone is documented in [`docs/REMOTE.md`](docs/REMOTE.md) (Tailscale; nothing is exposed publicly by default).
 
 ---
 

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Channels — ConductLoop</title>
+  <link rel="stylesheet" href="/channels.css" />
+  <script src="/csrf.js" defer></script>
+  <script src="/channels.js" defer></script>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div>
+        <h1>💬 Channels</h1>
+        <p class="sub">Talk to your agents from Telegram. Off until you turn it on; only chats you pair here are answered.</p>
+      </div>
+      <nav class="nav"><a href="/">Home</a><a href="/credentials">Credentials</a></nav>
+    </header>
+    <p class="error" id="error" hidden></p>
+
+    <section class="card">
+      <div class="row between">
+        <div>
+          <h2>Telegram</h2>
+          <p class="hint" id="state">Loading…</p>
+        </div>
+        <button id="toggle" type="button" disabled>Turn on</button>
+      </div>
+      <p class="hint" id="token-hint" hidden>No bot token yet. Create a bot with @BotFather and paste its token in <a href="/credentials">Credentials → Channels</a>.</p>
+      <p class="hint warn" id="last-error" hidden></p>
+    </section>
+
+    <section class="card">
+      <h2>Who answers</h2>
+      <p class="hint">A chat can still pick someone else with <span class="mono">/use &lt;id&gt;</span>.</p>
+      <div class="row">
+        <select id="default-agent" disabled></select>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Pair a chat</h2>
+      <p class="hint">Create a code, then send it to your bot from a private chat or a group. It works once and only for 10 minutes. In a group the bot answers only commands and messages that mention it, and only from the people on that group's list (whoever sends the code is put on it).</p>
+      <div class="row">
+        <button id="pair" type="button" disabled>Create a pairing code</button>
+      </div>
+      <p class="code mono" id="code" hidden></p>
+      <p class="hint" id="code-hint" hidden></p>
+    </section>
+
+    <section class="card">
+      <h2>Paired chats</h2>
+      <p class="hint">Results of finished runs go to each private chat, and privately (DM) to each person on a group's list. In a group only the people on its list can talk to the agents (find a user id by having them mention the bot: they show up below to allow). A member the bot cannot message is marked unreachable — ask them to send /start to the bot.</p>
+      <ul class="list" id="peers"></ul>
+      <p class="hint" id="no-peers">No paired chats yet.</p>
+    </section>
+  </div>
+</body>
+</html>

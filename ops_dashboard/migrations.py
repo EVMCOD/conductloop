@@ -961,3 +961,106 @@ def _mig_30_channels(conn: sqlite3.Connection) -> None:
 
 MIGRATIONS.append((30, "chat channels: settings and paired peers (Telegram)",
                    _mig_30_channels))
+
+
+def _mig_31_channel_groups_and_results(conn: sqlite3.Connection) -> None:
+    """Telegram step 2: paired groups, and run results sent once.
+
+    Idempotent (GAP_FILL_FROM): columns are added only when missing.
+    ``channel_peers.chat_type`` is 'private', 'group' or 'supergroup'.
+    ``channel_settings.results_since``: only runs finished after the channel
+    was turned on are sent. ``channel_deliveries`` records each run result
+    sent (or skipped) once per channel, so nothing is sent twice.
+    """
+    def cols(table: str) -> set[str]:
+        return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+
+    if "chat_type" not in cols("channel_peers"):
+        conn.execute("ALTER TABLE channel_peers ADD COLUMN chat_type TEXT NOT NULL DEFAULT 'private'")
+    if "results_since" not in cols("channel_settings"):
+        conn.execute("ALTER TABLE channel_settings ADD COLUMN results_since INTEGER")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS channel_deliveries ("
+        "  channel TEXT NOT NULL,"
+        "  run_id INTEGER NOT NULL,"
+        "  sent_at INTEGER NOT NULL,"
+        "  peers INTEGER NOT NULL DEFAULT 0,"            # chats it was sent to
+        "  PRIMARY KEY (channel, run_id))"
+    )
+
+
+MIGRATIONS.append((31, "chat channels: paired groups and run results sent once",
+                   _mig_31_channel_groups_and_results))
+
+
+def _mig_32_drop_telegram_chats(conn: sqlite3.Connection) -> None:
+    """Drop ``telegram_chats``, the table of the old Telegram bridge.
+
+    The bridge was removed on 2026-11-06 and nothing reads the table; the
+    Telegram channel keeps its paired chats in ``channel_peers``. Idempotent
+    (``IF EXISTS``); the schema no longer creates the table, so it does not
+    come back.
+    """
+    conn.execute("DROP INDEX IF EXISTS idx_telegram_chats_user")
+    conn.execute("DROP INDEX IF EXISTS idx_telegram_chats_bound")
+    conn.execute("DROP TABLE IF EXISTS telegram_chats")
+
+
+MIGRATIONS.append((32, "drop telegram_chats (old Telegram bridge)", _mig_32_drop_telegram_chats))
+
+
+def _mig_33_channel_members(conn: sqlite3.Connection) -> None:
+    """Who may talk to the agents in a paired group.
+
+    One row per (channel, group, Telegram user). ``allowed`` = 1: on the
+    list, set from the Channels page (or the person who paired the group);
+    0: someone who addressed the bot in the group but is not on the list,
+    kept so the page can offer to add them. Nobody is allowed by default.
+    Idempotent (``IF NOT EXISTS``).
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS channel_members ("
+        "  channel TEXT NOT NULL,"
+        "  peer_id TEXT NOT NULL,"                       # the group's chat id
+        "  user_id TEXT NOT NULL,"                       # the member's Telegram user id
+        "  username TEXT,"                               # last known @handle (no @)
+        "  allowed INTEGER NOT NULL DEFAULT 0,"
+        "  added_by TEXT,"                               # 'pairing' | 'app' | NULL (only seen)
+        "  added_at INTEGER,"
+        "  last_seen_at INTEGER,"
+        "  PRIMARY KEY (channel, peer_id, user_id))"
+    )
+
+
+
+MIGRATIONS.append((33, "chat channels: allowed members of paired groups", _mig_33_channel_members))
+
+
+def _mig_35_channel_member_reachability(conn: sqlite3.Connection) -> None:
+    """Reachability of group members for private run-result DMs, and the
+    once-ever marker for the "not on this group's list" notice.
+
+    Telegram bots can only DM a user who has opened a chat with the bot. Run
+    results for a paired group go to each allowed member by DM; a 403
+    (cannot initiate / blocked / deactivated) is recorded so we stop retrying
+    until that person writes to the bot. ``denied_notice_at`` marks that the fixed
+    notice was already sent to that person in that group (once ever). Idempotent
+    (``PRAGMA table_info`` + ``ADD COLUMN``). Numbered 35: 34 is the Holding
+    CEO picker on main (#116); gap-fill runs whichever lands later.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(channel_members)")}
+    if not cols:
+        return
+    if "reachable" not in cols:
+        conn.execute("ALTER TABLE channel_members ADD COLUMN reachable INTEGER")
+    if "reach_error" not in cols:
+        conn.execute("ALTER TABLE channel_members ADD COLUMN reach_error TEXT")
+    if "reach_at" not in cols:
+        conn.execute("ALTER TABLE channel_members ADD COLUMN reach_at INTEGER")
+    if "denied_notice_at" not in cols:
+        conn.execute("ALTER TABLE channel_members ADD COLUMN denied_notice_at INTEGER")
+
+
+MIGRATIONS.append((35, "chat channels: member DM reachability and once-ever denied notice",
+                   _mig_35_channel_member_reachability))
+

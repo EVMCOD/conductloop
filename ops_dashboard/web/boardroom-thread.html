@@ -115,15 +115,14 @@
         </div>
       </div>
       <div class="channels-list" id="channelsList">
-        <div class="ch-empty">No channels bound yet. Bind a Telegram chat or Discord channel to receive this CEO's replies automatically.</div>
+        <div class="ch-empty">No channels bound yet. Bind a Discord or Slack channel to receive this CEO's replies automatically.</div>
       </div>
       <div class="channels-form" id="channelsForm" style="display:none">
         <select id="chPlatform">
-          <option value="telegram">Telegram (chat_id)</option>
           <option value="discord">Discord (webhook URL or channel_id)</option>
           <option value="slack">Slack (webhook URL or channel_id)</option>
         </select>
-        <input id="chTargetId" placeholder="e.g. 123456789 (Telegram), https://discord.com/api/webhooks/... (Discord), or https://hooks.slack.com/services/... (Slack)" />
+        <input id="chTargetId" placeholder="e.g. https://discord.com/api/webhooks/... (Discord), or https://hooks.slack.com/services/... (Slack)" />
         <input id="chTargetName" placeholder="Friendly name (optional, e.g. @my_main)" />
         <select id="chDirection" title="outbound = CEO → channel; inbound = channel → CEO; both">
           <option value="both">Both directions</option>
@@ -144,15 +143,14 @@
         <button class="ch-btn ghost" id="testChannelBtn" title="Send a test message to all bound channels">📤 Test</button>
       </div>
       <div class="channels-list" id="channelsList">
-        <div class="ch-empty">No channels bound yet. Bind a Telegram chat or Discord channel to receive this CEO's replies automatically.</div>
+        <div class="ch-empty">No channels bound yet. Bind a Discord or Slack channel to receive this CEO's replies automatically.</div>
       </div>
       <div class="channels-form" id="channelsForm" style="display:none">
         <select id="chPlatform">
-          <option value="telegram">Telegram (chat_id)</option>
           <option value="discord">Discord (webhook URL or channel_id)</option>
           <option value="slack">Slack (webhook URL or channel_id)</option>
         </select>
-        <input id="chTargetId" placeholder="e.g. 123456789 (Telegram), https://discord.com/api/webhooks/... (Discord), or https://hooks.slack.com/services/... (Slack)" />
+        <input id="chTargetId" placeholder="e.g. https://discord.com/api/webhooks/... (Discord), or https://hooks.slack.com/services/... (Slack)" />
         <input id="chTargetName" placeholder="Friendly name (optional, e.g. @my_main)" />
         <select id="chDirection" title="outbound = CEO→channel; inbound = channel→CEO; both">
           <option value="both">Both directions</option>
@@ -408,7 +406,7 @@
     function renderChannels(items) {
       const box = $('channelsList');
       if (!items.length) {
-        box.innerHTML = '<div class="ch-empty">No channels bound yet. Bind a Telegram chat or Discord channel to receive this CEO\'s replies automatically.</div>';
+        box.innerHTML = '<div class="ch-empty">No channels bound yet. Bind a Discord or Slack channel to receive this CEO\'s replies automatically.</div>';
         return;
       }
       const iconFor = p => p === 'telegram' ? 'T' : p === 'discord' ? 'D' : '?';

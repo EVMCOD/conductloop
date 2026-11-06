@@ -105,9 +105,11 @@ def deliver(channels: list[str] | None = None, today: date | None = None) -> dic
     for ch in (channels or []):
         try:
             if ch == "telegram":
-                from . import telegram_bridge
-                telegram_bridge.broadcast_to_bound_chats(brief)
-            elif ch == "discord":
+                # The Telegram channel sends only run results (2026-11-06);
+                # the old broadcast bridge was removed.
+                out[ch] = "skipped: Telegram sends only run results (Channels)"
+                continue
+            if ch == "discord":
                 from . import discord_bridge
                 discord_bridge.send_message(brief)
             out[ch] = "sent"

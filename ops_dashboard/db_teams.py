@@ -144,7 +144,7 @@ def seed_default_teams() -> dict:
         ("ai-squad", "Indexer System",  "ai_agent", "agent",    "active", None,
          "index vault, repos, memory, embeddings", "all-MiniLM-L6-v2"),
         ("ai-squad", "Webhook Bot",     "ai_agent", "observer", "active", None,
-         "Slack/Discord/Telegram notifications on URL changes", "system"),
+         "Slack/Discord notifications on URL changes", "system"),
         ("ai-squad", "Daily Note",      "ai_agent", "agent",    "active", None,
          "generate daily markdown note in vault", "system"),
         ("ai-squad", "Snapshot Engine", "ai_agent", "agent",    "active", None,
