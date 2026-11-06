@@ -27,10 +27,57 @@ from . import brain, db, provider_errors
 
 log = logging.getLogger("scheduler")
 
-# Cache of "did this cron already fire this minute?" — prevents duplicate fires
-# when the scheduler ticks twice within the same minute.
+# "Did this cron already fire this minute?" The scheduler ticks every 30s, so
+# a matching minute is seen twice. The mark that counts is the row in
+# ``scheduler_fires`` (see ``_claim_minute``): it survives a restart inside
+# the same minute, and two processes on one database share it. These dicts
+# are only the fallback for when that row cannot be written.
 _fired_this_minute: dict[int, str] = {}  # trigger_id -> minute string
 _sys_fired: dict[str, str] = {}          # system-job name -> minute string
+
+_FIRES_DDL = (
+    "CREATE TABLE IF NOT EXISTS scheduler_fires ("
+    " job TEXT PRIMARY KEY,"          # 'trigger:<id>' or 'system:<name>'
+    " minute TEXT NOT NULL,"          # local 'YYYY-MM-DD HH:MM' it last fired in
+    " fired_at INTEGER NOT NULL)"
+)
+
+
+def _claim_minute(job: str, minute_key: str) -> bool:
+    """Take ``minute_key`` for ``job``, once, in the database.
+
+    True for the first caller in that minute: this process, a restarted one,
+    or another process using the same database. False for every later one.
+    Raises if the database cannot be written; ``_should_fire`` falls back to
+    the in-memory mark then, so a broken disk does not stop the scheduler.
+    """
+    conn = db.get_connection()
+    try:
+        conn.execute(_FIRES_DDL)
+        cur = conn.execute(
+            "INSERT INTO scheduler_fires (job, minute, fired_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(job) DO UPDATE SET minute = excluded.minute, "
+            "fired_at = excluded.fired_at WHERE scheduler_fires.minute <> excluded.minute",
+            (job, minute_key, int(time.time())),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+    finally:
+        conn.close()
+
+
+def _should_fire(job: str, memo: dict, key, minute_key: str) -> bool:
+    """Whether a cron that matches this minute still has to run in it."""
+    if memo.get(key) == minute_key:
+        return False
+    try:
+        first = _claim_minute(job, minute_key)
+    except Exception:
+        log.warning("could not record that %s fired; deduping in memory only", job,
+                    exc_info=True)
+        first = True
+    memo[key] = minute_key
+    return first
 
 
 def _system_jobs() -> list[tuple[str, str, object]]:
@@ -111,7 +158,8 @@ def run_system_jobs(now: datetime | None = None, *, force: bool = False) -> list
                 continue
             if not _cron_matches(spec, now):
                 continue
-            _sys_fired[name] = minute_key
+            if not _should_fire(f"system:{name}", _sys_fired, name, minute_key):
+                continue
         try:
             fn()
             out.append({"system_job": name, "ok": True})
@@ -316,7 +364,8 @@ def tick(now: datetime | None = None) -> list[dict]:
             continue
         if not _cron_matches(t["spec"], now):
             continue
-        _fired_this_minute[t["id"]] = minute_key
+        if not _should_fire(f"trigger:{t['id']}", _fired_this_minute, t["id"], minute_key):
+            continue
         # Fire
         log.info("firing trigger %s for agent %s", t["id"], t["agent_id"])
         r = _wake_agent(t["agent_id"], t.get("prompt") or "(scheduled)", trigger_id=t["id"])
