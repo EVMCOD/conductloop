@@ -1232,3 +1232,73 @@ def _gather_real_analytics() -> str:
     if not lines:
         return "(no live analytics available yet)"
     return "\n".join(lines)
+
+
+# --- Holding CEO choice (2026-11-06) ----------------------------------------
+# boardroom_settings.holding_ceo_id: the AI agent that is the Holding CEO.
+# NULL means none is chosen: whoever asks the Holding CEO (the Telegram
+# channel, for one) falls back to the Boardroom's own Holding CEO reply
+# (chat_with_holding_ceo). Deleting the member clears it (ON DELETE SET NULL).
+
+def holding_ceo_candidates() -> list[dict]:
+    """AI agents that can be chosen, CEOs first."""
+    with db.db() as conn:
+        rows = conn.execute(
+            "SELECT id, name, role, level, is_ceo, project_slug FROM team_members "
+            "WHERE type = 'ai_agent' "
+            "ORDER BY (COALESCE(is_ceo, 0) = 1 OR level = 'ceo') DESC, name COLLATE NOCASE, id"
+        ).fetchall()
+    return [{"id": r["id"], "name": r["name"] or f"#{r['id']}", "role": r["role"] or "",
+             "is_ceo": bool(r["is_ceo"]) or r["level"] == "ceo",
+             "project": r["project_slug"] or None} for r in rows]
+
+
+def holding_ceo() -> dict | None:
+    """The chosen Holding CEO ({id, name, role}), or None (not chosen, or no
+    longer an AI agent)."""
+    with db.db() as conn:
+        row = conn.execute(
+            "SELECT m.id, m.name, m.role FROM boardroom_settings s "
+            "JOIN team_members m ON m.id = s.holding_ceo_id "
+            "WHERE s.id = 1 AND m.type = 'ai_agent'").fetchone()
+    return {"id": row["id"], "name": row["name"] or f"#{row['id']}", "role": row["role"] or ""} \
+        if row else None
+
+
+def set_holding_ceo(member_id: int | None, *, user: dict | None = None) -> dict | None:
+    """Choose the Holding CEO (an existing AI agent), or clear it with None.
+    Raises ValueError("not_an_ai_agent") for anything else. Returns the new
+    Holding CEO, as holding_ceo()."""
+    if member_id is not None and (isinstance(member_id, bool) or not isinstance(member_id, int)):
+        raise ValueError("not_an_ai_agent")
+    now = int(time.time())
+    with db.db() as conn:
+        name = None
+        if member_id is not None:
+            row = conn.execute("SELECT name, type FROM team_members WHERE id = ?",
+                               (member_id,)).fetchone()
+            if row is None or row["type"] != "ai_agent":
+                raise ValueError("not_an_ai_agent")
+            name = row["name"]
+        current = conn.execute("SELECT chairman_user_id FROM boardroom_settings WHERE id = 1").fetchone()
+        uid = user.get("id") if user and user.get("id") else None
+        if current is None:
+            if uid is None:
+                found = conn.execute("SELECT id FROM users WHERE is_chairman = 1 ORDER BY id LIMIT 1"
+                                     ).fetchone()
+                uid = found["id"] if found else None
+            conn.execute("INSERT INTO boardroom_settings (id, chairman_user_id, holding_ceo_id, "
+                         "updated_at) VALUES (1, ?, ?, ?)", (uid, member_id, now))
+        else:
+            conn.execute("UPDATE boardroom_settings SET holding_ceo_id = ?, updated_at = ? "
+                         "WHERE id = 1", (member_id, now))
+            uid = uid or current["chairman_user_id"]
+        # Always write the decision log. A local install has no user account:
+        # user_id stays NULL and body records the actor as "local".
+        title = (f"Holding CEO: {name}" if member_id is not None
+                 else "Holding CEO cleared (the Boardroom answers)")
+        conn.execute(
+            "INSERT INTO boardroom_decisions (user_id, member_id, kind, title, body, created_at) "
+            "VALUES (?, ?, 'holding_ceo_changed', ?, ?, ?)",
+            (uid, member_id, title, None if uid else "local", now))
+    return holding_ceo()

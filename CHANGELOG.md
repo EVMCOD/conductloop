@@ -4,6 +4,12 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### Choose the Holding CEO
+
+- **Pick who is your Holding CEO in the Boardroom.** A new *Holding CEO* box at the top of the Boardroom lists your AI agents (CEOs first). The one you choose speaks for the holding where an outside channel asks for the Holding CEO (the Telegram channel answers with it by default). Choose *None* and the Boardroom's own Holding CEO reply answers, as before. Only an existing AI agent can be chosen; deleting that agent clears the choice.
+- **API:** `GET /api/boardroom/holding-ceo` (the choice and the candidates) and `POST /api/boardroom/holding-ceo {"member_id": n|null}`, for the chairman only (this machine, or a signed-in chairman). Every change is written to the Boardroom decision log (kind `holding_ceo_changed`), including set and clear.
+- **Works without accounts.** The Boardroom settings no longer need a user account (a local install has none), so the choice can be saved anywhere. The decision log accepts a row with no user (`user_id` null, body `local`) so those installs still keep a history of who was chosen.
+
 ### The browsing agent can go back, scroll and pick from drop-downs
 
 - **Three more tools for browser sessions.** `back` goes back one page and `scroll` moves about one screen up or down (for pages that load more as you scroll); both are allowed in *read* mode. `select` chooses an option of a drop-down by its visible text, in *act* mode only, and always waits for your approval. Each read now lists the options of a drop-down and the one chosen (never for card-payment fields).

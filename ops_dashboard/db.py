@@ -801,8 +801,8 @@ CREATE TABLE IF NOT EXISTS autonomy_config (
 
 CREATE TABLE IF NOT EXISTS boardroom_settings (
     id               INTEGER PRIMARY KEY CHECK (id = 1),    -- singleton
-    chairman_user_id INTEGER NOT NULL,
-    holding_ceo_id   INTEGER,                                -- the team_member that synthesizes the Daily Recap
+    chairman_user_id INTEGER,                                -- NULL on a local install with no accounts (migration 34)
+    holding_ceo_id   INTEGER,                                -- the AI agent chosen as Holding CEO (Boardroom); NULL = the Boardroom's own reply
     last_recap_at    INTEGER,
     updated_at       INTEGER NOT NULL,
     FOREIGN KEY (chairman_user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -824,11 +824,11 @@ CREATE INDEX IF NOT EXISTS idx_ceo_messages_user   ON ceo_messages(user_id);
 
 CREATE TABLE IF NOT EXISTS boardroom_decisions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id     INTEGER NOT NULL,                            -- chairman who created/logged it
+    user_id     INTEGER,                                     -- chairman who logged it; NULL = local / no account (migration 34)
     member_id   INTEGER,                                     -- optional CEO this decision touches
-    kind        TEXT    NOT NULL,                            -- 'ceo_created' | 'autonomy_changed' | 'tier_advanced' | 'note'
+    kind        TEXT    NOT NULL,                            -- 'ceo_created' | 'autonomy_changed' | 'tier_advanced' | 'note' | 'holding_ceo_changed'
     title       TEXT    NOT NULL,
-    body        TEXT,
+    body        TEXT,                                        -- optional; 'local' when there is no user account
     created_at  INTEGER NOT NULL,
     FOREIGN KEY (user_id)   REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (member_id) REFERENCES team_members(id) ON DELETE SET NULL
