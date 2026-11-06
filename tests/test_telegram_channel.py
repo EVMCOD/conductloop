@@ -804,7 +804,6 @@ def test_migrations_drop_the_old_table_and_add_the_list(env):
 def test_group_results_go_only_to_allowed_members_by_dm(env):
     _turn_on(env)
     _pair_group(env)
-    row = store.peer("telegram", "-500")["id"]
     assert store.allow_member("telegram", "-500", 99, "ana", by="app")
     env["fake"].calls.clear()
     _run(env, "done", "secret report")
