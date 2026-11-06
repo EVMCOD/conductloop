@@ -482,6 +482,14 @@ CREATE TABLE IF NOT EXISTS agent_triggers (
 CREATE INDEX IF NOT EXISTS idx_triggers_agent ON agent_triggers(agent_id, enabled);
 CREATE INDEX IF NOT EXISTS idx_triggers_kind  ON agent_triggers(kind, enabled);
 
+-- The minute each cron trigger / system job last fired in (scheduler.py), so
+-- a restart inside that minute does not fire it again.
+CREATE TABLE IF NOT EXISTS scheduler_fires (
+    job      TEXT PRIMARY KEY,
+    minute   TEXT NOT NULL,
+    fired_at INTEGER NOT NULL
+);
+
 -- Agent activity log: one row per thing the agent did
 CREATE TABLE IF NOT EXISTS agent_logs (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

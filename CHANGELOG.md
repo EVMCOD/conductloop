@@ -4,6 +4,10 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### A cron fires once per minute, even across a restart
+
+- **A restart no longer fires the same cron twice.** The scheduler remembered "already fired this minute" only in memory. When the app restarted inside a minute that matched (an update, a crash, a relaunch), every agent trigger and system job for that minute ran again: a second briefing, a second paid agent wake. The mark is now kept in the database (`scheduler_fires`), so a restarted app, or a second process on the same database, skips what already ran. If the mark cannot be written, the scheduler keeps going and falls back to the in-memory mark.
+
 ### Closing a session hands its work back
 
 - **Tasks of a closed session can be picked up again.** Closing a session (or a session that failed) put its claimed, running and blocked tasks back in the queue, but still assigned to that session. Only the assigned session may claim a task, and a closed one never does, so they stayed "queued" for ever. They are now unassigned, with a note saying which session gave them back, and so are the tasks assigned to it that had not started. Assign them to another session to continue. Tasks waiting for review keep their session: the result is on its branch.
