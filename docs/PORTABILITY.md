@@ -318,6 +318,11 @@ KeePassXC, an AppImage with the bundled `keyring`, a locked keyring prompt):
 
 ## 3. In-app browser
 
+Team agents can delegate a short task to this browser through the `browse`
+tool (`docs/BROWSER.md`): text summary only, macOS only, same approvals as a
+hand-started session.
+
+
 ### 3.1 What exists (macOS 14+)
 
 - `desktop/src-tauri/src/browser.rs`: each tab is a **child webview**

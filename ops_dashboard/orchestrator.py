@@ -272,9 +272,11 @@ def run_task(task_id: int, *, sync: bool = True, on_event=None) -> dict:
             if prov.supports_tools():
                 # The tools are in the API call; the prompt is what tells the
                 # model what they are and when a question needs one.
+                from . import browse_tools as _browse_tools
                 from .connector_tools import prompt_block as _connector_prompt
                 output_text = prov.ask_with_tools(
-                    system_prompt + _connector_prompt(), messages, prov_tools,
+                    system_prompt + _connector_prompt() + _browse_tools.prompt_block(),
+                    messages, prov_tools,
                     on_tool_call=_on_call, max_tokens=2000, temperature=0.3,
                 )
             else:

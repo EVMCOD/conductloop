@@ -351,9 +351,21 @@ def _wake_agent(agent_id: int, prompt: str, trigger_id: int | None = None) -> di
         # The scheduler ticks on one thread: a call that never returns would
         # stop every later trigger and system job. The abandoned call is not
         # joined; whatever it returns later is dropped, not logged as a run.
+        # Triggers and Telegram wakes get connectors + browse when the
+        # provider supports tools (same path as team chat / Holding CEO).
         limit = _wake_timeout()
         try:
-            text = brain.ask_with_deadline(prov, system_prompt, messages, seconds=limit)
+            import concurrent.futures as _cf
+            ex = _cf.ThreadPoolExecutor(max_workers=1)
+            fut = ex.submit(
+                lambda: brain.ask_with_connector_tools(prov, system_prompt, messages)[0])
+            try:
+                text = fut.result(timeout=limit)
+            except _cf.TimeoutError:
+                raise TimeoutError(
+                    f"{getattr(prov, 'name', 'llm')} exceeded {limit:.0f}s deadline") from None
+            finally:
+                ex.shutdown(wait=False, cancel_futures=True)
         except TimeoutError:
             duration = int((time.time() - t0) * 1000)
             msg = (f"the provider did not answer within {limit:g}s, so the agent did not "
