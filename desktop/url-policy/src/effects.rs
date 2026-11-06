@@ -31,7 +31,11 @@ pub struct Page<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     Click,
-    Type { submit: bool },
+    Type {
+        submit: bool,
+    },
+    /// Choose an option of a `<select>` (no submit).
+    Select,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -237,6 +241,20 @@ pub fn classify(action: Action, el: &Element, page: &Page) -> Effect {
     let tag = el.tag.to_ascii_lowercase();
     let typ = el.typ.to_ascii_lowercase();
     match action {
+        Action::Select => {
+            // Choosing an option submits nothing; a page that navigates on
+            // change is stopped by the new-site gate like any other.
+            if tag != "select" {
+                return Effect::Deny("not_a_select");
+            }
+            if is_payment(el) {
+                return Effect::Confirm("payment_field");
+            }
+            if page.has_password || page.has_payment {
+                return Effect::Confirm("sensitive_page");
+            }
+            Effect::Allow
+        }
         Action::Type { submit } => {
             if is_password(el) {
                 return Effect::Deny("password_field");

@@ -163,8 +163,18 @@ def _is_payment(el: Element) -> bool:
 
 
 def classify(action: str, el: Element, page: Page, *, submit: bool = False) -> str:
-    """``action``: 'click' | 'type'."""
+    """``action``: 'click' | 'type' | 'select' (choose an option of a <select>)."""
     tag, typ = el.tag.lower(), el.typ.lower()
+    if action == "select":
+        # Choosing an option submits nothing; a page that navigates on change
+        # is stopped by the new-site gate like any page-started navigation.
+        if tag != "select":
+            return "deny:not_a_select"
+        if _is_payment(el):
+            return "confirm:payment_field"
+        if page.has_password or page.has_payment:
+            return "confirm:sensitive_page"
+        return "allow"
     if action == "type":
         if _is_password(el):
             return "deny:password_field"
