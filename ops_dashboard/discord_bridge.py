@@ -5,8 +5,13 @@ Lets the chairman keep a 1:1 chat with the Holding CEO in a Discord channel
 something happens in the C-Suite (a CEO flips to blocked, a new CEO is
 spawned, etc.).
 
-Same LLM provider config as the rest of Boardroom — replies match tone
-and content with the in-app brief.
+Who answers a free-text message (same rule as the Telegram channel since
+#115 / #116):
+
+* the AI agent chosen as Holding CEO in the Boardroom
+  (``boardroom_settings.holding_ceo_id``), woken like any other agent; or
+* when none is set, or the member is no longer an AI agent, the Boardroom's
+  own Holding CEO reply (``chat_with_holding_ceo``).
 
 Setup (one-time):
   1. Create a webhook in your channel:
@@ -32,15 +37,24 @@ Why HTTP-only vs full Discord bot:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 
 from . import boardroom as _br
 
+log = logging.getLogger("conductloop.discord_bridge")
+
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
 LAST_DELIVERY: dict = {}
+
+# Injected in tests. Production defaults wake the chosen Holding CEO, or
+# fall back to the Boardroom's own Holding CEO reply.
+WakeFn = Callable[[int, str], dict]
+HoldingCeoFn = Callable[[str], str]
 
 
 def is_configured() -> bool:
@@ -78,9 +92,11 @@ def send_message(content: str, *, username: str = "ConductLoop Holding CEO") -> 
 
 
 def status() -> dict:
+    ceo = _br.holding_ceo()
     info = {
         "configured": is_configured(),
         "webhook_host": urllib.parse.urlparse(WEBHOOK_URL).netloc if WEBHOOK_URL else None,
+        "holding_ceo": ceo,
         "last_delivery": LAST_DELIVERY,
     }
     return info
@@ -95,7 +111,57 @@ def _authorized(request_token: str | None) -> bool:
     return request_token == expected
 
 
-def handle_update(update: dict) -> dict:
+def _default_wake(agent_id: int, prompt: str) -> dict:
+    from . import scheduler
+    return scheduler._wake_agent(agent_id, prompt)
+
+
+def _default_holding_ceo_reply(prompt: str) -> str:
+    return _br.chat_with_holding_ceo(prompt)
+
+
+_UNSET = object()
+
+
+def answer_as_holding_ceo(
+    text: str,
+    *,
+    wake: WakeFn | None = None,
+    holding_ceo_reply: HoldingCeoFn | None = None,
+    chosen: dict | None | object = _UNSET,
+) -> tuple[str, str]:
+    """Reply to a free-text Discord message as the Holding CEO.
+
+    Returns ``(reply, how)`` where ``how`` is ``"agent:<id>"`` when the
+    Boardroom's chosen Holding CEO was woken, or ``"boardroom"`` when the
+    fallback ``chat_with_holding_ceo`` path ran (none chosen, or the member
+    is no longer an AI agent).
+    """
+    wake = wake or _default_wake
+    holding_ceo_reply = holding_ceo_reply or _default_holding_ceo_reply
+    if chosen is _UNSET:
+        chosen = _br.holding_ceo()
+    if isinstance(chosen, dict) and chosen.get("id"):
+        try:
+            out = wake(int(chosen["id"]), text)
+        except Exception as e:
+            log.warning("discord holding-ceo wake failed: %s", type(e).__name__)
+            return ("The agent did not answer: an internal error happened.",
+                    f"agent:{chosen['id']}:error")
+        if out.get("ok"):
+            return (out.get("response") or "(no answer)", f"agent:{chosen['id']}")
+        return ("The agent did not answer: " + str(out.get("error") or "unknown error"),
+                f"agent:{chosen['id']}:error")
+    return (holding_ceo_reply(text) or "(no answer)", "boardroom")
+
+
+def handle_update(
+    update: dict,
+    *,
+    wake: WakeFn | None = None,
+    holding_ceo_reply: HoldingCeoFn | None = None,
+    send: Callable[..., dict] | None = None,
+) -> dict:
     """Called from /api/discord/webhook with a parsed update.
     Shape: {"author": "username", "content": "text", "channel_id": "..."}."""
     author = (update.get("author") or "chairman").strip()[:64]
@@ -111,19 +177,31 @@ def handle_update(update: dict) -> dict:
     }
     # Slash-style commands reused from telegram
     if text.startswith("/"):
-        return _handle_command(text, author)
-    # Otherwise Holding CEO reply
-    reply = _br.chat_with_holding_ceo(text)
-    send_message(reply)
+        return _handle_command(text, author, send=send)
+    # Otherwise Holding CEO reply (chosen agent, or Boardroom fallback)
+    reply, how = answer_as_holding_ceo(
+        text, wake=wake, holding_ceo_reply=holding_ceo_reply)
+    sender = send or send_message
+    username = "ConductLoop Holding CEO"
+    ceo = _br.holding_ceo() if how.startswith("agent:") else None
+    if ceo and ceo.get("name"):
+        username = f"{ceo['name']} (Holding CEO)"[:80]
+    sender(reply, username=username)
     LAST_DELIVERY["last_inbound"]["replied"] = True
-    return {"ok": True, "replied": True, "length": len(reply)}
+    LAST_DELIVERY["last_inbound"]["how"] = how
+    return {"ok": True, "replied": True, "length": len(reply), "how": how}
 
 
-def _handle_command(text: str, author: str) -> dict:
+def _handle_command(text: str, author: str, *, send: Callable[..., dict] | None = None) -> dict:
+    sender = send or send_message
     cmd = text.split()[0].lower().strip()
     if cmd in ("/help", "/start"):
-        send_message(
+        ceo = _br.holding_ceo()
+        who = (f"the chosen agent **{ceo['name']}**" if ceo
+               else "the Boardroom's Holding CEO reply (no agent chosen yet)")
+        sender(
             "👋 ConductLoop Holding CEO on Discord.\n\n"
+            f"Free-text messages are answered by {who}.\n\n"
             "Commands:\n"
             "  /inbox  - list of CEOs + status\n"
             "  /recap  - morning brief\n"
@@ -136,17 +214,17 @@ def _handle_command(text: str, author: str) -> dict:
         lines = [f"🏛️ {len(inbox['items'])} CEOs active"]
         for c in inbox["items"][:10]:
             lines.append(f"  {c['status_icon']} {c['name']}  ({c['status_label']})")
-        send_message("\n".join(lines))
+        sender("\n".join(lines))
     elif cmd == "/recap":
         syn = _br.recap_synthesis(_br._recap_payload())
         prefix = "[llm] " if syn.get("source") == "llm" else "[static] "
-        send_message(prefix + syn.get("text", "(no synthesis)"))
+        sender(prefix + syn.get("text", "(no synthesis)"))
     elif cmd == "/vault":
         items = _br.vault_feed(limit=5)
         lines = []
         for it in items:
             lines.append(f"· [{it.get('kind', '?')}] {it.get('title', '')}")
-        send_message("📚 Recent decisions:\n" + ("\n".join(lines) if lines else "(none)"))
+        sender("📚 Recent decisions:\n" + ("\n".join(lines) if lines else "(none)"))
     elif cmd == "/portfolio":
         p = _br.portfolio()
         lines = []
@@ -154,12 +232,13 @@ def _handle_command(text: str, author: str) -> dict:
             ceo_name = proj["ceo"]["name"] if proj.get("ceo") else "— unassigned —"
             lines.append(f"· {proj['name']} → {ceo_name}")
         k = p["kpis"]
-        head = f"🌐 Portfolio · {k['projects_total']} projects · {k['projects_with_ceo']} with CEO · {k['projects_with_decisions']} audit rows\n\n"
-        send_message(head + ("\n".join(lines) if lines else "(no projects)"))
+        head = (f"🌐 Portfolio · {k['projects_total']} projects · "
+                f"{k['projects_with_ceo']} with CEO · {k['projects_with_decisions']} audit rows\n\n")
+        sender(head + ("\n".join(lines) if lines else "(no projects)"))
     elif cmd == "/ping":
-        send_message(f"pong ({author})")
+        sender(f"pong ({author})")
     else:
-        send_message(f"Unknown command: {cmd}. Try /help.")
+        sender(f"Unknown command: {cmd}. Try /help.")
     return {"ok": True, "command": cmd}
 
 

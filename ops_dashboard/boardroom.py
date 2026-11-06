@@ -1237,8 +1237,9 @@ def _gather_real_analytics() -> str:
 # --- Holding CEO choice (2026-11-06) ----------------------------------------
 # boardroom_settings.holding_ceo_id: the AI agent that is the Holding CEO.
 # NULL means none is chosen: whoever asks the Holding CEO (the Telegram
-# channel, for one) falls back to the Boardroom's own Holding CEO reply
-# (chat_with_holding_ceo). Deleting the member clears it (ON DELETE SET NULL).
+# channel and the Discord bridge) falls back to the Boardroom's own Holding
+# CEO reply (chat_with_holding_ceo). Deleting the member clears it
+# (ON DELETE SET NULL).
 
 def holding_ceo_candidates() -> list[dict]:
     """AI agents that can be chosen, CEOs first."""

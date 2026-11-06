@@ -4,6 +4,10 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### Discord talks to the Holding CEO you chose
+
+- **The Discord bridge uses the Boardroom's Holding CEO.** A free-text message in the bound channel is answered by the AI agent set as Holding CEO (the same choice as Telegram), woken like any other agent. If none is set, or that member is no longer an AI agent, the Boardroom's own Holding CEO reply answers, as before. `/help` names who will answer. Status includes the choice. No live Discord in tests.
+
 ### Agents can ask the in-app browser to look something up
 
 - **A `browse` tool for team agents.** Chat, triggers and Telegram can delegate a short browsing task to a visible Browser tab. The agent gets a text summary back — never a screenshot. Default mode is *read* (open / navigate / read / back / scroll); *act* also allows click / type / select, and every select (and any other effect) waits for your approval, same as a browser session you started by hand.

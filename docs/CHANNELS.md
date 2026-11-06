@@ -1,7 +1,8 @@
 # Chat channels
 
 Talk to your agents from a chat app, and get their answers back. Telegram is
-the first channel; Discord comes next.
+the paired channel (Channels page). Discord still uses the older Boardroom
+webhook bridge; free-text there goes to the Holding CEO you chose.
 
 ## Telegram
 
@@ -86,3 +87,23 @@ option of the Boardroom CEO channels and its `telegram_chats` table
 `TELEGRAM_CHAT_ID` were removed too: alerts and digests go to Slack/Discord
 webhooks only. If its webhook is still set on your bot,
 the status says so: remove it (`deleteWebhook`) and the channel starts reading.
+
+## Discord (Boardroom webhook)
+
+The Boardroom Discord bridge (`ops_dashboard/discord_bridge.py`) is separate
+from the Telegram channel above: one outbound webhook URL
+(`DISCORD_WEBHOOK_URL`), optional inbound POSTs to `/api/discord/webhook`.
+
+**Who answers a free-text message** (same rule as Telegram):
+
+1. The AI agent chosen as Holding CEO in the Boardroom
+   (`boardroom_settings.holding_ceo_id`), woken like any other agent.
+2. If none is set, or that member is no longer an AI agent, the Boardroom's
+   own Holding CEO reply (`chat_with_holding_ceo`).
+
+`/help` names who will answer. `GET /api/discord/status` includes the choice
+(`holding_ceo`). Slash commands (`/inbox`, `/recap`, `/vault`, `/portfolio`)
+are unchanged.
+
+A full Discord channel on the Channels page (pairing, groups, run results) is
+still future work.
