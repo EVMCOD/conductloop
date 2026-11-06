@@ -334,10 +334,22 @@ class SessionStore:
                           "WHERE session_id = ? AND released_at IS NULL", (now, session_id))
                 # …nor work it can no longer do: claimed/running/blocked tasks go
                 # back to the queue (needs_review stays: its result is on the
-                # session's branch and the user can still review it).
+                # session's branch and the user can still review it). They are
+                # unassigned too: only the assigned session may claim a task,
+                # and this one never will again, so leaving its id there kept
+                # the task "queued" for ever. Same for assigned work it had not
+                # started yet. The user assigns them to another session.
+                note = f"[returned to the queue: session #{session_id} {status}]"
                 c.execute("UPDATE session_tasks SET status = 'queued', owner_session_id = NULL, "
+                          "assigned_session_id = NULL, "
+                          "result_summary = CASE WHEN result_summary IS NULL OR result_summary = '' "
+                          "THEN ? ELSE result_summary || char(10) || char(10) || ? END, "
                           "updated_at = ? WHERE owner_session_id = ? "
-                          "AND status IN ('claimed', 'running', 'blocked')", (now, session_id))
+                          "AND status IN ('claimed', 'running', 'blocked')",
+                          (note, note, now, session_id))
+                c.execute("UPDATE session_tasks SET assigned_session_id = NULL, updated_at = ? "
+                          "WHERE assigned_session_id = ? AND owner_session_id IS NULL "
+                          "AND status IN ('queued', 'blocked')", (now, session_id))
                 self._reconcile_dependencies(c, now)
             return cur.rowcount == 1
 

@@ -4,6 +4,10 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### Closing a session hands its work back
+
+- **Tasks of a closed session can be picked up again.** Closing a session (or a session that failed) put its claimed, running and blocked tasks back in the queue, but still assigned to that session. Only the assigned session may claim a task, and a closed one never does, so they stayed "queued" for ever. They are now unassigned, with a note saying which session gave them back, and so are the tasks assigned to it that had not started. Assign them to another session to continue. Tasks waiting for review keep their session: the result is on its branch.
+
 ### A task stuck behind a dependency says why
 
 - **A task whose dependency failed, was cancelled or got blocked is now "blocked", with the reason.** It used to stay "queued" with no explanation: it looked ready, but no session would ever take it. It now reads, for example, "blocked by dependency: #12 is failed" (a dependency that no longer exists is "missing"), and a chain of tasks behind it follows. If the dependency goes back to the queue, the task does too. Tasks already stuck this way get their reason the next time a session looks for work.
