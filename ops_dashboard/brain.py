@@ -47,15 +47,16 @@ LLM_TIMEOUT = float(os.environ.get("BRAIN_LLM_TIMEOUT", "90"))
 
 def ask_with_connector_tools(provider, system: str, messages: list[dict], *,
                              on_tool_call: Callable[..., None] | None = None) -> tuple[str, bool]:
-    """Ask a provider, offering it the connected connectors' tools.
+    """Ask a provider, offering connectors and the ``browse`` tool.
 
     Returns ``(answer, used_tools)``. When the provider cannot do tool
     calling, the question is asked the plain way and the answer is the same
     one it always was — the tools are an addition, never a requirement.
 
-    The system prompt gains the block that says what the agent can reach and
-    that what comes back is data. A tool the prompt never mentions is a tool
-    the model does not reach for.
+    The system prompt gains the blocks that say what the agent can reach
+    (connected apps, and the in-app browser) and that what comes back is
+    data. A tool the prompt never mentions is a tool the model does not
+    reach for.
     """
     from . import tools as brain_tools
     try:
@@ -67,16 +68,28 @@ def ask_with_connector_tools(provider, system: str, messages: list[dict], *,
 
     prov_tools = (brain_tools.tools_for_anthropic() if provider.name == "anthropic"
                   else brain_tools.tools_for_openai())
-    connector_tools = [t for t in prov_tools
-                       if t.get("function", {}).get("name", "").startswith("connector_")]
-    if not connector_tools:
-        # Nothing connected: do not pay for an empty tool list.
+
+    def _tname(t: dict) -> str:
+        return (t.get("function") or {}).get("name") or t.get("name") or ""
+
+    names = [_tname(t) for t in prov_tools]
+    has_connectors = any(n.startswith("connector_") for n in names)
+    # browse is always in the registry, but only macOS can run it: do not
+    # force a tool round-trip (and drop streaming) on Linux/Windows for a
+    # tool that would only refuse.
+    from . import platform_caps
+    has_browse = "browse" in names and platform_caps.browser_supported()
+    if not has_connectors and not has_browse:
+        # Nothing useful to offer: do not pay for an empty tool list.
         return provider.ask(system, messages), False
 
+    from . import browse_tools
     from .connector_tools import prompt_block
     block = prompt_block()
     if block:
         system = system + block
+    if has_browse:
+        system = system + browse_tools.prompt_block()
     answer = provider.ask_with_tools(system, messages, prov_tools, on_tool_call=on_tool_call)
     return answer, True
 
@@ -1949,8 +1962,10 @@ def ask(question: str, *, conversation_id: int | None = None,
         system += skills_catalog.catalog_prompt()
         # L8: the connected apps, so the model knows what it can reach and
         # that what comes back is data rather than instructions.
+        from . import browse_tools as _browse_tools
         from .connector_tools import prompt_block as _connector_prompt
         system += _connector_prompt()
+        system += _browse_tools.prompt_block()
         # Capture on_tool_call for system-prompt-level tool log
         tool_log: list[dict] = []
         def _on_call(name, args, result):

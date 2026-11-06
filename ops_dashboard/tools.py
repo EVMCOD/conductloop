@@ -461,12 +461,26 @@ def _connector_tools() -> list[dict]:
         return []
 
 
+def _browse_tools() -> list[dict]:
+    """The ``browse`` tool: agents delegate a task to a visible browser tab.
+
+    Always offered; on non-macOS a call refuses with ``platform_unsupported``.
+    A failure importing the module must not take the Brain's tools down.
+    """
+    try:
+        from . import browse_tools
+        return browse_tools.available_tools()
+    except Exception:
+        return []
+
+
 def _all_tools() -> list[dict]:
-    """Static TOOLS + activate_skill + the connected connectors' actions.
+    """Static TOOLS + activate_skill + connectors + browse.
 
     ``activate_skill`` is registered only when the catalog has enabled skills
     (its ``name`` is an enum of those skills). The connector tools are
-    registered only for connectors that are actually connected.
+    registered only for connectors that are actually connected. ``browse`` is
+    always registered (macOS runs it; elsewhere it refuses clearly).
     """
     from .skills import catalog
     spec = catalog.tool_spec()
@@ -474,12 +488,16 @@ def _all_tools() -> list[dict]:
     if spec:
         out.append(spec)
     out.extend(_connector_tools())
+    out.extend(_browse_tools())
     return out
 
 
 def call(name: str, args: dict) -> dict:
     if name == "activate_skill":
         return _activate_skill(args)
+    if name == "browse":
+        from . import browse_tools
+        return browse_tools.call(name, args)
     fn = IMPL.get(name)
     if not fn:
         # A connector tool: ``connector_<id>_<action>``.
