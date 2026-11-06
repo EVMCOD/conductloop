@@ -44,7 +44,7 @@ def settings(channel: str) -> dict:
 
 def update(channel: str, **fields) -> None:
     allowed = {"enabled", "default_agent_id", "update_offset", "bot_username",
-               "last_error", "last_ok_at"}
+               "last_error", "last_ok_at", "results_since"}
     bad = set(fields) - allowed
     if bad:
         raise ValueError(f"unknown channel setting(s): {sorted(bad)}")
@@ -92,7 +92,8 @@ def pairing_open(channel: str) -> bool:
     return bool(s["pairing_hash"]) and int(s["pairing_expires_at"] or 0) > _now()
 
 
-def try_pair(channel: str, peer_id: str, code: str, label: str | None) -> bool:
+def try_pair(channel: str, peer_id: str, code: str, label: str | None,
+             chat_type: str = "private") -> bool:
     """Pair ``peer_id`` when ``code`` is the open code. One use; too many
     wrong guesses close the code for everyone."""
     with db.db() as conn:
@@ -113,10 +114,12 @@ def try_pair(channel: str, peer_id: str, code: str, label: str | None) -> bool:
             return False
         conn.execute("UPDATE channel_settings SET pairing_hash = NULL, pairing_expires_at = NULL, "
                      "pairing_attempts = 0, updated_at = ? WHERE channel = ?", (_now(), channel))
-        conn.execute("INSERT INTO channel_peers (channel, peer_id, label, paired_at, last_seen_at) "
-                     "VALUES (?, ?, ?, ?, ?) ON CONFLICT(channel, peer_id) DO UPDATE SET "
-                     "label = excluded.label, last_seen_at = excluded.last_seen_at",
-                     (channel, str(peer_id), (label or "")[:64] or None, _now(), _now()))
+        conn.execute("INSERT INTO channel_peers (channel, peer_id, label, paired_at, last_seen_at, "
+                     "chat_type) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(channel, peer_id) DO UPDATE "
+                     "SET label = excluded.label, last_seen_at = excluded.last_seen_at, "
+                     "chat_type = excluded.chat_type",
+                     (channel, str(peer_id), (label or "")[:64] or None, _now(), _now(),
+                      chat_type if chat_type in ("private", "group", "supergroup") else "private"))
     return True
 
 
@@ -131,8 +134,9 @@ def peer(channel: str, peer_id: str) -> dict | None:
 
 def peers(channel: str) -> list[dict]:
     with db.db() as conn:
-        rows = conn.execute("SELECT id, channel, peer_id, label, agent_id, paired_at, last_seen_at "
-                            "FROM channel_peers WHERE channel = ? ORDER BY id", (channel,)).fetchall()
+        rows = conn.execute("SELECT id, channel, peer_id, label, chat_type, agent_id, paired_at, "
+                            "last_seen_at FROM channel_peers WHERE channel = ? ORDER BY id",
+                            (channel,)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -152,4 +156,32 @@ def unpair(channel: str, row_id: int) -> bool:
     with db.db() as conn:
         cur = conn.execute("DELETE FROM channel_peers WHERE channel = ? AND id = ?",
                            (channel, int(row_id)))
+        return cur.rowcount == 1
+
+
+# ── run results (sent once) ─────────────────────────────────────────────
+
+def pending_results(channel: str, since: int, limit: int = 5) -> list[dict]:
+    """Runs that finished ``done`` after ``since`` and were not handled yet.
+    Only results: failed runs and runs waiting for approval are never here."""
+    with db.db() as conn:
+        rows = conn.execute(
+            "SELECT r.id AS run_id, r.task_id, r.output_text, r.finished_at, "
+            "       t.title, t.output_summary, m.name AS agent_name "
+            "  FROM runs r JOIN tasks t ON t.id = r.task_id "
+            "  LEFT JOIN team_members m ON m.id = t.agent_member_id "
+            " WHERE r.status = 'done' AND r.finished_at >= ? "
+            "   AND NOT EXISTS (SELECT 1 FROM channel_deliveries d "
+            "                    WHERE d.channel = ? AND d.run_id = r.id) "
+            " ORDER BY r.finished_at, r.id LIMIT ?",
+            (int(since), channel, int(limit))).fetchall()
+    return [dict(r) for r in rows]
+
+
+def claim_result(channel: str, run_id: int, peers: int) -> bool:
+    """Mark a run result as handled. True only for the first caller, so a
+    result is sent at most once even with two processes on one database."""
+    with db.db() as conn:
+        cur = conn.execute("INSERT OR IGNORE INTO channel_deliveries (channel, run_id, sent_at, peers) "
+                           "VALUES (?, ?, ?, ?)", (channel, int(run_id), _now(), int(peers)))
         return cur.rowcount == 1

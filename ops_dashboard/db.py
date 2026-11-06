@@ -837,6 +837,8 @@ CREATE INDEX IF NOT EXISTS idx_boardroom_decisions_user   ON boardroom_decisions
 CREATE INDEX IF NOT EXISTS idx_boardroom_decisions_member ON boardroom_decisions(member_id, created_at DESC);
 
 -- Boardroom chat-bindings (2026-07-01): telegram_chats / discord_channels.
+-- telegram_chats is legacy: the bridge that filled it was removed 2026-11-06
+-- (Telegram now uses channel_settings / channel_peers). Kept, never read.
 -- One row per chairman-channel pair. Lets the cron push the daily recap
 -- and lets inbound webhooks route replies to the right chat_id.
 CREATE TABLE IF NOT EXISTS telegram_chats (
@@ -845,7 +847,7 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
     chat_id         INTEGER NOT NULL UNIQUE,  -- Telegram chat_id (from /start message)
     username        TEXT,                     -- last known @handle (best-effort)
     first_name      TEXT,
-    bound           INTEGER NOT NULL DEFAULT 0,   -- 1 = approved by chairman via /api/telegram/chats-bind
+    bound           INTEGER NOT NULL DEFAULT 0,   -- 1 = approved by chairman (legacy route, removed)
     created_at      INTEGER NOT NULL,
     last_seen_at    INTEGER,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL

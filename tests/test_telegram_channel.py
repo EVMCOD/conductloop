@@ -8,6 +8,7 @@ a status, an error or the database; each update is answered once.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 
 import pytest
@@ -81,9 +82,16 @@ def env(monkeypatch):
         wakes.append((aid, prompt))
         return {"ok": True, "response": f"answer to: {prompt}"}
 
-    poller = telegram.Poller(transport=fake, wake=wake)
+    ceo_asks: list[str] = []
+
+    def holding_ceo(prompt: str) -> str:
+        ceo_asks.append(prompt)
+        return f"CEO: {prompt}"
+
+    poller = telegram.Poller(transport=fake, wake=wake, holding_ceo=holding_ceo)
     poller._submit = lambda fn: fn()  # answers inline, no thread
-    yield {"fake": fake, "items": items, "agent_id": agent_id, "wakes": wakes, "poller": poller}
+    yield {"fake": fake, "items": items, "agent_id": agent_id, "wakes": wakes, "poller": poller,
+           "ceo_asks": ceo_asks}
     with db.db() as conn:
         conn.execute("DELETE FROM channel_settings")
         conn.execute("DELETE FROM channel_peers")
@@ -148,13 +156,13 @@ def test_a_stranger_gets_one_fixed_sentence_and_no_agent(env):
     assert env["fake"].sent() == [(7, telegram.STRANGER)]   # once, not twice
 
 
-def test_group_chats_are_never_answered(env):
+def test_channels_are_never_answered(env):
     _turn_on(env)
     _pair(env, 42)
     env["fake"].calls.clear()
-    env["fake"].updates = [_msg(3, -100, "/pair ABC", "group"), _msg(4, 42, "hi", "supergroup")]
+    env["fake"].updates = [_msg(3, -100, "/pair ABC", "channel"), _msg(4, -101, "@my_cl_bot hi", "channel")]
     env["poller"].run_once()
-    assert env["fake"].sent() == [] and env["wakes"] == []
+    assert env["fake"].sent() == [] and env["wakes"] == [] and env["ceo_asks"] == []
 
 
 # ── pairing ──────────────────────────────────────────────────────────────
@@ -207,8 +215,8 @@ def test_a_paired_chat_picks_an_agent_and_gets_its_answer(env):
     _pair(env, 42)
     aid = env["agent_id"]
     env["fake"].updates = [_msg(10, 42, "what's new?")]
-    env["poller"].run_once()
-    assert env["wakes"] == [] and "Pick an agent" in env["fake"].sent()[-1][1]
+    env["poller"].run_once()            # nobody picked: the Holding CEO answers
+    assert env["wakes"] == [] and env["fake"].sent()[-1][1] == "CEO: what's new?"
 
     env["fake"].updates = [_msg(11, 42, "/agents"), _msg(12, 42, f"/use {aid}"),
                            _msg(13, 42, "what's new?")]
@@ -373,3 +381,259 @@ def test_the_worker_threads_start_idle_and_stop(env):
     poller._worker.join(5)
     assert not poller._thread.is_alive() and not poller._worker.is_alive()
     assert env["fake"].calls == []                   # off: never called Telegram
+
+
+# ── step 2: groups (answer only on mention or command) ───────────────────────
+
+def _pair_group(env, chat_id: int = -500, title: str = "Ops room", uid: int = 2) -> None:
+    code = store.new_pairing_code("telegram")["code"]
+    upd = _msg(uid, chat_id, f"/pair@my_cl_bot {code}", "supergroup")
+    upd["message"]["chat"]["title"] = title
+    env["fake"].updates = [upd]
+    env["poller"].run_once()
+    peer = store.peer("telegram", str(chat_id))
+    assert peer is not None and peer["chat_type"] == "supergroup" and peer["label"] == title
+
+
+def test_a_group_pairs_only_with_the_app_code(env):
+    _turn_on(env)
+    env["fake"].updates = [_msg(1, -500, "/pair WRONGCDE", "group"),
+                           _msg(2, -500, "hello everyone", "group")]
+    env["poller"].run_once()
+    assert store.peer("telegram", "-500") is None
+    assert [t for _, t in env["fake"].sent()] == ["That code is not valid. Create a new one in ConductLoop."]
+    _pair_group(env, uid=3)
+
+
+def test_in_a_group_only_mentions_and_commands_are_answered(env):
+    _turn_on(env)
+    _pair_group(env)
+    env["fake"].calls.clear()
+    env["fake"].updates = [
+        _msg(10, -500, "chatting among humans", "supergroup"),
+        _msg(11, -500, "/agents@another_bot", "supergroup"),
+        _msg(12, -500, "mail me at x@my_cl_botany.example", "supergroup"),
+        _msg(13, -500, "@My_CL_Bot what is blocked?", "supergroup"),
+        _msg(14, -500, "/agents", "supergroup"),
+    ]
+    env["poller"].run_once()
+    assert env["ceo_asks"] == ["what is blocked?"]
+    sent = [t for _, t in env["fake"].sent()]
+    assert sent[0] == "CEO: what is blocked?" and sent[1].startswith("Agents:")
+    assert len(sent) == 2
+
+
+def test_an_unpaired_group_is_quiet_unless_addressed(env):
+    _turn_on(env)
+    env["fake"].updates = [_msg(1, -600, "random talk", "group"),
+                           _msg(2, -600, "@my_cl_bot hi", "group")]
+    env["poller"].run_once()
+    assert env["fake"].sent() == [(-600, telegram.STRANGER)]
+    assert env["ceo_asks"] == [] and env["wakes"] == []
+
+
+def test_the_bot_name_comes_from_get_me_when_not_saved(env):
+    _turn_on(env)
+    _pair_group(env)
+    store.update("telegram", bot_username=None)
+    env["poller"]._handler = None
+    env["fake"].updates = [_msg(20, -500, "@my_cl_bot status?", "supergroup")]
+    env["poller"].run_once()
+    assert env["ceo_asks"] == ["status?"]
+    assert store.settings("telegram")["bot_username"] == "my_cl_bot"
+
+
+# ── step 2: the Holding CEO answers by default ──────────────────────────────
+
+def test_use_overrides_and_use_ceo_goes_back(env):
+    _turn_on(env)
+    _pair(env, 42)
+    aid = env["agent_id"]
+    env["fake"].updates = [_msg(10, 42, f"/use {aid}"), _msg(11, 42, "one"),
+                           _msg(12, 42, "/use ceo"), _msg(13, 42, "two"),
+                           _msg(14, 42, "/agents")]
+    env["poller"].run_once()
+    assert env["wakes"] == [(aid, "one")] and env["ceo_asks"] == ["two"]
+    agents = env["fake"].sent()[-1][1]
+    assert "→ ceo  Holding CEO (default)" in agents and f"→ {aid}" not in agents
+
+
+def test_the_member_set_as_holding_ceo_is_woken(env, monkeypatch):
+    _turn_on(env)
+    _pair(env, 42)
+    ceo = db.get_member(env["agent_id"])
+    monkeypatch.setattr(telegram, "_holding_ceo_member", lambda: ceo)
+    env["fake"].updates = [_msg(10, 42, "plan?")]
+    env["poller"].run_once()
+    assert env["wakes"] == [(env["agent_id"], "plan?")] and env["ceo_asks"] == []
+    assert telegram.status()["default_agent"] == "Holding CEO (Scout)"
+
+
+def test_no_boardroom_settings_means_the_boardroom_reply():
+    db.init_db()
+    assert telegram._holding_ceo_member() is None or telegram._holding_ceo_member()["type"] == "ai_agent"
+
+
+# ── step 2: run results, only results, each once ─────────────────────────────
+
+def _run(env, status: str, text: str = "the report") -> int:
+    tid = db.create_task(None, f"task {uuid.uuid4().hex[:6]}", "do it",
+                         agent_member_id=env["agent_id"])
+    rid = db.start_run(tid, "mock", "m")
+    assert rid
+    assert db.finish_run(rid, status=status, output_text=text,
+                         error="boom" if status == "error" else None)
+    return rid
+
+
+def _results(env) -> list[tuple[object, str]]:
+    return [(c, t) for c, t in env["fake"].sent() if t.startswith("✅ Result")]
+
+
+def test_done_runs_are_sent_once_to_every_paired_chat(env):
+    _turn_on(env)
+    _pair(env, 42)
+    _pair_group(env)
+    env["fake"].calls.clear()
+    rid = _run(env, "done", "Lamp found: 10 EUR")
+    env["poller"].run_once()
+    got = _results(env)
+    assert {c for c, _ in got} == {"42", "-500"} and len(got) == 2
+    assert "Lamp found: 10 EUR" in got[0][1] and "Agent: Scout" in got[0][1]
+    env["poller"].run_once()
+    env["poller"]._handler = None                  # a "restart"
+    env["poller"].run_once()
+    assert len(_results(env)) == 2
+    with db.db() as conn:
+        assert conn.execute("SELECT peers FROM channel_deliveries WHERE run_id = ?",
+                            (rid,)).fetchone()[0] == 2
+
+
+def test_errors_and_approval_requests_are_never_sent(env):
+    _turn_on(env)
+    _pair(env, 42)
+    _run(env, "error")
+    _run(env, "needs_approval")
+    env["poller"].run_once()
+    assert _results(env) == []
+
+
+def test_nothing_is_sent_while_off_or_from_before_it_was_on(env):
+    credentials.set_secret(telegram.TOKEN_NAME, TOKEN)
+    old = _run(env, "done", "old result")
+    with db.db() as conn:
+        conn.execute("UPDATE runs SET finished_at = finished_at - 100 WHERE id = ?", (old,))
+    env["poller"].run_once()                         # off: no call at all
+    assert env["fake"].calls == []
+    assert telegram.enable()["ok"]
+    _pair(env, 42)
+    env["poller"].run_once()
+    assert _results(env) == []
+    since = store.settings("telegram")["results_since"]
+    assert telegram.enable()["ok"]                   # enabling again keeps the start
+    assert store.settings("telegram")["results_since"] == since
+
+
+def test_a_result_with_no_paired_chat_is_not_kept_for_later(env):
+    _turn_on(env)
+    _run(env, "done")
+    env["poller"].run_once()
+    _pair(env, 42)
+    env["poller"].run_once()
+    assert _results(env) == []
+
+
+def test_long_results_are_cut_and_a_failed_chat_does_not_resend(env):
+    _turn_on(env)
+    _pair(env, 42)
+    _pair_group(env)
+    _run(env, "done", "z" * 9000)
+    real = env["fake"].__call__
+
+    def flaky(url, payload, timeout):
+        if url.endswith("/sendMessage") and str(payload.get("chat_id")) == "-500":
+            return {"ok": False, "error_code": 403, "description": "bot was kicked"}
+        return real(url, payload, timeout)
+    env["poller"]._handler = None
+    env["poller"]._transport = flaky
+    env["poller"].run_once()
+    env["poller"].run_once()
+    got = _results(env)
+    assert len(got) == 1 and got[0][0] == "42"
+    assert len(got[0][1]) < 4096 and got[0][1].endswith("[cut: open ConductLoop for the rest]")
+
+
+def test_a_second_process_cannot_send_the_same_result():
+    db.init_db()
+    with db.db() as conn:
+        conn.execute("DELETE FROM channel_deliveries")
+    assert store.claim_result("telegram", 987654, 1) is True
+    assert store.claim_result("telegram", 987654, 1) is False
+
+
+def test_migration_31_can_run_twice():
+    from ops_dashboard import migrations
+
+    fn = dict((n, f) for n, _d, f in migrations.MIGRATIONS)[31]
+    with db.db() as conn:
+        fn(conn)
+        fn(conn)
+        peers = {r[1] for r in conn.execute("PRAGMA table_info(channel_peers)")}
+        settings = {r[1] for r in conn.execute("PRAGMA table_info(channel_settings)")}
+        deliveries = {r[1] for r in conn.execute("PRAGMA table_info(channel_deliveries)")}
+    assert "chat_type" in peers and "results_since" in settings
+    assert {"channel", "run_id", "sent_at", "peers"} <= deliveries
+
+
+# ── step 2: the old bridge is gone ───────────────────────────────────────────
+
+def test_the_old_bridge_is_gone():
+    import importlib.util
+    from pathlib import Path
+
+    from ops_dashboard import briefing, ceo_channels
+
+    assert importlib.util.find_spec("ops_dashboard.telegram_bridge") is None
+    src = (Path(__file__).resolve().parent.parent / "ops_dashboard" / "server.py").read_text()
+    assert "/api/telegram/" not in src and "telegram_bridge" not in src
+    assert "telegram" not in ceo_channels.PLATFORMS
+    assert ceo_channels.bind_channel(1, "telegram", "123")["ok"] is False
+    assert briefing.deliver.__code__.co_names.count("telegram_bridge") == 0
+
+
+# ── step 2: the page ─────────────────────────────────────────────────────────
+
+def test_the_page_is_strict_and_builds_nothing_from_html():
+    from pathlib import Path
+
+    web = Path(__file__).resolve().parent.parent / "ops_dashboard" / "web"
+    page = (web / "channels.html").read_text()
+    js = (web / "channels.js").read_text()
+    assert "<script>" not in page and "style=" not in page
+    assert not re.search(r"\son[a-z]+\s*=", page)
+    assert "innerHTML" not in js and "eval(" not in js
+    for route in ("/api/channels", "/api/channels/telegram/", "/channels.css"):
+        assert route in js or route in page
+
+
+def test_page_route_sends_the_strict_policy_and_the_api_lists_agents(env):
+    from ops_dashboard import routes_channels
+    from ops_dashboard.routes_learning import PAGE_CSP
+
+    class H(_Handler):
+        headers_sent: dict = {}
+
+        def _is_local(self):
+            return True
+
+        def _send(self, code, raw, ctype, headers=None):
+            self.code, self.raw, self.headers_sent = code, raw, headers or {}
+
+    h = H()
+    assert router.dispatch(h, "GET", "/channels") is True
+    assert h.code == 200 and h.headers_sent.get("Content-Security-Policy") == PAGE_CSP
+    assert b"/channels.js" in h.raw
+    out = _call("GET", "/api/channels").out
+    assert {"id": env["agent_id"], "name": "Scout", "role": "research"} in out["agents"]
+    assert out["channels"]["telegram"]["default_agent"] == "Holding CEO"
+    assert routes_channels  # imported for its routes

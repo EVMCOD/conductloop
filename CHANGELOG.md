@@ -4,11 +4,19 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### Telegram: groups, the Holding CEO, and run results
+
+- **The Holding CEO answers by default.** A paired chat no longer has to pick an agent first: the member set as Holding CEO answers (or the Boardroom's Holding CEO reply when none is set). `/use <id>` still picks another agent, `/use ceo` goes back, and the default can be changed for every chat.
+- **Results of finished runs come to your chats.** When a task run finishes successfully, its result is sent to every paired chat, once — even across a restart. Only runs that finish after the channel was turned on; failed runs and approval requests are never sent.
+- **Groups can be paired.** Pair a group with the same one-time code from the app. In a group the bot answers only commands and messages that mention it; everything else is ignored. Everyone in a paired group can talk to your agents, so pair only groups you trust.
+- **A Channels page.** `/channels` (linked from Setup): turn Telegram on or off, choose who answers by default, create a pairing code, and see or unpair the paired chats.
+- **The old Telegram bridge is gone.** `telegram_bridge.py` and its `/api/telegram/*` routes (webhook, chat binding) are removed: it answered any chat with a paid AI reply. The daily recap no longer goes to Telegram, and a Boardroom CEO can no longer be bound to a Telegram chat (existing bindings stay listed and say they are not delivered). The Slack/Discord/Telegram webhook notifications set with `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are a separate feature and are unchanged.
+
 ### Talk to your agents from Telegram
 
 - **A Telegram channel, off until you turn it on.** Create a bot with @BotFather and put its token in Credentials → Channels: it goes to the keychain (or the encrypted vault), never to the database, the configuration or a log. Turn the channel on (`POST /api/channels/telegram/enable` checks the token with Telegram first), create a pairing code, and send `/pair <code>` to your bot from Telegram. From then on `/agents` lists your agents, `/use <id>` picks one, and anything else you write goes to that agent; its answer comes back in the chat.
-- **Only your chats are answered.** The code is valid for 10 minutes, works once, and closes after 5 wrong guesses; only its hash is kept. Any other chat gets one fixed sentence and costs nothing (no agent, no provider call). Groups and channels are never answered.
-- **Nothing is exposed to the internet.** Messages are fetched from this machine (long polling): no webhook, no open port. Each message is answered at most once, even if the app stops in the middle. If a webhook is still set on the bot (the older Boardroom bridge), the status says so instead of retrying. `OPS_DISABLE_CHANNELS=1` keeps the channel stopped. There is no page for it yet: the status, the switch and the pairing code are in the API (`/api/channels`).
+- **Only your chats are answered.** The code is valid for 10 minutes, works once, and closes after 5 wrong guesses; only its hash is kept. Any other chat gets one fixed sentence and costs nothing (no agent, no provider call). Groups are answered only once paired (see below).
+- **Nothing is exposed to the internet.** Messages are fetched from this machine (long polling): no webhook, no open port. Each message is answered at most once, even if the app stops in the middle. If a webhook is still set on the bot (from the old bridge), the status says so instead of retrying. `OPS_DISABLE_CHANNELS=1` keeps the channel stopped. The Channels page (below) shows the status, the switch and the pairing code; the API is `/api/channels`.
 
 ### CI: a hung package install fails in minutes
 

@@ -961,3 +961,33 @@ def _mig_30_channels(conn: sqlite3.Connection) -> None:
 
 MIGRATIONS.append((30, "chat channels: settings and paired peers (Telegram)",
                    _mig_30_channels))
+
+
+def _mig_31_channel_groups_and_results(conn: sqlite3.Connection) -> None:
+    """Telegram step 2: paired groups, and run results sent once.
+
+    Idempotent (GAP_FILL_FROM): columns are added only when missing.
+    ``channel_peers.chat_type`` is 'private', 'group' or 'supergroup'.
+    ``channel_settings.results_since``: only runs finished after the channel
+    was turned on are sent. ``channel_deliveries`` records each run result
+    sent (or skipped) once per channel, so nothing is sent twice.
+    """
+    def cols(table: str) -> set[str]:
+        return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+
+    if "chat_type" not in cols("channel_peers"):
+        conn.execute("ALTER TABLE channel_peers ADD COLUMN chat_type TEXT NOT NULL DEFAULT 'private'")
+    if "results_since" not in cols("channel_settings"):
+        conn.execute("ALTER TABLE channel_settings ADD COLUMN results_since INTEGER")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS channel_deliveries ("
+        "  channel TEXT NOT NULL,"
+        "  run_id INTEGER NOT NULL,"
+        "  sent_at INTEGER NOT NULL,"
+        "  peers INTEGER NOT NULL DEFAULT 0,"            # chats it was sent to
+        "  PRIMARY KEY (channel, run_id))"
+    )
+
+
+MIGRATIONS.append((31, "chat channels: paired groups and run results sent once",
+                   _mig_31_channel_groups_and_results))

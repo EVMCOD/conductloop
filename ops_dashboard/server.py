@@ -309,7 +309,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 "ceo_id": ceo_id,
                 "total": len(chs),
                 "enabled": sum(1 for c in chs if c["enabled"]),
-                "by_platform": {p: sum(1 for c in chs if c["platform"] == p) for p in ("telegram","discord")},
+                "by_platform": {p: sum(1 for c in chs if c["platform"] == p) for p in ("telegram", "discord", "slack")},
             }).encode(), "application/json")
             return
         if path.startswith("/api/boardroom/ceo/") and path.endswith("/events") and path.count("/") == 5:
@@ -350,30 +350,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
             from .seed_agents import STARTER_PACK
             self._send(200, json.dumps({"items": STARTER_PACK}).encode(), "application/json")
             return
-        # ── Telegram bridge (2026-07-01) ─────────────────────────────────
-        if path == "/api/telegram/status":
-            from . import telegram_bridge as _tg
-            self._send(200, json.dumps(_tg.status(), default=str).encode(), "application/json")
-            return
-        if path == "/api/telegram/chats":
-            from . import telegram_bridge as _tg
-            bound_only = (qs.get("bound", ["0"])[0] == "1")
-            self._send(200, json.dumps({"items": _tg.list_chats(bound_only=bound_only)}, default=str).encode(), "application/json")
-            return
-        if path == "/api/telegram/chats-bind":
-            from . import telegram_bridge as _tg
-            try: payload = self._read_json()
-            except Exception: payload = {}
-            chat_id = payload.get("chat_id")
-            try: chat_id_int = int(chat_id) if chat_id is not None else None
-            except Exception: chat_id_int = None
-            if chat_id_int is None:
-                self._send(400, b'{"error":"chat_id required"}', "application/json"); return
-            user = self._current_user()
-            user_id = (user.get("id") if user else None) or payload.get("user_id") or _boardroom.current_chairman_id()
-            out = _tg.bind_chat(chat_id_int, user_id)
-            self._send(200, json.dumps(out, default=str).encode(), "application/json")
-            return
         # ── Discord bridge (2026-07-01) ───────────────────────────────
         if path == "/api/discord/status":
             from . import discord_bridge as _dc
@@ -383,44 +359,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if path == "/api/slack/status":
             from . import slack_bridge as _sl
             self._send(200, json.dumps(_sl.status(), default=str).encode(), "application/json")
-            return
-        if path == "/api/telegram/set_webhook":
-            # Body: {url, secret?}. When no body is given, we try to read the
-            # public URL from NEXT_PUBLIC_SITE_URL or HOST env var.
-            from . import telegram_bridge as _tg
-            try: payload = self._read_json()
-            except Exception: payload = {}
-            public_url = (
-                (payload.get("url") or "").strip()
-                or os.environ.get("NEXT_PUBLIC_SITE_URL", "").strip()
-                or os.environ.get("OPS_PUBLIC_URL", "").strip()
-                or f"http://localhost:{os.environ.get('OPS_PORT', '7777')}"
-            )
-            secret = (payload.get("secret") or _tg.WEBHOOK_SECRET or None)
-            out = _tg.set_webhook(public_url, secret=secret)
-            self._send(200, json.dumps({"ok": out.get("ok"), "result": out, "public_url": public_url}, default=str).encode(), "application/json")
-            return
-        if path == "/api/telegram/clear_webhook":
-            from . import telegram_bridge as _tg
-            self._send(200, json.dumps(_tg.delete_webhook(), default=str).encode(), "application/json")
-            return
-        if path == "/api/telegram/webhook":
-            # Telegram → server delivery endpoint.
-            from . import telegram_bridge as _tg
-            secret_header = self.headers.get("X-Telegram-Bot-Api-Secret-Token")
-            if not _tg._authorized(secret_header):
-                self._send(403, b'{"error":"unauthorized"}', "application/json"); return
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-                body = self.rfile.read(length).decode("utf-8") if length else ""
-                update = json.loads(body) if body else {}
-            except Exception as e:
-                self._send(400, json.dumps({"error": f"bad json: {e}"}).encode(), "application/json"); return
-            try:
-                result = _tg.handle_update(update)
-                self._send(200, json.dumps(result, default=str).encode(), "application/json")
-            except Exception as e:
-                self._send(500, json.dumps({"error": str(e)}).encode(), "application/json")
             return
 
         if path in ("/", "/index.html"):
@@ -1964,52 +1902,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 synthesis = _boardroom_post.recap_synthesis(payload, force=True)
                 self._send(200, json.dumps({"synthesis": synthesis, "regenerated_at": int(__import__('time').time())}, default=str).encode(), "application/json")
                 return
-            # ── Telegram bridge (2026-07-01): POST webhook delivery + set/clear webhook ──
-            if path == "/api/telegram/webhook":
-                from . import telegram_bridge as _tg_post
-                secret_header = self.headers.get("X-Telegram-Bot-Api-Secret-Token")
-                if not _tg_post._authorized(secret_header):
-                    self._send(403, b'{"error":"unauthorized"}', "application/json"); return
-                try:
-                    length = int(self.headers.get("Content-Length", "0"))
-                    body = self.rfile.read(length).decode("utf-8") if length else ""
-                    update = json.loads(body) if body else {}
-                except Exception as e:
-                    self._send(400, json.dumps({"error": f"bad json: {e}"}).encode(), "application/json"); return
-                try:
-                    result = _tg_post.handle_update(update)
-                    self._send(200, json.dumps(result, default=str).encode(), "application/json")
-                except Exception as e:
-                    self._send(500, json.dumps({"error": str(e)}).encode(), "application/json")
-                return
-            if path == "/api/telegram/chats-bind":
-                from . import telegram_bridge as _tg_post
-                try: payload = self._read_json()
-                except Exception: payload = {}
-                chat_id = payload.get("chat_id")
-                try: chat_id_int = int(chat_id) if chat_id is not None else None
-                except Exception: chat_id_int = None
-                if chat_id_int is None:
-                    self._send(400, b'{"error":"chat_id required"}', "application/json"); return
-                user = self._current_user()
-                user_id = (user.get("id") if user else None) or payload.get("user_id") or _boardroom_post.current_chairman_id()
-                out = _tg_post.bind_chat(chat_id_int, user_id)
-                self._send(200, json.dumps(out, default=str).encode(), "application/json")
-                return
-            if path == "/api/telegram/set_webhook":
-                from . import telegram_bridge as _tg_post
-                try: payload = self._read_json()
-                except Exception: payload = {}
-                public_url = (
-                    (payload.get("url") or "").strip()
-                    or os.environ.get("NEXT_PUBLIC_SITE_URL", "").strip()
-                    or os.environ.get("OPS_PUBLIC_URL", "").strip()
-                    or f"http://localhost:{os.environ.get('OPS_PORT', '7777')}"
-                )
-                secret = (payload.get("secret") or _tg_post.WEBHOOK_SECRET or None)
-                out = _tg_post.set_webhook(public_url, secret=secret)
-                self._send(200, json.dumps({"ok": out.get("ok"), "result": out, "public_url": public_url}, default=str).encode(), "application/json")
-                return
             # ── Discord bridge POST endpoints (2026-07-01) ────────────────────
             if path == "/api/slack/test_send":
                 from . import slack_bridge as _sl_post
@@ -2087,11 +1979,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     self._send(400, b'{"error":"content required"}', "application/json"); return
                 out = _dc_post.send_message(content)
                 self._send(200, json.dumps(out, default=str).encode(), "application/json")
-                return
-            if path == "/api/telegram/clear_webhook":
-                from . import telegram_bridge as _tg_post
-                out = _tg_post.delete_webhook()
-                self._send(200, json.dumps({"ok": out.get("ok"), "result": out}, default=str).encode(), "application/json")
                 return
             if path == "/api/brain/memory":
                 self._brain_memory_set()

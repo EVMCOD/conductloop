@@ -64,7 +64,6 @@ SIDE_EFFECT_GETS = frozenset({
     "/api/digest", "/api/digest/ai-summary", "/api/github/sync",
     "/api/docs/create",
     "/api/revenue/seed-mock", "/api/sentry/seed-mock", "/api/cost/seed-mock", "/api/ga/seed-mock",
-    "/api/telegram/set_webhook", "/api/telegram/clear_webhook", "/api/telegram/chats-bind",
     "/api/voice/transcribe",
     "/api/webhooks/test",
 })

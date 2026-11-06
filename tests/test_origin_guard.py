@@ -187,7 +187,7 @@ def test_remote_same_host_origin_still_needs_auth(srv):
 
 def test_side_effect_gets_are_guarded(srv):
     call = srv["call"]
-    for p in ("/api/revenue/seed-mock", "/api/webhooks/test", "/api/telegram/clear_webhook",
+    for p in ("/api/revenue/seed-mock", "/api/webhooks/test", "/api/ga/seed-mock",
               "/api/auth/logout", "/api/brain/ask", "/api/brain/briefing", "/api/digest",
               "/api/github/sync"):
         _forbidden(call("GET", p, headers={"Origin": EVIL}), "origin_not_allowed")

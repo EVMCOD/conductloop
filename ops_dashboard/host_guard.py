@@ -29,7 +29,7 @@ Policy
   that authority", which is the situation; 403 would suggest a permissions
   problem that logging in could fix.
 * Tunnels (cloudflared, ngrok, Tailscale Serve/Funnel) that deliver
-  Telegram webhooks to localhost all add ``X-Forwarded-For``, so those requests
+  chat webhooks (Slack, Discord) to localhost all add ``X-Forwarded-For``, so those requests
   are already "remote" for ``_is_local()`` and this check does not touch them.
   A tunnel configured to strip X-Forwarded-For *and* keep the public Host would
   now get 421 — before this check it was treated as the trusted local owner.

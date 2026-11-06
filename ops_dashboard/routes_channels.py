@@ -1,5 +1,7 @@
 """Chat channels (Telegram): status, on/off, pairing, paired chats.
 
+GET    /channels                              the page (strict CSP, this machine only)
+
 GET    /api/channels                          every channel's status — never a token
 POST   /api/channels/telegram/enable          check the token with Telegram, then turn on
 POST   /api/channels/telegram/disable         turn off (and close any open pairing code)
@@ -14,7 +16,12 @@ from __future__ import annotations
 import json
 
 from .channels import store, telegram
+from .routes_learning import PAGE_CSP, _serve_web
 from .routing import router
+
+router.add("GET", "/channels", _serve_web("channels.html", "text/html; charset=utf-8",
+                                          {"Content-Security-Policy": PAGE_CSP}))
+router.add("GET", "/channels.css", _serve_web("channels.css", "text/css; charset=utf-8"))
 
 
 def _send(handler, code: int, obj: dict) -> None:
@@ -35,7 +42,9 @@ def _body(handler) -> dict:
 
 @router.get("/api/channels")
 def channels_status(handler) -> None:
-    _send(handler, 200, {"ok": True, "channels": {"telegram": telegram.status()}})
+    agents = [{"id": a["id"], "name": a.get("name") or str(a["id"]), "role": a.get("role") or ""}
+              for a in telegram._agents()]
+    _send(handler, 200, {"ok": True, "channels": {"telegram": telegram.status()}, "agents": agents})
 
 
 @router.post("/api/channels/telegram/enable")

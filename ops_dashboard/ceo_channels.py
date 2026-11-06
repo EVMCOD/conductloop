@@ -7,7 +7,9 @@ as if the chairman had typed them in the thread.
 Storage: ceo_channels table (see db.py).
 
 Bridging:
-  - Telegram: uses the existing bot token via telegram_bridge.send_message(chat_id, text).
+  - Telegram: no longer published to (2026-11-06). The Telegram channel
+    (``channels/telegram.py``) sends only run results to paired chats; old
+    rows stay listed and report that they are not delivered.
     For inbound, the webhook handler should call route_inbound(ceo_id, text) which
     appends a chairman message to the CEO's thread.
   - Discord: uses the existing webhook URL pattern from discord_channels table,
@@ -22,7 +24,7 @@ import time
 from . import boardroom as _br
 from . import db
 
-PLATFORMS = ("telegram", "discord", "slack")
+PLATFORMS = ("discord", "slack")        # telegram removed 2026-11-06 (see above)
 DIRECTIONS = ("outbound", "inbound", "both")
 
 
@@ -150,7 +152,7 @@ def publish_outbound(ceo_id: int, text: str, *, kind: str = "ceo_message") -> di
     Returns {ok, deliveries: [{channel_id, platform, target_id, ok, error}, ...]}
     Never raises — best-effort publish, errors are stored per-channel.
     """
-    from . import discord_bridge, slack_bridge, telegram_bridge
+    from . import discord_bridge, slack_bridge
 
     channels = list_channels(ceo_id)
     outbound = [c for c in channels if c["enabled"] and c["direction"] in ("outbound", "both")]
@@ -161,9 +163,8 @@ def publish_outbound(ceo_id: int, text: str, *, kind: str = "ceo_message") -> di
     for ch in outbound:
         try:
             if ch["platform"] == "telegram":
-                out = telegram_bridge.send_message(ch["target_id"], text)
-                ok = bool(out.get("ok"))
-                err = None if ok else out.get("description") or out.get("error")
+                ok, err = False, ("not delivered: Telegram sends only run results now "
+                                  "(Channels → Telegram)")
             elif ch["platform"] == "discord":
                 out = discord_bridge.send_message(
                     content=f"**[CEO #{ceo_id}]** {text}",
