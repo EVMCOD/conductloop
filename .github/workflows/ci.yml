@@ -96,6 +96,9 @@ jobs:
         run: pip install . --no-deps
 
       - name: Install bubblewrap and ffmpeg (real sandbox and real mixing)
+        # apt on the hosted runner has hung for 15-30 minutes several times;
+        # fail this step fast so a re-run is the obvious next move.
+        timeout-minutes: 10
         # tests/test_sessions_code_tools.py proves network/write isolation for
         # real; CONDUCTLOOP_REQUIRE_SANDBOX makes it fail instead of skipping.
         # ffmpeg is the same idea for the media pipeline: the narration and
