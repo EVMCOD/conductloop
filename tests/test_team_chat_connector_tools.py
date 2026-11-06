@@ -138,9 +138,14 @@ def test_the_agent_prompt_says_what_it_can_reach(env, monkeypatch):
 
 
 def test_without_connectors_the_answer_still_streams(env, monkeypatch):
-    """The common case must not change: no connectors, no extra round trip."""
-    from ops_dashboard import team_chat
+    """No connectors and no usable browse: keep streaming (no tool round trip).
 
+    On macOS the browse tool is usable, so the tools path is taken instead —
+    pin browse off here so this test stays about connectors alone.
+    """
+    from ops_dashboard import platform_caps, team_chat
+
+    monkeypatch.setattr(platform_caps, "browser_supported", lambda: False)
     provider = _ToolsProvider()
     monkeypatch.setattr(team_chat.brain, "resolve_provider", lambda *a, **k: provider)
 

@@ -22,7 +22,7 @@ Team agents (chat, scheduled triggers, Telegram) get a `browse` tool:
   waits for your approval in the Browser tab)
 
 On Linux and Windows the tool returns `platform_unsupported` and does not open
-a session. Caps default to about 50 ¢ and 10 steps; `OPS_BROWSE_TIMEOUT`
+a session. Caps default to about 50 ¢ and 5 steps; `OPS_BROWSE_TIMEOUT`
 (seconds, max 300) is the wall-clock limit for one delegated run. The session
 stays in Browser if it times out, so you can take over.
 

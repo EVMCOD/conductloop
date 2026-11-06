@@ -20,6 +20,11 @@ def _no_real_browser(monkeypatch):
     monkeypatch.setenv("OPS_BROWSE_ALLOW_MOCK", "")
 
 
+def test_default_step_cap_is_five():
+    assert bt.DEFAULT_MAX_ITERATIONS == 5
+    assert bt.DEFAULT_BUDGET_CENTS == 50
+
+
 def test_tool_spec_matches_brain_shape():
     spec = bt.tool_spec()
     assert spec["name"] == "browse"

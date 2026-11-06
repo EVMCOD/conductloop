@@ -7,7 +7,7 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 ### Agents can ask the in-app browser to look something up
 
 - **A `browse` tool for team agents.** Chat, triggers and Telegram can delegate a short browsing task to a visible Browser tab. The agent gets a text summary back — never a screenshot. Default mode is *read* (open / navigate / read / back / scroll); *act* also allows click / type / select, and every select (and any other effect) waits for your approval, same as a browser session you started by hand.
-- **macOS only for now.** On other platforms the tool refuses with `platform_unsupported` and costs nothing beyond the refusal. You can still watch the tab, pause it or take control while the agent waits. Caps: about 50 ¢ and 10 steps by default (`OPS_BROWSE_TIMEOUT` for the wall clock, up to 5 minutes).
+- **macOS only for now.** On other platforms the tool refuses with `platform_unsupported` and costs nothing beyond the refusal. You can still watch the tab, pause it or take control while the agent waits. Caps: about 50 ¢ and 5 steps by default (`OPS_BROWSE_TIMEOUT` for the wall clock, up to 5 minutes).
 
 ### Choose the Holding CEO
 

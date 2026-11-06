@@ -23,7 +23,7 @@ TOOL_NAME = "browse"
 # Modest defaults: a delegated browse is a side quest of a chat answer, not a
 # long autonomous session. The user can open /browser and take over.
 DEFAULT_BUDGET_CENTS = 50          # 0.50 EUR
-DEFAULT_MAX_ITERATIONS = 10
+DEFAULT_MAX_ITERATIONS = 5
 DEFAULT_TIMEOUT_S = 90.0           # wall clock for the whole run
 HARD_TIMEOUT_S = 300.0             # absolute ceiling (OPS_BROWSE_TIMEOUT)
 
