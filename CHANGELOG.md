@@ -4,6 +4,11 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### Discord channel on the Channels page (step 1)
+
+- **A Discord channel, same design as Telegram.** Create a bot in the Discord Developer Portal, put its token in Credentials → Channels (`channel.discord.bot_token`; keychain or vault, never the database). Off until you turn it on. Pair DMs and server text channels with a one-time code from the app (`/pair <code>`). In a server channel the bot answers only commands and mentions, and only from people on that channel's list (managed on `/channels`; whoever paired is put on it). Others who address the bot get a short fixed notice once ever, with no agent call. Default agent is the Holding CEO; `/use` changes it. Finished run results go to paired DMs and privately to allowed members (unreachable members are flagged). The Boardroom Discord *webhook* bridge (`DISCORD_WEBHOOK_URL`) is unchanged and separate.
+- **Step 1 scope.** Live inbound events (Discord Gateway) come in step 2; until then the channel validates the token, pairs, answers injected messages in tests, and pushes run results while on. Group member ids accept Discord snowflakes (up to 20 digits).
+
 ### Discord talks to the Holding CEO you chose
 
 - **The Discord bridge uses the Boardroom's Holding CEO.** A free-text message in the bound channel is answered by the AI agent set as Holding CEO (the same choice as Telegram), woken like any other agent. If none is set, or that member is no longer an AI agent, the Boardroom's own Holding CEO reply answers, as before. `/help` names who will answer. Status includes the choice. No live Discord in tests.
