@@ -184,9 +184,10 @@ MAX_SEEN = 20                  # not-allowed people kept per group (newest)
 
 
 def _clean_user_id(user_id) -> str | None:
-    """A Telegram user id: a positive whole number. None when it is not."""
+    """A chat-platform user id: a positive whole number (Telegram ids, or a
+    Discord snowflake up to 20 digits). None when it is not."""
     s = str(user_id).strip()
-    if isinstance(user_id, bool) or not s.isdigit() or len(s) > 15 or int(s) <= 0:
+    if isinstance(user_id, bool) or not s.isdigit() or len(s) > 20 or int(s) <= 0:
         return None
     return str(int(s))
 

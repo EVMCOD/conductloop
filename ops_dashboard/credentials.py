@@ -40,8 +40,11 @@ GROUPS = {
 # Chat channels whose bot token the panel can hold (vault name → label).
 CHANNEL_SECRETS = {
     "channel.telegram.bot_token": "Telegram bot token (from @BotFather)",
+    "channel.discord.bot_token": "Discord bot token (Developer Portal → Bot)",
 }
 _TELEGRAM_TOKEN_SHAPE = re.compile(r"^\d{5,12}:[A-Za-z0-9_-]{30,64}$")
+# Discord bot tokens are three base64url segments; keep the check loose.
+_DISCORD_TOKEN_SHAPE = re.compile(r"^[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{20,}$")
 
 
 def _brain_rows() -> list[dict[str, Any]]:
@@ -203,6 +206,9 @@ def set_secret(name: str, value: str) -> dict[str, Any]:
             # The message never repeats the value.
             raise ValueError("that does not look like a Telegram bot token "
                              "(123456789:ABC… from @BotFather)")
+        if name == "channel.discord.bot_token" and not _DISCORD_TOKEN_SHAPE.match(value):
+            raise ValueError("that does not look like a Discord bot token "
+                             "(from the Discord Developer Portal → Bot)")
         secret_vault.set(name, value)
         return {"name": name, "where": secret_vault.where(name)}
     raise ValueError(f"'{name}' is not a credential of the app")

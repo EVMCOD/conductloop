@@ -88,22 +88,35 @@ option of the Boardroom CEO channels and its `telegram_chats` table
 webhooks only. If its webhook is still set on your bot,
 the status says so: remove it (`deleteWebhook`) and the channel starts reading.
 
-## Discord (Boardroom webhook)
+## Discord (Channels page) — step 1
 
-The Boardroom Discord bridge (`ops_dashboard/discord_bridge.py`) is separate
-from the Telegram channel above: one outbound webhook URL
-(`DISCORD_WEBHOOK_URL`), optional inbound POSTs to `/api/discord/webhook`.
+Same design as Telegram above: bot token in Credentials → Channels
+(`channel.discord.bot_token`), off by default, pairing codes from the app,
+DMs plus server text channels (answers only mentions/commands, per-member
+allowlist on `/channels`), run results only to allowed members privately,
+unreachable flag, once-ever not-on-list notice with no token spend, default
+agent = Holding CEO with `/use` to change.
 
-**Who answers a free-text message** (same rule as Telegram):
+1. In the [Discord Developer Portal](https://discord.com/developers/applications),
+   create an application → Bot → copy the token. Enable Message Content Intent
+   (needed in step 2 for reading messages).
+2. In ConductLoop, **Credentials → Channels → Discord bot token**: paste it.
+3. On **Channels**, turn Discord on (the token is checked with Discord
+   `GET /users/@me` first).
+4. Create a pairing code and send `/pair <code>` to the bot in a DM or a
+   server text channel.
 
-1. The AI agent chosen as Holding CEO in the Boardroom
-   (`boardroom_settings.holding_ceo_id`), woken like any other agent.
-2. If none is set, or that member is no longer an AI agent, the Boardroom's
-   own Holding CEO reply (`chat_with_holding_ceo`).
+**Step 1 vs step 2.** Step 1 ships the token, on/off, pairing, allowlist,
+Holding CEO / `/use`, run-result DMs, and the API under
+`/api/channels/discord/…`. Live inbound messages use the Discord Gateway and
+are step 2 (`status.inbound` is `gateway_pending` until then). Tests inject
+MESSAGE_CREATE-shaped payloads; they never call Discord.
 
-`/help` names who will answer. `GET /api/discord/status` includes the choice
-(`holding_ceo`). Slash commands (`/inbox`, `/recap`, `/vault`, `/portfolio`)
-are unchanged.
+### Discord (Boardroom webhook) — separate
 
-A full Discord channel on the Channels page (pairing, groups, run results) is
-still future work.
+The Boardroom Discord bridge (`ops_dashboard/discord_bridge.py`) is **not**
+this channel: one outbound webhook URL (`DISCORD_WEBHOOK_URL`), optional
+inbound POSTs to `/api/discord/webhook`. Free-text there still goes to the
+chosen Holding CEO (same rule as Telegram). Slash commands (`/inbox`,
+`/recap`, `/vault`, `/portfolio`) are unchanged. Keep using it for Boardroom
+broadcasts; use the Channels page Discord bot for paired chats and run results.

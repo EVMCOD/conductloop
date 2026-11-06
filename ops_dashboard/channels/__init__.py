@@ -1,9 +1,9 @@
 """Chat channels: talk to your agents from a chat app, and get the answers back.
 
-Telegram is the first channel (``telegram``). Every channel is off until the
-user turns it on, its token lives in the vault (never in the database, the
-configuration or a log), and it only talks to chats the user paired from the
-app with a one-time code. See ``docs/CHANNELS.md``.
+Telegram and Discord are the chat channels (``telegram``, ``discord``). Every
+channel is off until the user turns it on, its token lives in the vault (never
+in the database, the configuration or a log), and it only talks to chats the
+user paired from the app with a one-time code. See ``docs/CHANNELS.md``.
 """
 from __future__ import annotations
 
@@ -23,13 +23,14 @@ def start() -> None:
     """Start the channel workers. They idle (no network) while a channel is off."""
     if disabled_by_env():
         return
-    from . import telegram
+    from . import discord, telegram
     with _lock:
-        runner = _runners.get("telegram")
-        if runner is None:
-            runner = telegram.Poller()
-            _runners["telegram"] = runner
-        runner.start()  # type: ignore[attr-defined]
+        for name, mod in (("telegram", telegram), ("discord", discord)):
+            runner = _runners.get(name)
+            if runner is None:
+                runner = mod.Poller()
+                _runners[name] = runner
+            runner.start()  # type: ignore[attr-defined]
 
 
 def stop() -> None:

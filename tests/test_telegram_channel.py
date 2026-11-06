@@ -725,7 +725,7 @@ def test_member_api_refuses_bad_input(env):
     _pair_group(env)
     group = store.peer("telegram", "-500")["id"]
     private = store.peer("telegram", "42")["id"]
-    for bad in ("", "abc", "-5", "0", "1" * 16, None, True):
+    for bad in ("", "abc", "-5", "0", "1" * 21, None, True):  # >20 digits (Discord snowflake max)
         assert _call("POST", f"/api/channels/telegram/peers/{group}/members",
                      {"user_id": bad}).code == 400, bad
     assert _call("POST", f"/api/channels/telegram/peers/{private}/members",
