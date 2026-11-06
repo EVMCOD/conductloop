@@ -1032,4 +1032,35 @@ def _mig_33_channel_members(conn: sqlite3.Connection) -> None:
     )
 
 
+
 MIGRATIONS.append((33, "chat channels: allowed members of paired groups", _mig_33_channel_members))
+
+
+def _mig_35_channel_member_reachability(conn: sqlite3.Connection) -> None:
+    """Reachability of group members for private run-result DMs, and the
+    rate-limit clock for the "not on this group's list" notice.
+
+    Telegram bots can only DM a user who has opened a chat with the bot. Run
+    results for a paired group go to each allowed member by DM; a 403
+    (cannot initiate / blocked / deactivated) is recorded so we stop retrying
+    until that person writes to the bot. ``denied_notice_at`` caps the fixed
+    notice to people not on the list (once per 24 h). Idempotent
+    (``PRAGMA table_info`` + ``ADD COLUMN``). Numbered 35: 34 is the Holding
+    CEO picker on main (#116); gap-fill runs whichever lands later.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(channel_members)")}
+    if not cols:
+        return
+    if "reachable" not in cols:
+        conn.execute("ALTER TABLE channel_members ADD COLUMN reachable INTEGER")
+    if "reach_error" not in cols:
+        conn.execute("ALTER TABLE channel_members ADD COLUMN reach_error TEXT")
+    if "reach_at" not in cols:
+        conn.execute("ALTER TABLE channel_members ADD COLUMN reach_at INTEGER")
+    if "denied_notice_at" not in cols:
+        conn.execute("ALTER TABLE channel_members ADD COLUMN denied_notice_at INTEGER")
+
+
+MIGRATIONS.append((35, "chat channels: member DM reachability and denied-notice clock",
+                   _mig_35_channel_member_reachability))
+

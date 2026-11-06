@@ -87,6 +87,7 @@
   }
 
   // A group's list: only these people can talk to the agents in the group.
+  // Results of finished runs are DMed to them; unreachable = bot cannot DM yet.
   function membersOf(p) {
     var box = document.createElement("div");
     box.className = "members";
@@ -96,7 +97,7 @@
     var title = document.createElement("p");
     title.className = "hint";
     title.textContent = allowed.length
-      ? "Can talk to the agents here:"
+      ? "Can talk to the agents here (results come to them privately):"
       : "Nobody can talk to the agents here yet. Add people below.";
     box.appendChild(title);
     allowed.forEach(function (m) {
@@ -104,6 +105,12 @@
       row.className = "row between member";
       var name = document.createElement("span");
       name.textContent = personName(m);
+      if (m.reachable === false) {
+        var flag = document.createElement("span");
+        flag.className = "pill warn";
+        flag.textContent = "unreachable — ask them to send /start to the bot";
+        name.appendChild(flag);
+      }
       row.appendChild(name);
       row.appendChild(button("Remove", "ghost small", function () { removeMember(p.id, m.user_id); }));
       box.appendChild(row);
@@ -111,7 +118,7 @@
     if (asked.length) {
       var t2 = document.createElement("p");
       t2.className = "hint";
-      t2.textContent = "Wrote to the bot here but are not on the list (ignored):";
+      t2.textContent = "Wrote to the bot here but are not on the list (told once per day):";
       box.appendChild(t2);
       asked.forEach(function (m) {
         var row = document.createElement("div");

@@ -24,8 +24,11 @@ the first channel; Discord comes next.
    changes the default for every chat. Long answers are split; very long
    ones are cut.
 6. **Run results**: when a task run finishes successfully, its result is
-   sent to every paired chat — once. Only runs that finish after the channel
-   was turned on; failed runs and approval requests are never sent.
+   sent once — to each paired private chat, and privately (DM) to each
+   person on a paired group's list. Only runs that finish after the channel
+   was turned on; failed runs and approval requests are never sent. URL
+   alerts and the daily digest never go to Telegram (Slack/Discord webhooks
+   only).
 
 | Route | What it does |
 |---|---|
@@ -49,16 +52,23 @@ the first channel; Discord comes next.
   costs nothing. Telegram channels are ignored.
 - **Groups.** A group is paired with the same one-time code from the app.
   In a group the bot answers only commands and messages that mention it
-  (`@yourbot …`), and only from the people on that group's list; anything
-  else is ignored and costs nothing (no agent, no provider call).
+  (`@yourbot …`), and only from the people on that group's list. Someone not
+  on the list who addresses the bot gets a short fixed notice (no agent, no
+  provider call), at most once per 24 hours (`store.DENIED_NOTICE_EVERY`).
 - **A group's list.** Whoever sent the pairing code in the group is put on
   it. Add or remove others on the Channels page by Telegram user id. The
-  easy way to find one: they mention the bot in the group; they are ignored,
-  and show up on the page under the group with an **Allow** button (the 20
-  newest are kept; only people who wrote *to the bot*, never the rest of the
-  group). A list with nobody on it means nobody can talk to the agents
-  there. Bots and anonymous admins are always ignored. Run results still go
-  to the whole group.
+  easy way to find one: they mention the bot in the group; they get the
+  notice above, and show up on the page under the group with an **Allow**
+  button (the 20 newest are kept; only people who wrote *to the bot*, never
+  the rest of the group). A list with nobody on it means nobody can talk to
+  the agents there. Bots and anonymous admins are always ignored. Re-pairing
+  the same group keeps its list; only **Unpair** deletes it.
+- **Run results to groups are private.** Each allowed member receives the
+  result as a DM. Telegram only lets a bot message a user who has opened a
+  chat with it: if a DM fails with 403 (cannot initiate / blocked /
+  deactivated), that member is marked *unreachable* on the Channels page
+  (ask them to send `/start` to the bot) and is not retried until they write
+  to the bot privately. The group chat itself never gets a result.
 - **One answer per message.** The update offset is saved before the message
   is handled, so a crash or a restart never answers (and pays for) the same
   message twice.

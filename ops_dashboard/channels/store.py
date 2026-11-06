@@ -1,4 +1,4 @@
-"""Settings, paired peers and group members of the chat channels (migrations 30-33).
+"""Settings, paired peers and group members of the chat channels (migrations 30-33, 35).
 
 Nothing here is a secret. The bot token is in the vault; a pairing code is
 kept only as a SHA-256 hash, only until it is used, expires, or has been
@@ -200,11 +200,20 @@ def _clean_username(username) -> str | None:
 
 def members(channel: str, peer_id: str) -> list[dict]:
     with db.db() as conn:
-        rows = conn.execute("SELECT user_id, username, allowed, added_by, added_at, last_seen_at "
-                            "FROM channel_members WHERE channel = ? AND peer_id = ? "
-                            "ORDER BY allowed DESC, COALESCE(last_seen_at, added_at) DESC",
-                            (channel, str(peer_id))).fetchall()
-    return [{**dict(r), "allowed": bool(r["allowed"])} for r in rows]
+        rows = conn.execute(
+            "SELECT user_id, username, allowed, added_by, added_at, last_seen_at, "
+            "       reachable, reach_error, reach_at, denied_notice_at "
+            "FROM channel_members WHERE channel = ? AND peer_id = ? "
+            "ORDER BY allowed DESC, COALESCE(last_seen_at, added_at) DESC",
+            (channel, str(peer_id))).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["allowed"] = bool(r["allowed"])
+        # reachable: True / False / None (never tried)
+        d["reachable"] = None if r["reachable"] is None else bool(r["reachable"])
+        out.append(d)
+    return out
 
 
 def member_allowed(channel: str, peer_id: str, user_id) -> bool:
@@ -262,6 +271,77 @@ def remove_member(channel: str, peer_id: str, user_id) -> bool:
         cur = conn.execute("DELETE FROM channel_members WHERE channel = ? AND peer_id = ? "
                            "AND user_id = ?", (channel, str(peer_id), uid))
         return cur.rowcount == 1
+
+
+# ── reachability + denied-notice clock (migration 35) ───────────────────
+
+DENIED_NOTICE_EVERY = 24 * 60 * 60   # seconds: one "not on the list" notice per user per group
+
+
+def member_reachable(channel: str, peer_id: str, user_id) -> bool | None:
+    """True / False / None (never tried) for an allowed member's DM."""
+    uid = _clean_user_id(user_id)
+    if uid is None:
+        return None
+    with db.db() as conn:
+        row = conn.execute("SELECT reachable FROM channel_members WHERE channel = ? AND peer_id = ? "
+                           "AND user_id = ?", (channel, str(peer_id), uid)).fetchone()
+    if row is None or row["reachable"] is None:
+        return None
+    return bool(row["reachable"])
+
+
+def mark_reachable(channel: str, peer_id: str, user_id, ok: bool,
+                   error: str | None = None) -> None:
+    """Record whether a DM to this member worked. Unreachable members are
+    skipped on the next run-result push until they write to the bot."""
+    uid = _clean_user_id(user_id)
+    if uid is None:
+        return
+    err = (error or "").strip()[:200] or None
+    with db.db() as conn:
+        conn.execute(
+            "UPDATE channel_members SET reachable = ?, reach_error = ?, reach_at = ? "
+            "WHERE channel = ? AND peer_id = ? AND user_id = ?",
+            (1 if ok else 0, None if ok else err, _now(), channel, str(peer_id), uid))
+
+
+def note_user_can_receive_dm(channel: str, user_id) -> None:
+    """The user wrote to the bot in a private chat: any earlier 'unreachable'
+    flag across groups is cleared so the next result push retries the DM."""
+    uid = _clean_user_id(user_id)
+    if uid is None:
+        return
+    with db.db() as conn:
+        conn.execute(
+            "UPDATE channel_members SET reachable = NULL, reach_error = NULL, reach_at = ? "
+            "WHERE channel = ? AND user_id = ? AND reachable = 0",
+            (_now(), channel, uid))
+
+
+def should_send_denied_notice(channel: str, peer_id: str, user_id) -> bool:
+    """True when this not-on-list person has not been told within DENIED_NOTICE_EVERY."""
+    uid = _clean_user_id(user_id)
+    if uid is None:
+        return False
+    with db.db() as conn:
+        row = conn.execute("SELECT denied_notice_at FROM channel_members "
+                           "WHERE channel = ? AND peer_id = ? AND user_id = ?",
+                           (channel, str(peer_id), uid)).fetchone()
+    if row is None:
+        return True
+    last = int(row["denied_notice_at"] or 0)
+    return (_now() - last) >= DENIED_NOTICE_EVERY
+
+
+def record_denied_notice(channel: str, peer_id: str, user_id) -> None:
+    uid = _clean_user_id(user_id)
+    if uid is None:
+        return
+    with db.db() as conn:
+        conn.execute("UPDATE channel_members SET denied_notice_at = ? "
+                     "WHERE channel = ? AND peer_id = ? AND user_id = ?",
+                     (_now(), channel, str(peer_id), uid))
 
 
 # ── run results (sent once) ─────────────────────────────────────────────

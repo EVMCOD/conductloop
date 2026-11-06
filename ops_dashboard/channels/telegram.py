@@ -17,15 +17,18 @@ How it works:
   provider call. In a group the bot answers only a command or a message that
   mentions it (``@botname``), and only from the people on that group's list
   (``channel_members``, managed on the Channels page; the person who paired
-  the group is put on it). Anyone else in the group is ignored: no answer,
-  no agent, no provider call.
+  the group is put on it). Anyone else who addresses the bot gets a short
+  fixed notice (no agent, no provider call), at most once per 24 hours.
 * Who answers: the agent picked in the chat (``/agents``, ``/use <id>``),
   else the channel's default agent, else the Holding CEO (the member set as
   Holding CEO, or the Boardroom's Holding CEO reply). An agent is woken with
   ``scheduler._wake_agent`` (deadline, logged in ``agent_logs``).
-* Run results: when a task run finishes ``done``, its result is sent to every
-  paired chat, once (``channel_deliveries``). Only runs that finish after
-  the channel was turned on; never errors, never approval requests.
+* Run results: when a task run finishes ``done``, its result is sent once
+  (``channel_deliveries``): to each paired private chat, and privately (DM)
+  to each allowed member of a paired group. Only runs that finish after the
+  channel was turned on; never errors, never approval requests. Members the
+  bot cannot DM (403) are flagged on the Channels page and not retried until
+  they write to the bot.
 
 The old Boardroom bridge (``telegram_bridge.py``, webhook) was removed on
 2026-11-06. Telegram refuses polling while a webhook is set on the bot; that
@@ -55,6 +58,9 @@ IDLE_WAIT = 5.0              # seconds between checks while the channel is off
 MAX_CHUNK = 4000             # Telegram's limit is 4096 characters per message
 MAX_CHUNKS = 4               # longer answers are cut, and say so
 STRANGER_REPLY_EVERY = 600   # seconds: one "this bot is private" per chat
+# One "not on this group's list" notice per user per group; period lives in store.
+NOT_ON_LIST = ("You're not on this group's list in ConductLoop. Ask someone who is "
+               "to add you on the Channels page.")
 
 HELP = (
     "ConductLoop\n\n"
@@ -62,10 +68,12 @@ HELP = (
     "/use <id>  talk to that agent (/use ceo: back to the Holding CEO)\n"
     "/help  this message\n\n"
     "Anything else you write goes to the agent you picked (in a group: mention me).\n"
-    "Results of finished runs are sent here."
+    "Results of finished runs are sent here (in a group: privately to people on the list)."
 )
 GROUP_PAIRED = ("Only the people on this group's list in ConductLoop (Channels → Telegram) "
-                "can talk to the agents here. You are on it; add others from the app.")
+                "can talk to the agents here. You are on it; add others from the app. "
+                "Results of finished runs come to you privately — send /start to this bot "
+                "once if you have not already, so it can message you.")
 STRANGER = ("This bot is private to its owner's ConductLoop. To pair this chat, create a "
             "code in ConductLoop (Channels → Telegram) and send /pair <code>.")
 
@@ -211,7 +219,7 @@ class Handler:
 
     Private chats and groups the user paired. In a group the bot answers only
     a command or a message that mentions it (``@botname``), and only from a
-    member on the group's list; everything else in the group is ignored. Pairing is only ever with a code from the app.
+    member on the group's list; others who address the bot get a fixed notice (no agent). Pairing is only ever with a code from the app.
     Who answers: the agent picked with ``/use``, else the channel's default
     agent, else the Holding CEO.
     """
@@ -281,6 +289,10 @@ class Handler:
         else:
             sender = msg.get("from") or {}
             label = ("@" + sender["username"]) if sender.get("username") else sender.get("first_name")
+            # Writing to the bot privately proves a DM is possible: clear any
+            # earlier "unreachable" flag so the next result push retries.
+            if sender.get("id") is not None and not sender.get("is_bot"):
+                store.note_user_can_receive_dm(CHANNEL, sender.get("id"))
         known = store.peer(CHANNEL, peer_id)
 
         if known is None:
@@ -307,13 +319,18 @@ class Handler:
             return "stranger:quiet"
 
         if chat_type in GROUP_TYPES:
-            # Only the group's list may talk to the agents; others cost nothing.
+            # Only the group's list may talk to the agents; others get a fixed
+            # notice (no agent, no provider call), at most once per 24 h.
             sender = msg.get("from") or {}
             if sender.get("is_bot") or sender.get("id") is None:
                 return "ignored:not-a-person"     # bots, anonymous admins
             store.seen_member(CHANNEL, peer_id, sender.get("id"), sender.get("username"))
             if not store.member_allowed(CHANNEL, peer_id, sender.get("id")):
-                return "ignored:not-on-list"
+                if store.should_send_denied_notice(CHANNEL, peer_id, sender.get("id")):
+                    store.record_denied_notice(CHANNEL, peer_id, sender.get("id"))
+                    self.api.send(chat_id, NOT_ON_LIST)
+                    return "denied:not-on-list"
+                return "denied:quiet"
         store.touch_peer(CHANNEL, peer_id)
         if text.startswith("/"):
             return self._command(chat_id, peer_id, text)
@@ -398,28 +415,76 @@ def format_result(r: dict) -> str:
     return f"✅ Result — task #{r['task_id']}: {(r.get('title') or '').strip()[:200]}{who}\n\n{body}"
 
 
+def _unreachable_dm(err: TelegramError) -> bool:
+    """True when Telegram refused a DM because the user has not started a chat
+    with the bot, blocked it, or is gone — do not keep retrying."""
+    if err.status != 403:
+        return False
+    d = (err.description or "").lower()
+    return any(s in d for s in (
+        "can't initiate conversation",
+        "bot can't initiate conversation",
+        "bot was blocked",
+        "user is deactivated",
+        "user not found",
+    ))
+
+
+def _result_recipients(peers: list[dict]) -> list[tuple[str, str | None, str]]:
+    """Where one run result goes: (chat_id, member_user_id_or_None, peer_id).
+
+    Private paired chats get the result in the chat. Paired groups get it as a
+    private DM to each *allowed* member who is not already marked unreachable.
+    The group chat itself never receives a result.
+    """
+    out: list[tuple[str, str | None, str]] = []
+    for p in peers:
+        if (p.get("chat_type") or "private") == "private":
+            out.append((str(p["peer_id"]), None, str(p["peer_id"])))
+            continue
+        for m in p.get("members") or []:
+            if not m.get("allowed"):
+                continue
+            if m.get("reachable") is False:
+                continue                      # flagged: wait until they write to the bot
+            out.append((str(m["user_id"]), str(m["user_id"]), str(p["peer_id"])))
+    return out
+
+
 def push_results(api: BotApi, settings: dict) -> int:
     """Send the results of runs that finished ``done`` since the channel was
-    turned on to every paired chat. Each result is claimed once in the
+    turned on. Private chats get the result in the chat; paired groups get it
+    as a DM to each allowed member. Each result is claimed once in the
     database before it is sent: never twice, even after a restart or with a
-    second process. Failed runs and approval requests are never sent."""
+    second process. Failed runs and approval requests are never sent.
+    Members the bot cannot DM (403) are flagged and skipped until they write
+    to the bot."""
     since = settings.get("results_since")
     if not settings.get("enabled") or not since:
         return 0
     sent = 0
     for r in store.pending_results(CHANNEL, int(since)):
         peers = store.peers(CHANNEL)
-        if not store.claim_result(CHANNEL, r["run_id"], len(peers)):
+        recipients = _result_recipients(peers)
+        if not store.claim_result(CHANNEL, r["run_id"], len(recipients)):
             continue
-        text = format_result(r)
-        for p in peers:
+        body = format_result(r)
+        for chat_id, member_uid, peer_id in recipients:
             try:
-                api.call("sendMessage", {"chat_id": p["peer_id"], "text": text,
+                api.call("sendMessage", {"chat_id": chat_id, "text": body,
                                          "disable_web_page_preview": True})
+                if member_uid is not None:
+                    store.mark_reachable(CHANNEL, peer_id, member_uid, True)
                 sent += 1
             except TelegramError as e:
-                log.warning("telegram result %s not delivered to a chat: %s", r["run_id"],
-                            e.description)
+                if member_uid is not None and _unreachable_dm(e):
+                    store.mark_reachable(CHANNEL, peer_id, member_uid, False,
+                                         e.description)
+                    log.warning("telegram result %s: member %s unreachable: %s",
+                                r["run_id"], member_uid, e.description)
+                else:
+                    log.warning("telegram result %s not delivered to %s: %s",
+                                r["run_id"], chat_id, e.description)
     return sent
 
 

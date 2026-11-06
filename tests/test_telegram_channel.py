@@ -501,13 +501,15 @@ def _results(env) -> list[tuple[object, str]]:
 def test_done_runs_are_sent_once_to_every_paired_chat(env):
     _turn_on(env)
     _pair(env, 42)
-    _pair_group(env)
+    _pair_group(env)                               # OWNER (7) is the first member
     env["fake"].calls.clear()
     rid = _run(env, "done", "Lamp found: 10 EUR")
     env["poller"].run_once()
     got = _results(env)
-    assert {c for c, _ in got} == {"42", "-500"} and len(got) == 2
+    # Private chat + DM to the allowed member; never the group chat itself.
+    assert {str(c) for c, _ in got} == {"42", str(OWNER)} and len(got) == 2
     assert "Lamp found: 10 EUR" in got[0][1] and "Agent: Scout" in got[0][1]
+    assert "-500" not in {str(c) for c, _ in got}
     env["poller"].run_once()
     env["poller"]._handler = None                  # a "restart"
     env["poller"].run_once()
@@ -559,7 +561,8 @@ def test_long_results_are_cut_and_a_failed_chat_does_not_resend(env):
     real = env["fake"].__call__
 
     def flaky(url, payload, timeout):
-        if url.endswith("/sendMessage") and str(payload.get("chat_id")) == "-500":
+        # A transient failure to the private chat must not resend the run.
+        if url.endswith("/sendMessage") and str(payload.get("chat_id")) == "42":
             return {"ok": False, "error_code": 403, "description": "bot was kicked"}
         return real(url, payload, timeout)
     env["poller"]._handler = None
@@ -567,7 +570,7 @@ def test_long_results_are_cut_and_a_failed_chat_does_not_resend(env):
     env["poller"].run_once()
     env["poller"].run_once()
     got = _results(env)
-    assert len(got) == 1 and got[0][0] == "42"
+    assert len(got) == 1 and str(got[0][0]) == str(OWNER)   # DM to the member still went
     assert len(got[0][1]) < 4096 and got[0][1].endswith("[cut: open ConductLoop for the rest]")
 
 
@@ -658,7 +661,7 @@ def test_the_person_who_paired_a_group_is_its_first_member(env):
     assert telegram.GROUP_PAIRED in env["fake"].sent()[-1][1]
 
 
-def test_people_not_on_the_list_are_ignored_and_cost_nothing(env):
+def test_people_not_on_the_list_get_a_fixed_notice_and_cost_nothing(env):
     _turn_on(env)
     _pair_group(env)
     env["fake"].calls.clear()
@@ -668,10 +671,13 @@ def test_people_not_on_the_list_are_ignored_and_cost_nothing(env):
         _msg(32, -500, "/agents", "supergroup", sender=99, username="mallory"),
     ]
     env["poller"].run_once()
-    assert env["fake"].sent() == [] and env["ceo_asks"] == [] and env["wakes"] == []
+    # One fixed notice for the first address; the other two stay quiet (rate limit).
+    assert env["fake"].sent() == [(-500, telegram.NOT_ON_LIST)]
+    assert env["ceo_asks"] == [] and env["wakes"] == []
     assert store.peer("telegram", "-500")["agent_id"] is None     # /use did nothing
     seen = {m["user_id"]: m for m in store.members("telegram", "-500")}
     assert seen["99"]["allowed"] is False and seen["99"]["username"] == "mallory"
+    assert seen["99"]["denied_notice_at"]
     # Unaddressed chatter is never recorded: only people who wrote to the bot.
     env["fake"].updates = [_msg(33, -500, "just talking", "supergroup", sender=98)]
     env["poller"].run_once()
@@ -792,3 +798,135 @@ def test_migrations_drop_the_old_table_and_add_the_list(env):
     with db.db() as conn:
         names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
     assert "telegram_chats" not in names
+
+# ── step 2c: private results to allowed members, unreachable, denied notice ──
+
+def test_group_results_go_only_to_allowed_members_by_dm(env):
+    _turn_on(env)
+    _pair_group(env)
+    row = store.peer("telegram", "-500")["id"]
+    assert store.allow_member("telegram", "-500", 99, "ana", by="app")
+    env["fake"].calls.clear()
+    _run(env, "done", "secret report")
+    env["poller"].run_once()
+    got = _results(env)
+    assert {str(c) for c, _ in got} == {str(OWNER), "99"}
+    assert all("secret report" in t for _, t in got)
+    assert "-500" not in {str(c) for c, _ in got}
+    # Someone not on the list never gets a DM, even if they addressed the bot.
+    env["fake"].updates = [_msg(70, -500, "@my_cl_bot hi", "supergroup", sender=55)]
+    env["poller"].run_once()
+    _run(env, "done", "second")
+    env["fake"].calls.clear()
+    env["poller"].run_once()
+    assert {str(c) for c, _ in _results(env)} == {str(OWNER), "99"}
+
+
+def test_unreachable_members_are_flagged_and_not_retried(env):
+    _turn_on(env)
+    _pair_group(env)
+    store.allow_member("telegram", "-500", 99, "ana", by="app")
+    real = env["fake"].__call__
+
+    def refuse_ana(url, payload, timeout):
+        if url.endswith("/sendMessage") and str(payload.get("chat_id")) == "99":
+            return {"ok": False, "error_code": 403,
+                    "description": "Forbidden: bot can't initiate conversation with a user"}
+        return real(url, payload, timeout)
+
+    env["poller"]._handler = None
+    env["poller"]._transport = refuse_ana
+    _run(env, "done", "first")
+    env["poller"].run_once()
+    m = {x["user_id"]: x for x in store.members("telegram", "-500")}
+    assert m["99"]["reachable"] is False and "initiate" in (m["99"]["reach_error"] or "")
+    assert m[str(OWNER)]["reachable"] is True
+    # Status exposes the flag for the Channels page.
+    peers = telegram.status()["peers"]
+    group = next(p for p in peers if p["peer_id"] == "-500")
+    flagged = {x["user_id"]: x for x in group["members"]}
+    assert flagged["99"]["reachable"] is False
+
+    env["fake"].calls.clear()
+    _run(env, "done", "second")
+    env["poller"].run_once()
+    # Ana is skipped; OWNER still gets it. No endless retry to 99.
+    got = _results(env)
+    assert {str(c) for c, _ in got} == {str(OWNER)}
+    assert not any(str(c) == "99" for c, _ in env["fake"].sent())
+
+
+def test_writing_to_the_bot_privately_clears_unreachable(env):
+    _turn_on(env)
+    _pair_group(env)
+    store.allow_member("telegram", "-500", 99, "ana", by="app")
+    store.mark_reachable("telegram", "-500", 99, False, "bot can't initiate conversation")
+    # Ana opens a private chat with the bot (even as a stranger).
+    env["fake"].updates = [_msg(80, 99, "/start")]
+    env["poller"].run_once()
+    m = {x["user_id"]: x for x in store.members("telegram", "-500")}
+    assert m["99"]["reachable"] is None                  # cleared → retry next push
+    env["fake"].calls.clear()
+    _run(env, "done", "after start")
+    env["poller"].run_once()
+    assert "99" in {str(c) for c, _ in _results(env)}
+    assert {x["user_id"]: x for x in store.members("telegram", "-500")}["99"]["reachable"] is True
+
+
+def test_denied_notice_is_rate_limited_to_once_per_day(env, monkeypatch):
+    _turn_on(env)
+    _pair_group(env)
+    env["fake"].calls.clear()
+    env["fake"].updates = [_msg(90, -500, "@my_cl_bot hey", "supergroup", sender=99)]
+    env["poller"].run_once()
+    assert env["fake"].sent() == [(-500, telegram.NOT_ON_LIST)]
+    env["fake"].calls.clear()
+    env["fake"].updates = [_msg(91, -500, "@my_cl_bot again", "supergroup", sender=99)]
+    env["poller"].run_once()
+    assert env["fake"].sent() == []                      # still inside the window
+    # After the period, another notice is allowed.
+    real_now = store._now()
+    monkeypatch.setattr(store, "_now", lambda: real_now + store.DENIED_NOTICE_EVERY + 1)
+    env["fake"].updates = [_msg(92, -500, "@my_cl_bot later", "supergroup", sender=99)]
+    env["poller"].run_once()
+    assert env["fake"].sent() == [(-500, telegram.NOT_ON_LIST)]
+    assert store.DENIED_NOTICE_EVERY == 24 * 60 * 60
+
+
+def test_re_pairing_a_group_keeps_its_list(env):
+    _turn_on(env)
+    _pair_group(env)
+    store.allow_member("telegram", "-500", 99, "ana", by="app")
+    before = {(m["user_id"], m["allowed"]) for m in store.members("telegram", "-500")}
+    assert ("99", True) in before and (str(OWNER), True) in before
+    # Pair the same group again with a fresh code: the list stays.
+    _pair_group(env, uid=200)
+    after = {(m["user_id"], m["allowed"]) for m in store.members("telegram", "-500")}
+    assert after == before
+    # Unpair deletes it (already covered); confirm the contrast.
+    row = store.peer("telegram", "-500")["id"]
+    store.unpair("telegram", row)
+    assert store.members("telegram", "-500") == []
+
+
+def test_url_alerts_and_digest_never_go_to_telegram(env, monkeypatch):
+    from ops_dashboard import webhooks
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TOKEN)
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", "")
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "")
+    assert set(webhooks.status()) == {"slack", "discord"}
+    assert "telegram" not in webhooks.notify("alert")
+    assert not hasattr(webhooks, "_send_telegram")
+
+
+def test_migration_35_adds_reachability_columns(env):
+    from ops_dashboard import migrations
+
+    fn = {v: f for v, _d, f in migrations.MIGRATIONS}[35]
+    with db.db() as conn:
+        for _ in range(2):                                # idempotent
+            fn(conn)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(channel_members)")}
+    assert {"reachable", "reach_error", "reach_at", "denied_notice_at"} <= cols
