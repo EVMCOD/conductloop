@@ -801,8 +801,8 @@ CREATE TABLE IF NOT EXISTS autonomy_config (
 
 CREATE TABLE IF NOT EXISTS boardroom_settings (
     id               INTEGER PRIMARY KEY CHECK (id = 1),    -- singleton
-    chairman_user_id INTEGER NOT NULL,
-    holding_ceo_id   INTEGER,                                -- the team_member that synthesizes the Daily Recap
+    chairman_user_id INTEGER,                                -- NULL on a local install with no accounts (migration 34)
+    holding_ceo_id   INTEGER,                                -- the AI agent chosen as Holding CEO (Boardroom); NULL = the Boardroom's own reply
     last_recap_at    INTEGER,
     updated_at       INTEGER NOT NULL,
     FOREIGN KEY (chairman_user_id) REFERENCES users(id) ON DELETE CASCADE,

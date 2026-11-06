@@ -48,6 +48,11 @@
     .btn.primary{background:var(--brand);color:#0b0d12;border:0;border-radius:9px;padding:12px 20px;font-size:14px;font-weight:700;cursor:pointer}
     .btn.primary:disabled{opacity:0.6;cursor:not-allowed}
     .pack-foot{font-size:12px;color:var(--muted);text-align:center;margin-top:14px;font-style:italic}
+    .hceo{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:16px}
+    .hceo-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .hceo-title{font-size:15px;font-weight:600}
+    .hceo select{background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;min-width:220px}
+    .hceo .meta.err{color:var(--bad)}
 
   </style>
 </head>
@@ -72,6 +77,17 @@
       <a href="/boardroom/recap">📊 Daily Recap</a>
       <a href="/boardroom/create">➕ Create New CEO</a>
     </div>
+
+    <section class="hceo" id="hceo" hidden>
+      <div class="hceo-row">
+        <div>
+          <div class="hceo-title">👑 Holding CEO</div>
+          <p class="meta" id="hceo-hint">Answers you from outside the app (Telegram) when no other agent is picked.</p>
+        </div>
+        <select id="hceo-select" aria-label="Holding CEO"></select>
+      </div>
+      <p class="meta" id="hceo-msg" hidden></p>
+    </section>
 
     <div id="list"><span class="empty">Loading C-Suite…</span></div>
   </div>
@@ -174,5 +190,6 @@
     load();
   </script>
   <script src="/boardroom-i18n.js" defer></script>
+  <script src="/boardroom-holding-ceo.js" defer></script>
 </body>
 </html>

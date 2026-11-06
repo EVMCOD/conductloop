@@ -1036,6 +1036,45 @@ def _mig_33_channel_members(conn: sqlite3.Connection) -> None:
 MIGRATIONS.append((33, "chat channels: allowed members of paired groups", _mig_33_channel_members))
 
 
+def _mig_34_holding_ceo_choice(conn: sqlite3.Connection) -> None:
+    """``boardroom_settings.chairman_user_id`` may be NULL.
+
+    The singleton row was never written, and it needed a user (NOT NULL,
+    foreign key): a local install without accounts could not store the
+    Holding CEO chosen in the Boardroom. Rebuilds the one-row table with the
+    column nullable, keeping its data. Idempotent (GAP_FILL_FROM): does
+    nothing when the column already allows NULL. Numbered 34 so it does not
+    collide with 30-33 developed on the Telegram branches; whichever lands
+    first, the others are gap-filled.
+    """
+    cols = {r[1]: r for r in conn.execute("PRAGMA table_info(boardroom_settings)")}
+    if not cols:
+        return                                   # the schema creates it, already nullable
+    if not cols["chairman_user_id"][3]:          # notnull flag
+        return
+    conn.execute("DROP TABLE IF EXISTS boardroom_settings_new")
+    conn.execute(
+        "CREATE TABLE boardroom_settings_new ("
+        "  id INTEGER PRIMARY KEY CHECK (id = 1),"
+        "  chairman_user_id INTEGER,"
+        "  holding_ceo_id INTEGER,"
+        "  last_recap_at INTEGER,"
+        "  updated_at INTEGER NOT NULL,"
+        "  FOREIGN KEY (chairman_user_id) REFERENCES users(id) ON DELETE CASCADE,"
+        "  FOREIGN KEY (holding_ceo_id) REFERENCES team_members(id) ON DELETE SET NULL)"
+    )
+    conn.execute(
+        "INSERT INTO boardroom_settings_new (id, chairman_user_id, holding_ceo_id, last_recap_at, "
+        "updated_at) SELECT id, chairman_user_id, holding_ceo_id, last_recap_at, updated_at "
+        "FROM boardroom_settings"
+    )
+    conn.execute("DROP TABLE boardroom_settings")
+    conn.execute("ALTER TABLE boardroom_settings_new RENAME TO boardroom_settings")
+
+
+MIGRATIONS.append((34, "boardroom_settings: chairman optional, so the Holding CEO can be chosen",
+                   _mig_34_holding_ceo_choice))
+
 def _mig_35_channel_member_reachability(conn: sqlite3.Connection) -> None:
     """Reachability of group members for private run-result DMs, and the
     once-ever marker for the "not on this group's list" notice.

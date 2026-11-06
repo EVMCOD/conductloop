@@ -16,6 +16,7 @@ from . import (  # noqa: F401  (importing this module registers the routes)
     routes_channels,  # Telegram channel: talk to agents from a chat app (2026-11-06)
     routes_chat,  # the /chat page and its API
     routes_credentials,  # what the app holds the keys to, and where (2026-10-24)
+    routes_holding_ceo,  # Boardroom: choose the Holding CEO (2026-11-06)
     routes_learning,  # the Aprendizaje page (L3)
     routes_library,  # /setup: indexed folders and "index now"
     routes_media,  # image / video / speech generation (2026-10-23)
