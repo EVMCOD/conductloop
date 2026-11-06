@@ -115,8 +115,9 @@ TOOLS: list[dict] = [
             "(_agents/<project>/) and indexes it into the knowledge base. "
             "Use this to deliver the result of your task. Returns the new doc_id. "
             "The artifact will appear in search and the graph immediately. "
-            "If OPS_REQUIRE_APPROVAL is on, the artifact is staged for review instead "
-            "of being written, and the task status becomes 'needs_approval'."
+            "If OPS_REQUIRE_APPROVAL is on, nothing is written: the run ends as "
+            "'needs_approval'. Approving it records the decision and does not "
+            "write the artifact."
         ),
         "input_schema": {
             "type": "object",
@@ -289,7 +290,10 @@ def _impl_write_artifact(args: dict) -> dict:
             "project": project,
             "title": title,
             "length": len(md),
-            "message": "OPS_REQUIRE_APPROVAL is on. Artifact NOT written; task is now needs_approval and the user must approve in the UI before it lands in the vault.",
+            "message": (
+                "OPS_REQUIRE_APPROVAL is on. Artifact NOT written. "
+                "Approving the run records the decision and does not write it to the vault."
+            ),
         })
 
     # Build the file path

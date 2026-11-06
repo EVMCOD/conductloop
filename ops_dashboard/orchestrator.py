@@ -188,15 +188,16 @@ def run_task(task_id: int, *, sync: bool = True, on_event=None) -> dict:
     if not task:
         return {"ok": False, "error": f"task {task_id} not found"}
 
-    if task["status"] == "running":
-        return {"ok": False, "error": "task is already running"}
-
     try:
         provider, model, system_suffix, provider_explicit, model_explicit = _resolve_agent_ex(task)
     except ValueError as e:                      # e.g. provider "openai" with "anthropic:…"
         return {"ok": False, "error": str(e)}
     system_prompt = _build_system_prompt(task.get("project_key"), system_suffix)
+    # The claim is the lock: a live run (this process or another) refuses a
+    # second start. A run left behind by a dead process is closed first.
     run_id = db.start_run(task_id, provider, model)
+    if run_id is None:
+        return {"ok": False, "error": "task is already running"}
     db.add_activity("task_started", f"{task['title'][:80]} → {provider}/{model}", task.get("project_key"))
 
     def _emit(event: dict) -> None:
@@ -350,41 +351,54 @@ def run_task(task_id: int, *, sync: bool = True, on_event=None) -> dict:
 
 
 def re_run(task_id: int, *, sync: bool = True) -> dict:
-    """Re-run a task: always creates a NEW run row."""
+    """Start another attempt. A live run is left alone.
+
+    Resetting the task to ``queued`` while its run was still in flight used
+    to let a second attempt start, and whichever thread finished last wrote
+    the task status. The claim in ``run_task`` is what decides.
+    """
     task = db.get_task(task_id)
     if not task:
         return {"ok": False, "error": f"task {task_id} not found"}
-    # Reset status so start_run() works
-    db.update_task(task_id, status="queued")
     return run_task(task_id, sync=sync)
 
 
-def approve_run(run_id: int = None, task_id: int = None) -> dict:
-    """If a run is in 'needs_approval', the user has approved it via UI.
-    We re-execute the write_artifact call (since the original was staged).
-    For now, this is a no-op stub; the actual artifact landing is the UI's job.
+# The staged markdown is not kept, so approval cannot write it later. Say so
+# on the run instead of reporting a write that did not happen.
+APPROVAL_NOTE = "[approved by user; the staged artifact was not written to the vault]"
 
-    Accepts either run_id (the existing API) or task_id (resolves to the
-    latest run for that task, which is what the UI uses).
+
+def approve_run(run_id: int | None = None, task_id: int | None = None) -> dict:
+    """Record approval of a ``needs_approval`` run.
+
+    ``run_id`` approves that run. With only ``task_id``, the newest run of
+    that task that is still waiting is approved. The run is marked ``done``.
+    Nothing is written to the vault: the staged body was not stored, and
+    approval must not turn into an unattended write.
+
+    Returns ok only when the row actually changed.
     """
     run = None
     if run_id is not None:
-        run = db.get_run(run_id)
+        run = db.get_run(int(run_id))
+        if run is not None and task_id is not None and int(run["task_id"]) != int(task_id):
+            return {"ok": False, "error": "run does not belong to this task"}
     elif task_id is not None:
-        with db.db() as conn:
-            row = conn.execute(
-                "SELECT * FROM runs WHERE task_id = ? ORDER BY started_at DESC LIMIT 1",
-                (task_id,),
-            ).fetchone()
-        if row:
-            run = dict(row)
+        run = db.latest_pending_approval(int(task_id))
     if not run:
-        return {"ok": False, "error": "no run found for the given id"}
+        return {"ok": False, "error": "no run awaiting approval"}
     if run["status"] != "needs_approval":
         return {"ok": False, "error": f"run status is '{run['status']}', not needs_approval"}
-    # For the MVP, "approving" means: turn off OPS_REQUIRE_APPROVAL and re-run
-    # the write. The user can do this in a future iteration. For now, just
-    # mark the run as approved (alias for 'done' since the artifact was never
-    # actually written).
-    db.finish_run(run_id, status="done", output_text=run.get("output_text") or "(approved by user; artifact was not written under OPS_REQUIRE_APPROVAL=on)", error=None)
-    return {"ok": True, "run_id": run_id, "status": "done"}
+    text = run.get("output_text") or ""
+    if APPROVAL_NOTE not in text:
+        text = (text + "\n\n" + APPROVAL_NOTE).strip()
+    wrote = db.record_approval(int(run["id"]), text)
+    if not wrote:
+        return {"ok": False, "error": "run is no longer awaiting approval"}
+    return {
+        "ok": True,
+        "run_id": int(run["id"]),
+        "task_id": int(run["task_id"]),
+        "status": "done",
+        "artifact_written": False,
+    }

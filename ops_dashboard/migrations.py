@@ -879,3 +879,47 @@ def _mig_28_bind_role_packs(conn: sqlite3.Connection) -> None:
 
 MIGRATIONS.append((28, "bind each existing agent its role's skill pack (L7c)",
                    _mig_28_bind_role_packs))
+
+
+def _mig_29_one_live_run(conn: sqlite3.Connection) -> None:
+    """runs.owner_token, and at most one ``running`` row per task.
+
+    Idempotent (GAP_FILL_FROM). Existing databases can already hold two
+    ``running`` rows for one task, from a start that did not claim the task.
+    Those extras are closed before the unique index is created, or the index
+    would fail to build. The newest running row is the one kept. A database
+    that has no ``runs`` table yet (the migration runner on an empty
+    connection, before SCHEMA) is left alone.
+    """
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'runs'"
+    ).fetchone()
+    if row is None:
+        return
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(runs)")]
+    if "owner_token" not in cols:
+        conn.execute("ALTER TABLE runs ADD COLUMN owner_token TEXT")
+    rows = conn.execute(
+        "SELECT id, task_id FROM runs WHERE status = 'running' ORDER BY task_id, id"
+    ).fetchall()
+    by_task: dict[int, list[int]] = {}
+    for run_id, task_id in rows:
+        by_task.setdefault(int(task_id), []).append(int(run_id))
+    now = int(time.time())
+    note = "interrupted: another run of this task was already running"
+    for ids in by_task.values():
+        for old in ids[:-1]:
+            conn.execute(
+                "UPDATE runs SET status = 'error', error = ?, "
+                "finished_at = COALESCE(finished_at, ?) "
+                "WHERE id = ? AND status = 'running'",
+                (note, now, old),
+            )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_one_live "
+        "ON runs(task_id) WHERE status = 'running'"
+    )
+
+
+MIGRATIONS.append((29, "runs.owner_token and one live run per task",
+                   _mig_29_one_live_run))

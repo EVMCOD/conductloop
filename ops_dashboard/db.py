@@ -334,11 +334,15 @@ CREATE TABLE IF NOT EXISTS runs (
     tool_calls        TEXT,                       -- JSON: [{name, args, ok, ts}]
     error             TEXT,
     started_at        INTEGER NOT NULL,
-    finished_at       INTEGER
+    finished_at       INTEGER,
+    owner_token       TEXT                        -- pid:uuid of the process that started the run
 );
 CREATE INDEX IF NOT EXISTS idx_runs_task     ON runs(task_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_runs_status   ON runs(status, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_runs_artifact ON runs(artifact_doc_id);
+-- At most one live attempt per task. A second start has to wait until the
+-- first leaves ``running`` (finished, failed, or recovered after a restart).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_one_live ON runs(task_id) WHERE status = 'running';
 
 -- Code-file TODOs (auto-extracted from source files in repos)
 CREATE TABLE IF NOT EXISTS code_todos (
@@ -1072,6 +1076,16 @@ def init_db(*, backup_before_upgrade: bool = True) -> None:
         _projects_mod.backfill_document_project_keys()
     except Exception:
         log.debug("backfill_document_project_keys failed", exc_info=True)
+    # A task left ``running`` by a process that is gone can never be started
+    # again until that row is closed. Live runs (this process, or another
+    # process that still owns them) are left alone.
+    try:
+        from .db_tasks import recover_interrupted_runs
+        interrupted = recover_interrupted_runs()
+        if interrupted:
+            log.info("marked %d interrupted task run(s) after restart", len(interrupted))
+    except Exception:
+        log.debug("recover_interrupted_runs failed", exc_info=True)
 
 
 # Optional connection reuse (upgrade #6, opt-in via OPS_DB_CONN_REUSE=1).
@@ -1987,8 +2001,11 @@ from .db_tasks import (  # noqa: E402,F401
     finish_run,
     get_run,
     get_task,
+    latest_pending_approval,
     list_runs,
     list_tasks,
+    record_approval,
+    recover_interrupted_runs,
     start_run,
     task_stats,
     update_task,
