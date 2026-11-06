@@ -13,6 +13,7 @@ from . import (  # noqa: F401  (importing this module registers the routes)
     db,
     routes_agent_skills,  # per-agent skill packs for the Boardroom (L7)
     routes_backups,  # Setup → Backups: take one, list, restore
+    routes_channels,  # Telegram channel: talk to agents from a chat app (2026-11-06)
     routes_chat,  # the /chat page and its API
     routes_credentials,  # what the app holds the keys to, and where (2026-10-24)
     routes_learning,  # the Aprendizaje page (L3)

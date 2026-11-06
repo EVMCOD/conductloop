@@ -454,6 +454,18 @@ class Scheduler:
         self._thread = threading.Thread(target=run_loop, args=(self._stop, self.interval),
                                          daemon=True, name="agent-scheduler")
         self._thread.start()
+        # Chat channels (Telegram) live and die with the scheduler. They are
+        # off by default and make no network call until the user turns one on.
+        try:
+            from . import channels
+            channels.start()
+        except Exception:
+            log.exception("chat channels did not start")
 
     def stop(self) -> None:
         self._stop.set()
+        try:
+            from . import channels
+            channels.stop()
+        except Exception:
+            pass

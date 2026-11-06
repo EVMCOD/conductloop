@@ -923,3 +923,41 @@ def _mig_29_one_live_run(conn: sqlite3.Connection) -> None:
 
 MIGRATIONS.append((29, "runs.owner_token and one live run per task",
                    _mig_29_one_live_run))
+
+
+def _mig_30_channels(conn: sqlite3.Connection) -> None:
+    """Chat channels (Telegram first): per-channel settings and paired peers.
+
+    Idempotent (GAP_FILL_FROM). ``channel_settings`` holds no secret: the bot
+    token lives in the vault (``channel.<name>.bot_token``). A pairing code
+    is stored only as a hash, and only until it is used or expires.
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS channel_settings ("
+        "  channel TEXT PRIMARY KEY,"
+        "  enabled INTEGER NOT NULL DEFAULT 0,"          # off until the user turns it on
+        "  default_agent_id INTEGER,"                    # team_members.id talked to by default
+        "  update_offset INTEGER NOT NULL DEFAULT 0,"    # next Telegram update_id to fetch
+        "  pairing_hash TEXT,"
+        "  pairing_expires_at INTEGER,"
+        "  pairing_attempts INTEGER NOT NULL DEFAULT 0,"
+        "  bot_username TEXT,"
+        "  last_error TEXT,"
+        "  last_ok_at INTEGER,"
+        "  updated_at INTEGER NOT NULL DEFAULT 0)"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS channel_peers ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  channel TEXT NOT NULL,"
+        "  peer_id TEXT NOT NULL,"                       # Telegram chat id of a private chat
+        "  label TEXT,"
+        "  agent_id INTEGER,"                            # agent this peer talks to (/use)
+        "  paired_at INTEGER NOT NULL,"
+        "  last_seen_at INTEGER,"
+        "  UNIQUE(channel, peer_id))"
+    )
+
+
+MIGRATIONS.append((30, "chat channels: settings and paired peers (Telegram)",
+                   _mig_30_channels))

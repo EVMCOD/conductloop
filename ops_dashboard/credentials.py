@@ -16,6 +16,7 @@ The inventory never contains a value. It says *where* a credential is:
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from . import secret_vault
@@ -33,7 +34,14 @@ GROUPS = {
     "brain": "The brain — what it thinks with",
     "media": "Media — images, video and speech",
     "connectors": "Connectors — Gmail, GitHub, Linear…",
+    "channels": "Channels — talk to your agents from a chat app",
 }
+
+# Chat channels whose bot token the panel can hold (vault name → label).
+CHANNEL_SECRETS = {
+    "channel.telegram.bot_token": "Telegram bot token (from @BotFather)",
+}
+_TELEGRAM_TOKEN_SHAPE = re.compile(r"^\d{5,12}:[A-Za-z0-9_-]{30,64}$")
 
 
 def _brain_rows() -> list[dict[str, Any]]:
@@ -109,12 +117,24 @@ def _connector_rows() -> list[dict[str, Any]]:
     return out
 
 
+def _channel_rows() -> list[dict[str, Any]]:
+    """The bot tokens of the chat channels (Telegram)."""
+    return [{
+        "name": name,
+        "group": "channels",
+        "provider": name.split(".")[1],
+        "label": label,
+        "where": secret_vault.where(name),
+        "editable": True,
+    } for name, label in CHANNEL_SECRETS.items()]
+
+
 def inventory() -> dict[str, Any]:
     """Every credential, where it lives, and how the vault itself is doing.
 
     Never a value.
     """
-    rows = _brain_rows() + _media_rows() + _connector_rows()
+    rows = _brain_rows() + _media_rows() + _connector_rows() + _channel_rows()
     return {
         "rows": rows,
         "groups": GROUPS,
@@ -172,6 +192,18 @@ def set_secret(name: str, value: str) -> dict[str, Any]:
         if not provider:
             raise ValueError(f"'{name}' is not a credential of the app")
         media.providers.save_config(provider, {"api_key": value})
+        return {"name": name, "where": secret_vault.where(name)}
+    if name in CHANNEL_SECRETS:
+        # A bot token is never kept in plain text either.
+        if not secret_vault.keychain_available() and not secret_vault.is_open():
+            raise secret_vault.VaultLocked(
+                "there is no keychain on this machine: set a passphrase to keep "
+                "the keys encrypted")
+        if name == "channel.telegram.bot_token" and not _TELEGRAM_TOKEN_SHAPE.match(value):
+            # The message never repeats the value.
+            raise ValueError("that does not look like a Telegram bot token "
+                             "(123456789:ABC… from @BotFather)")
+        secret_vault.set(name, value)
         return {"name": name, "where": secret_vault.where(name)}
     raise ValueError(f"'{name}' is not a credential of the app")
 
