@@ -8,6 +8,9 @@ POST   /api/channels/telegram/disable         turn off (and close any open pairi
 POST   /api/channels/telegram/pairing         a new one-time pairing code (shown once)
 POST   /api/channels/telegram/default-agent   {"agent_id": n|null}: who answers by default
 DELETE /api/channels/telegram/peers/<id>      unpair a chat
+POST   /api/channels/telegram/peers/<id>/members        {"user_id": "123", "username"?}:
+                                                         put someone on a group's list
+DELETE /api/channels/telegram/peers/<id>/members/<uid>  take them off
 
 The bot token itself goes in through Credentials (``channel.telegram.bot_token``).
 """
@@ -98,5 +101,49 @@ def telegram_unpair(handler, peer_row: str) -> None:
         return
     if not store.unpair(telegram.CHANNEL, row_id):
         _err(handler, 404, "not_found", "no such paired chat")
+        return
+    _send(handler, 200, {"ok": True, **telegram.status()})
+
+
+def _group(handler, peer_row: str) -> dict | None:
+    """The paired group with that row id, or None after sending the error."""
+    try:
+        row_id = int(peer_row)
+    except ValueError:
+        _err(handler, 400, "bad_request", "peer id must be a number")
+        return None
+    peer = store.peer_by_row(telegram.CHANNEL, row_id)
+    if peer is None:
+        _err(handler, 404, "not_found", "no such paired chat")
+        return None
+    if peer.get("chat_type") not in telegram.GROUP_TYPES:
+        _err(handler, 400, "not_a_group", "only groups have a list of members")
+        return None
+    return peer
+
+
+@router.post("/api/channels/telegram/peers/<peer_row>/members")
+def telegram_allow_member(handler, peer_row: str) -> None:
+    peer = _group(handler, peer_row)
+    if peer is None:
+        return
+    body = _body(handler)
+    user_id = body.get("user_id")
+    if isinstance(user_id, bool) or not isinstance(user_id, (str, int)) or \
+            not store.allow_member(telegram.CHANNEL, peer["peer_id"], user_id,
+                                   body.get("username"), by="app"):
+        _err(handler, 400, "bad_user_id",
+             "user_id: the person's Telegram user id (a positive number)")
+        return
+    _send(handler, 200, {"ok": True, **telegram.status()})
+
+
+@router.delete("/api/channels/telegram/peers/<peer_row>/members/<user_id>")
+def telegram_remove_member(handler, peer_row: str, user_id: str) -> None:
+    peer = _group(handler, peer_row)
+    if peer is None:
+        return
+    if not store.remove_member(telegram.CHANNEL, peer["peer_id"], user_id):
+        _err(handler, 404, "not_found", "that person is not on this group's list")
         return
     _send(handler, 200, {"ok": True, **telegram.status()})

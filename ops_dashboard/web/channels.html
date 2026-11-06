@@ -41,7 +41,7 @@
 
     <section class="card">
       <h2>Pair a chat</h2>
-      <p class="hint">Create a code, then send it to your bot from a private chat or a group. It works once and only for 10 minutes. In a group the bot answers only commands and messages that mention it.</p>
+      <p class="hint">Create a code, then send it to your bot from a private chat or a group. It works once and only for 10 minutes. In a group the bot answers only commands and messages that mention it, and only from the people on that group's list (whoever sends the code is put on it).</p>
       <div class="row">
         <button id="pair" type="button" disabled>Create a pairing code</button>
       </div>
@@ -51,7 +51,7 @@
 
     <section class="card">
       <h2>Paired chats</h2>
-      <p class="hint">They receive the results of finished runs, and can talk to your agents.</p>
+      <p class="hint">They receive the results of finished runs. In a private chat you talk to your agents; in a group only the people on its list can (find a user id by having them mention the bot: they show up below to allow).</p>
       <ul class="list" id="peers"></ul>
       <p class="hint" id="no-peers">No paired chats yet.</p>
     </section>

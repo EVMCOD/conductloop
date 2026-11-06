@@ -49,11 +49,17 @@ class FakeTelegram:
         return [(p["chat_id"], p["text"]) for m, p in self.calls if m == "sendMessage"]
 
 
-def _msg(update_id: int, chat_id: int, text: str, chat_type: str = "private") -> dict:
+OWNER = 7          # the Telegram user who pairs groups in these tests
+
+
+def _msg(update_id: int, chat_id: int, text: str, chat_type: str = "private",
+         sender: int | None = None, username: str = "someone") -> dict:
+    if sender is None:
+        sender = chat_id if chat_type == "private" else OWNER
     return {"update_id": update_id,
             "message": {"message_id": update_id, "text": text,
                         "chat": {"id": chat_id, "type": chat_type},
-                        "from": {"id": chat_id, "username": "someone"}}}
+                        "from": {"id": sender, "username": username}}}
 
 
 @pytest.fixture()
@@ -65,6 +71,7 @@ def env(monkeypatch):
     with db.db() as conn:
         conn.execute("DELETE FROM channel_settings")
         conn.execute("DELETE FROM channel_peers")
+        conn.execute("DELETE FROM channel_members")
     items: dict[str, str] = {}
     monkeypatch.setattr(secrets_store, "keychain_available", lambda: True)
     monkeypatch.setattr(secrets_store, "keychain_get", lambda name: items.get(name))
@@ -95,6 +102,7 @@ def env(monkeypatch):
     with db.db() as conn:
         conn.execute("DELETE FROM channel_settings")
         conn.execute("DELETE FROM channel_peers")
+        conn.execute("DELETE FROM channel_members")
 
 
 def _turn_on(env) -> None:
@@ -612,7 +620,7 @@ def test_the_page_is_strict_and_builds_nothing_from_html():
     assert "<script>" not in page and "style=" not in page
     assert not re.search(r"\son[a-z]+\s*=", page)
     assert "innerHTML" not in js and "eval(" not in js
-    for route in ("/api/channels", "/api/channels/telegram/", "/channels.css"):
+    for route in ("/api/channels", "/api/channels/telegram/", "/channels.css", "/members"):
         assert route in js or route in page
 
 
@@ -637,3 +645,150 @@ def test_page_route_sends_the_strict_policy_and_the_api_lists_agents(env):
     assert {"id": env["agent_id"], "name": "Scout", "role": "research"} in out["agents"]
     assert out["channels"]["telegram"]["default_agent"] == "Holding CEO"
     assert routes_channels  # imported for its routes
+
+
+# ── step 2b: who may talk in a paired group ──────────────────────────────────
+
+def test_the_person_who_paired_a_group_is_its_first_member(env):
+    _turn_on(env)
+    _pair_group(env)
+    members = store.members("telegram", "-500")
+    assert [(m["user_id"], m["username"], m["allowed"], m["added_by"]) for m in members] == \
+        [(str(OWNER), "someone", True, "pairing")]
+    assert telegram.GROUP_PAIRED in env["fake"].sent()[-1][1]
+
+
+def test_people_not_on_the_list_are_ignored_and_cost_nothing(env):
+    _turn_on(env)
+    _pair_group(env)
+    env["fake"].calls.clear()
+    env["fake"].updates = [
+        _msg(30, -500, "@my_cl_bot spend my tokens", "supergroup", sender=99, username="mallory"),
+        _msg(31, -500, "/use 1", "supergroup", sender=99, username="mallory"),
+        _msg(32, -500, "/agents", "supergroup", sender=99, username="mallory"),
+    ]
+    env["poller"].run_once()
+    assert env["fake"].sent() == [] and env["ceo_asks"] == [] and env["wakes"] == []
+    assert store.peer("telegram", "-500")["agent_id"] is None     # /use did nothing
+    seen = {m["user_id"]: m for m in store.members("telegram", "-500")}
+    assert seen["99"]["allowed"] is False and seen["99"]["username"] == "mallory"
+    # Unaddressed chatter is never recorded: only people who wrote to the bot.
+    env["fake"].updates = [_msg(33, -500, "just talking", "supergroup", sender=98)]
+    env["poller"].run_once()
+    assert "98" not in {m["user_id"] for m in store.members("telegram", "-500")}
+
+
+def test_bots_and_anonymous_admins_are_ignored(env):
+    _turn_on(env)
+    _pair_group(env)
+    env["fake"].calls.clear()
+    bot = _msg(40, -500, "@my_cl_bot hi", "supergroup", sender=555)
+    bot["message"]["from"]["is_bot"] = True
+    anon = _msg(41, -500, "@my_cl_bot hi", "supergroup")
+    del anon["message"]["from"]
+    env["fake"].updates = [bot, anon]
+    env["poller"].run_once()
+    assert env["fake"].sent() == [] and env["ceo_asks"] == []
+
+
+def test_adding_and_removing_members_from_the_app(env):
+    _turn_on(env)
+    _pair_group(env)
+    row = store.peer("telegram", "-500")["id"]
+    env["fake"].updates = [_msg(50, -500, "@my_cl_bot hello", "supergroup", sender=99,
+                                username="ana")]
+    env["poller"].run_once()
+    assert env["ceo_asks"] == []
+    r = _call("POST", f"/api/channels/telegram/peers/{row}/members", {"user_id": "99"})
+    assert r.code == 200 and r.out["ok"]
+    m = {x["user_id"]: x for x in r.out["peers"][0]["members"]}
+    assert m["99"]["allowed"] is True and m["99"]["username"] == "ana" and m["99"]["added_by"] == "app"
+    env["fake"].updates = [_msg(51, -500, "@my_cl_bot hello again", "supergroup", sender=99)]
+    env["poller"].run_once()
+    assert env["ceo_asks"] == ["hello again"]
+    r = _call("DELETE", f"/api/channels/telegram/peers/{row}/members/99")
+    assert r.code == 200
+    env["fake"].updates = [_msg(52, -500, "@my_cl_bot and now?", "supergroup", sender=99)]
+    env["poller"].run_once()
+    assert env["ceo_asks"] == ["hello again"]
+
+
+def test_member_api_refuses_bad_input(env):
+    _turn_on(env)
+    _pair(env, 42)
+    _pair_group(env)
+    group = store.peer("telegram", "-500")["id"]
+    private = store.peer("telegram", "42")["id"]
+    for bad in ("", "abc", "-5", "0", "1" * 16, None, True):
+        assert _call("POST", f"/api/channels/telegram/peers/{group}/members",
+                     {"user_id": bad}).code == 400, bad
+    assert _call("POST", f"/api/channels/telegram/peers/{private}/members",
+                 {"user_id": "5"}).code == 400               # private chats have no list
+    assert _call("POST", "/api/channels/telegram/peers/999/members", {"user_id": "5"}).code == 404
+    assert _call("DELETE", f"/api/channels/telegram/peers/{group}/members/12345").code == 404
+    assert _call("POST", f"/api/channels/telegram/peers/{group}/members",
+                 {"user_id": " 123 ", "username": "@Bob_1"}).code == 200
+    m = {x["user_id"]: x for x in store.members("telegram", "-500")}
+    assert m["123"]["username"] == "Bob_1"
+
+
+def test_unpairing_a_group_forgets_its_list(env):
+    _turn_on(env)
+    _pair_group(env)
+    row = store.peer("telegram", "-500")["id"]
+    assert store.members("telegram", "-500")
+    assert store.unpair("telegram", row) is True
+    assert store.members("telegram", "-500") == []
+
+
+def test_only_the_newest_strangers_are_kept(env):
+    _turn_on(env)
+    _pair_group(env)
+    for i in range(store.MAX_SEEN + 5):
+        store.seen_member("telegram", "-500", 1000 + i, None)
+    m = store.members("telegram", "-500")
+    assert sum(1 for x in m if not x["allowed"]) == store.MAX_SEEN
+    assert any(x["allowed"] for x in m)                       # the list itself is never pruned
+
+
+def test_private_chats_need_no_list(env):
+    _turn_on(env)
+    _pair(env, 42)
+    env["fake"].updates = [_msg(60, 42, "hi")]
+    env["poller"].run_once()
+    assert env["ceo_asks"] == ["hi"]
+    assert store.members("telegram", "42") == []
+
+
+# ── step 2b: the env notifier and the old table are gone ─────────────────────
+
+def test_the_env_telegram_notifier_is_gone(monkeypatch):
+    from ops_dashboard import webhooks
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TOKEN)
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
+    assert not hasattr(webhooks, "_send_telegram")
+    assert "telegram" not in webhooks.status()
+    calls = []
+    monkeypatch.setattr(webhooks.httpx, "post", lambda *a, **k: calls.append(a) or None)
+    assert "telegram" not in webhooks.notify("x")
+    assert calls == []                                    # nothing configured: no call at all
+
+
+def test_migrations_drop_the_old_table_and_add_the_list(env):
+    from ops_dashboard import migrations
+
+    fns = {v: fn for v, _d, fn in migrations.MIGRATIONS}
+    with db.db() as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS telegram_chats (id INTEGER PRIMARY KEY, chat_id INTEGER)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_telegram_chats_bound ON telegram_chats(chat_id)")
+        for _ in range(2):                                # idempotent
+            fns[32](conn)
+            fns[33](conn)
+        names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
+    assert "telegram_chats" not in names and "idx_telegram_chats_bound" not in names
+    assert "channel_members" in names
+    db.init_db()                                          # the schema does not bring it back
+    with db.db() as conn:
+        names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
+    assert "telegram_chats" not in names

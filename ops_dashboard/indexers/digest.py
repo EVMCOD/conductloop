@@ -9,7 +9,7 @@ For each run, builds a markdown summary covering:
 
 Output: markdown string (suitable for email body, Obsidian note, or webhook payload).
 Saved to <data dir>/digests/YYYY-MM-DD.md (app_paths).
-Sent to configured webhook (Slack/Discord/Telegram) if env vars set.
+Sent to configured webhook (Slack/Discord) if env vars set.
 """
 from __future__ import annotations
 
@@ -152,11 +152,11 @@ def save_digest(target_date: dt.date | None = None) -> Path:
 
 
 def send_digest(markdown: str, *, target_date: dt.date | None = None) -> dict:
-    """Send the digest via configured webhook (Slack/Discord/Telegram).
+    """Send the digest via configured webhook (Slack/Discord).
 
-    Slack/Discord: uses webhooks.notify which honors SLACK_WEBHOOK_URL /
-    DISCORD_WEBHOOK_URL env vars.
-    Telegram: uses TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID.
+    Uses webhooks.notify, which honors the SLACK_WEBHOOK_URL /
+    DISCORD_WEBHOOK_URL env vars. Telegram is not used (it sends only run
+    results, through the Telegram channel).
 
     Returns a dict of {channel: ok} so caller knows what succeeded.
     """
@@ -166,7 +166,7 @@ def send_digest(markdown: str, *, target_date: dt.date | None = None) -> dict:
     # readability, we send title + first 500 chars.
     title = f"Daily digest {target.isoformat()}"
     summary = markdown[:600].replace("# ", "").replace("**", "").replace("\n", " | ")[:500]
-    # Send via webhooks.notify (handles Slack/Discord/Telegram)
+    # Send via webhooks.notify (Slack/Discord)
     res = webhooks.notify(f"{title}\n{summary}…", severity="info")
     # res is {channel: bool}; return a richer dict
     return {

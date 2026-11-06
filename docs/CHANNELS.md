@@ -30,11 +30,14 @@ the first channel; Discord comes next.
 | Route | What it does |
 |---|---|
 | `GET /channels` | the page |
-| `GET /api/channels` | status: on/off, where the token is, bot name, default agent, paired chats, last error; the agents |
+| `GET /api/channels` | status: on/off, where the token is, bot name, default agent, paired chats (a group with its list), last error; the agents |
 | `POST /api/channels/telegram/enable` / `disable` | on / off (off also closes an open code) |
 | `POST /api/channels/telegram/pairing` | a new one-time code |
 | `POST /api/channels/telegram/default-agent` | the default agent (`null` for none) |
 | `DELETE /api/channels/telegram/peers/<id>` | unpair a chat |
+| `POST /api/channels/telegram/peers/<id>/members` | `{"user_id": "123"}`: put someone on a group's list |
+| `DELETE /api/channels/telegram/peers/<id>/members/<user_id>` | take them off |
+
 
 ### How it behaves
 
@@ -46,8 +49,16 @@ the first channel; Discord comes next.
   costs nothing. Telegram channels are ignored.
 - **Groups.** A group is paired with the same one-time code from the app.
   In a group the bot answers only commands and messages that mention it
-  (`@yourbot …`); anything else in the group is ignored. Everyone in a
-  paired group can talk to your agents: pair only groups you trust.
+  (`@yourbot …`), and only from the people on that group's list; anything
+  else is ignored and costs nothing (no agent, no provider call).
+- **A group's list.** Whoever sent the pairing code in the group is put on
+  it. Add or remove others on the Channels page by Telegram user id. The
+  easy way to find one: they mention the bot in the group; they are ignored,
+  and show up on the page under the group with an **Allow** button (the 20
+  newest are kept; only people who wrote *to the bot*, never the rest of the
+  group). A list with nobody on it means nobody can talk to the agents
+  there. Bots and anonymous admins are always ignored. Run results still go
+  to the whole group.
 - **One answer per message.** The update offset is saved before the message
   is handled, so a crash or a restart never answers (and pays for) the same
   message twice.
@@ -59,6 +70,9 @@ the first channel; Discord comes next.
 - `OPS_DISABLE_CHANNELS=1` keeps every channel stopped.
 
 The older Boardroom bridge (`telegram_bridge.py`, webhook, `/api/telegram/*`)
-was removed on 2026-11-06, with its daily-recap broadcast and the Telegram
-option of the Boardroom CEO channels. If its webhook is still set on your bot,
+was removed on 2026-11-06, with its daily-recap broadcast, the Telegram
+option of the Boardroom CEO channels and its `telegram_chats` table
+(migration 32). The Telegram notifications set with `TELEGRAM_BOT_TOKEN` /
+`TELEGRAM_CHAT_ID` were removed too: alerts and digests go to Slack/Discord
+webhooks only. If its webhook is still set on your bot,
 the status says so: remove it (`deleteWebhook`) and the channel starts reading.

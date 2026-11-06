@@ -1,4 +1,5 @@
-/* Channels page (Telegram): on/off, who answers, pairing code, paired chats.
+/* Channels page (Telegram): on/off, who answers, pairing code, paired chats,
+ * and who may talk to the agents in each paired group.
  * Talks to /api/channels…; builds the page with textContent only. */
 (function () {
   "use strict";
@@ -54,22 +55,114 @@
     ul.textContent = "";
     (tg.peers || []).forEach(function (p) {
       var li = document.createElement("li");
+      li.className = "peer";
+      var head = document.createElement("div");
+      head.className = "row between";
       var who = document.createElement("span");
       who.textContent = p.label || p.peer_id;
       var kind = document.createElement("span");
       kind.className = "pill";
       kind.textContent = p.chat_type === "private" ? "private" : "group";
       who.appendChild(kind);
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "ghost small";
-      btn.textContent = "Unpair";
-      btn.addEventListener("click", function () { unpair(p.id); });
-      li.appendChild(who);
-      li.appendChild(btn);
+      head.appendChild(who);
+      head.appendChild(button("Unpair", "ghost small", function () { unpair(p.id); }));
+      li.appendChild(head);
+      if (p.chat_type !== "private") li.appendChild(membersOf(p));
       ul.appendChild(li);
     });
     $("no-peers").hidden = (tg.peers || []).length > 0;
+  }
+
+  function button(label, cls, onClick) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = cls;
+    b.textContent = label;
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  function personName(m) {
+    return (m.username ? "@" + m.username + " " : "") + "(id " + m.user_id + ")";
+  }
+
+  // A group's list: only these people can talk to the agents in the group.
+  function membersOf(p) {
+    var box = document.createElement("div");
+    box.className = "members";
+    var members = p.members || [];
+    var allowed = members.filter(function (m) { return m.allowed; });
+    var asked = members.filter(function (m) { return !m.allowed; });
+    var title = document.createElement("p");
+    title.className = "hint";
+    title.textContent = allowed.length
+      ? "Can talk to the agents here:"
+      : "Nobody can talk to the agents here yet. Add people below.";
+    box.appendChild(title);
+    allowed.forEach(function (m) {
+      var row = document.createElement("div");
+      row.className = "row between member";
+      var name = document.createElement("span");
+      name.textContent = personName(m);
+      row.appendChild(name);
+      row.appendChild(button("Remove", "ghost small", function () { removeMember(p.id, m.user_id); }));
+      box.appendChild(row);
+    });
+    if (asked.length) {
+      var t2 = document.createElement("p");
+      t2.className = "hint";
+      t2.textContent = "Wrote to the bot here but are not on the list (ignored):";
+      box.appendChild(t2);
+      asked.forEach(function (m) {
+        var row = document.createElement("div");
+        row.className = "row between member";
+        var name = document.createElement("span");
+        name.textContent = personName(m);
+        row.appendChild(name);
+        row.appendChild(button("Allow", "small", function () { addMember(p.id, m.user_id); }));
+        box.appendChild(row);
+      });
+    }
+    var add = document.createElement("div");
+    add.className = "row member";
+    var input = document.createElement("input");
+    input.type = "text";
+    input.inputMode = "numeric";
+    input.placeholder = "Telegram user id";
+    input.className = "member-id";
+    add.appendChild(input);
+    add.appendChild(button("Add", "ghost small", function () {
+      var v = input.value.trim();
+      if (v) addMember(p.id, v);
+    }));
+    box.appendChild(add);
+    return box;
+  }
+
+  async function addMember(peerRow, userId) {
+    try {
+      state = await call("POST", "/api/channels/telegram/peers/" + encodeURIComponent(peerRow) +
+                         "/members", { user_id: String(userId) });
+      state = await call("GET", "/api/channels");
+      render();
+    } catch (e) { showError(e.message); }
+  }
+
+  async function removeMember(peerRow, userId) {
+    try {
+      await call("DELETE", "/api/channels/telegram/peers/" + encodeURIComponent(peerRow) +
+                 "/members/" + encodeURIComponent(userId));
+      await load();
+    } catch (e) { showError(e.message); }
+  }
+
+  // Do not redraw over an id being typed.
+  function typing() {
+    var inputs = document.querySelectorAll("input.member-id");
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].value || document.activeElement === inputs[i]) return true;
+    }
+    return false;
   }
 
   async function load() {
@@ -120,6 +213,6 @@
     $("pair").addEventListener("click", pair);
     $("default-agent").addEventListener("change", setDefault);
     load();
-    setInterval(function () { if (!document.hidden) load(); }, 15000);
+    setInterval(function () { if (!document.hidden && !typing()) load(); }, 15000);
   });
 })();

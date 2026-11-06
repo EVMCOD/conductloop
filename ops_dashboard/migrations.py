@@ -991,3 +991,45 @@ def _mig_31_channel_groups_and_results(conn: sqlite3.Connection) -> None:
 
 MIGRATIONS.append((31, "chat channels: paired groups and run results sent once",
                    _mig_31_channel_groups_and_results))
+
+
+def _mig_32_drop_telegram_chats(conn: sqlite3.Connection) -> None:
+    """Drop ``telegram_chats``, the table of the old Telegram bridge.
+
+    The bridge was removed on 2026-11-06 and nothing reads the table; the
+    Telegram channel keeps its paired chats in ``channel_peers``. Idempotent
+    (``IF EXISTS``); the schema no longer creates the table, so it does not
+    come back.
+    """
+    conn.execute("DROP INDEX IF EXISTS idx_telegram_chats_user")
+    conn.execute("DROP INDEX IF EXISTS idx_telegram_chats_bound")
+    conn.execute("DROP TABLE IF EXISTS telegram_chats")
+
+
+MIGRATIONS.append((32, "drop telegram_chats (old Telegram bridge)", _mig_32_drop_telegram_chats))
+
+
+def _mig_33_channel_members(conn: sqlite3.Connection) -> None:
+    """Who may talk to the agents in a paired group.
+
+    One row per (channel, group, Telegram user). ``allowed`` = 1: on the
+    list, set from the Channels page (or the person who paired the group);
+    0: someone who addressed the bot in the group but is not on the list,
+    kept so the page can offer to add them. Nobody is allowed by default.
+    Idempotent (``IF NOT EXISTS``).
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS channel_members ("
+        "  channel TEXT NOT NULL,"
+        "  peer_id TEXT NOT NULL,"                       # the group's chat id
+        "  user_id TEXT NOT NULL,"                       # the member's Telegram user id
+        "  username TEXT,"                               # last known @handle (no @)
+        "  allowed INTEGER NOT NULL DEFAULT 0,"
+        "  added_by TEXT,"                               # 'pairing' | 'app' | NULL (only seen)
+        "  added_at INTEGER,"
+        "  last_seen_at INTEGER,"
+        "  PRIMARY KEY (channel, peer_id, user_id))"
+    )
+
+
+MIGRATIONS.append((33, "chat channels: allowed members of paired groups", _mig_33_channel_members))

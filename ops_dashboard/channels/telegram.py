@@ -15,7 +15,10 @@ How it works:
   5 wrong guesses close it) that is sent to the bot as ``/pair <code>``.
   Any other chat gets one fixed sentence and costs nothing: no agent, no
   provider call. In a group the bot answers only a command or a message that
-  mentions it (``@botname``).
+  mentions it (``@botname``), and only from the people on that group's list
+  (``channel_members``, managed on the Channels page; the person who paired
+  the group is put on it). Anyone else in the group is ignored: no answer,
+  no agent, no provider call.
 * Who answers: the agent picked in the chat (``/agents``, ``/use <id>``),
   else the channel's default agent, else the Holding CEO (the member set as
   Holding CEO, or the Boardroom's Holding CEO reply). An agent is woken with
@@ -61,6 +64,8 @@ HELP = (
     "Anything else you write goes to the agent you picked (in a group: mention me).\n"
     "Results of finished runs are sent here."
 )
+GROUP_PAIRED = ("Only the people on this group's list in ConductLoop (Channels → Telegram) "
+                "can talk to the agents here. You are on it; add others from the app.")
 STRANGER = ("This bot is private to its owner's ConductLoop. To pair this chat, create a "
             "code in ConductLoop (Channels → Telegram) and send /pair <code>.")
 
@@ -205,8 +210,8 @@ class Handler:
     its own: the poller gives it the API, tests give it fakes.
 
     Private chats and groups the user paired. In a group the bot answers only
-    a command or a message that mentions it (``@botname``); everything else
-    in the group is ignored. Pairing is only ever with a code from the app.
+    a command or a message that mentions it (``@botname``), and only from a
+    member on the group's list; everything else in the group is ignored. Pairing is only ever with a code from the app.
     Who answers: the agent picked with ``/use``, else the channel's default
     agent, else the Holding CEO.
     """
@@ -282,7 +287,15 @@ class Handler:
             word, _, arg = text.partition(" ")
             if word.split("@")[0].lower() in ("/pair", "/start") and arg.strip():
                 if store.try_pair(CHANNEL, peer_id, arg.strip(), label, chat_type):
-                    self.api.send(chat_id, "Paired with ConductLoop.\n\n" + HELP)
+                    extra = ""
+                    if chat_type in GROUP_TYPES:
+                        # Whoever typed the code from the app is the first member.
+                        sender = msg.get("from") or {}
+                        if not sender.get("is_bot") and store.allow_member(
+                                CHANNEL, peer_id, sender.get("id"), sender.get("username"),
+                                by="pairing"):
+                            extra = "\n\n" + GROUP_PAIRED
+                    self.api.send(chat_id, "Paired with ConductLoop.\n\n" + HELP + extra)
                     return "paired"
                 self.api.send(chat_id, "That code is not valid. Create a new one in ConductLoop.")
                 return "pair-refused"
@@ -293,6 +306,14 @@ class Handler:
                 return "stranger"
             return "stranger:quiet"
 
+        if chat_type in GROUP_TYPES:
+            # Only the group's list may talk to the agents; others cost nothing.
+            sender = msg.get("from") or {}
+            if sender.get("is_bot") or sender.get("id") is None:
+                return "ignored:not-a-person"     # bots, anonymous admins
+            store.seen_member(CHANNEL, peer_id, sender.get("id"), sender.get("username"))
+            if not store.member_allowed(CHANNEL, peer_id, sender.get("id")):
+                return "ignored:not-on-list"
         store.touch_peer(CHANNEL, peer_id)
         if text.startswith("/"):
             return self._command(chat_id, peer_id, text)

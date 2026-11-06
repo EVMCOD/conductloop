@@ -1,13 +1,15 @@
 """Outbound webhooks for dashboard events.
 
 Supports Slack-compatible and Discord-compatible incoming webhooks
-(JSON POST with text field). Telegram is a special case (uses sendMessage
-API with bot token).
+(JSON POST with text field).
 
 Configure via env vars (or config.json):
   SLACK_WEBHOOK_URL
   DISCORD_WEBHOOK_URL
-  TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
+
+Telegram is not a notification target any more (removed 2026-11-06): the
+Telegram channel (Channels page) is the only way ConductLoop talks to
+Telegram, and it sends only run results to paired chats.
 
 Use:
   from ops_dashboard import webhooks
@@ -61,15 +63,6 @@ def _send_discord(text: str) -> bool:
     return _post_json(url, {"content": text})
 
 
-def _send_telegram(text: str) -> bool:
-    token = _get("TELEGRAM_BOT_TOKEN")
-    chat = _get("TELEGRAM_CHAT_ID")
-    if not token or not chat:
-        return False
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    return _post_json(url, {"chat_id": chat, "text": text, "parse_mode": "HTML"})
-
-
 Severity = Literal["info", "warn", "alert"]
 
 
@@ -80,7 +73,6 @@ def notify(text: str, *, severity: Severity = "info") -> dict:
     results = {
         "slack":    _send_slack(msg),
         "discord":  _send_discord(msg),
-        "telegram": _send_telegram(msg),
     }
     return results
 
@@ -89,7 +81,6 @@ def status() -> dict:
     return {
         "slack": bool(_get("SLACK_WEBHOOK_URL")),
         "discord": bool(_get("DISCORD_WEBHOOK_URL")),
-        "telegram": bool(_get("TELEGRAM_BOT_TOKEN") and _get("TELEGRAM_CHAT_ID")),
     }
 
 

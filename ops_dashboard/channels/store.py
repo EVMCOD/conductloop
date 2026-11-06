@@ -1,4 +1,4 @@
-"""Settings and paired peers of the chat channels (migration 30).
+"""Settings, paired peers and group members of the chat channels (migrations 30-33).
 
 Nothing here is a secret. The bot token is in the vault; a pairing code is
 kept only as a SHA-256 hash, only until it is used, expires, or has been
@@ -133,11 +133,16 @@ def peer(channel: str, peer_id: str) -> dict | None:
 
 
 def peers(channel: str) -> list[dict]:
+    """Paired chats; a group also lists its members (allowed and not)."""
     with db.db() as conn:
         rows = conn.execute("SELECT id, channel, peer_id, label, chat_type, agent_id, paired_at, "
                             "last_seen_at FROM channel_peers WHERE channel = ? ORDER BY id",
                             (channel,)).fetchall()
-    return [dict(r) for r in rows]
+    out = [dict(r) for r in rows]
+    for p in out:
+        if p["chat_type"] != "private":
+            p["members"] = members(channel, p["peer_id"])
+    return out
 
 
 def touch_peer(channel: str, peer_id: str) -> None:
@@ -152,10 +157,110 @@ def set_peer_agent(channel: str, peer_id: str, agent_id: int | None) -> None:
                      (agent_id, channel, str(peer_id)))
 
 
-def unpair(channel: str, row_id: int) -> bool:
+def peer_by_row(channel: str, row_id: int) -> dict | None:
     with db.db() as conn:
+        row = conn.execute("SELECT * FROM channel_peers WHERE channel = ? AND id = ?",
+                           (channel, int(row_id))).fetchone()
+    return dict(row) if row else None
+
+
+def unpair(channel: str, row_id: int) -> bool:
+    """Unpair a chat; a group's member list goes with it."""
+    with db.db() as conn:
+        row = conn.execute("SELECT peer_id FROM channel_peers WHERE channel = ? AND id = ?",
+                           (channel, int(row_id))).fetchone()
+        if row is None:
+            return False
+        conn.execute("DELETE FROM channel_members WHERE channel = ? AND peer_id = ?",
+                     (channel, row["peer_id"]))
         cur = conn.execute("DELETE FROM channel_peers WHERE channel = ? AND id = ?",
                            (channel, int(row_id)))
+        return cur.rowcount == 1
+
+
+# ── members of paired groups (migration 33) ─────────────────────────────
+
+MAX_SEEN = 20                  # not-allowed people kept per group (newest)
+
+
+def _clean_user_id(user_id) -> str | None:
+    """A Telegram user id: a positive whole number. None when it is not."""
+    s = str(user_id).strip()
+    if isinstance(user_id, bool) or not s.isdigit() or len(s) > 15 or int(s) <= 0:
+        return None
+    return str(int(s))
+
+
+def _clean_username(username) -> str | None:
+    if not isinstance(username, str):
+        return None
+    u = username.strip().lstrip("@")[:64]
+    return u if u and all(c.isalnum() or c == "_" for c in u) else None
+
+
+def members(channel: str, peer_id: str) -> list[dict]:
+    with db.db() as conn:
+        rows = conn.execute("SELECT user_id, username, allowed, added_by, added_at, last_seen_at "
+                            "FROM channel_members WHERE channel = ? AND peer_id = ? "
+                            "ORDER BY allowed DESC, COALESCE(last_seen_at, added_at) DESC",
+                            (channel, str(peer_id))).fetchall()
+    return [{**dict(r), "allowed": bool(r["allowed"])} for r in rows]
+
+
+def member_allowed(channel: str, peer_id: str, user_id) -> bool:
+    uid = _clean_user_id(user_id)
+    if uid is None:
+        return False
+    with db.db() as conn:
+        row = conn.execute("SELECT allowed FROM channel_members WHERE channel = ? AND peer_id = ? "
+                           "AND user_id = ?", (channel, str(peer_id), uid)).fetchone()
+    return bool(row and row["allowed"])
+
+
+def allow_member(channel: str, peer_id: str, user_id, username=None, *, by: str = "app") -> bool:
+    """Put a Telegram user on a group's list. False for a bad user id."""
+    uid = _clean_user_id(user_id)
+    if uid is None:
+        return False
+    name = _clean_username(username)
+    with db.db() as conn:
+        conn.execute("INSERT INTO channel_members (channel, peer_id, user_id, username, allowed, "
+                     "added_by, added_at) VALUES (?, ?, ?, ?, 1, ?, ?) "
+                     "ON CONFLICT(channel, peer_id, user_id) DO UPDATE SET allowed = 1, "
+                     "added_by = excluded.added_by, added_at = excluded.added_at, "
+                     "username = COALESCE(excluded.username, channel_members.username)",
+                     (channel, str(peer_id), uid, name, by, _now()))
+    return True
+
+
+def seen_member(channel: str, peer_id: str, user_id, username=None) -> None:
+    """Note who wrote to the bot in a group: refreshes an allowed member's
+    @name; keeps someone not on the list so the page can offer to add them
+    (only the newest ``MAX_SEEN`` of those)."""
+    uid = _clean_user_id(user_id)
+    if uid is None:
+        return
+    name = _clean_username(username)
+    with db.db() as conn:
+        conn.execute("INSERT INTO channel_members (channel, peer_id, user_id, username, allowed, "
+                     "last_seen_at) VALUES (?, ?, ?, ?, 0, ?) "
+                     "ON CONFLICT(channel, peer_id, user_id) DO UPDATE SET "
+                     "last_seen_at = excluded.last_seen_at, "
+                     "username = COALESCE(excluded.username, channel_members.username)",
+                     (channel, str(peer_id), uid, name, _now()))
+        conn.execute("DELETE FROM channel_members WHERE channel = ? AND peer_id = ? AND allowed = 0 "
+                     "AND user_id NOT IN (SELECT user_id FROM channel_members WHERE channel = ? "
+                     "AND peer_id = ? AND allowed = 0 ORDER BY last_seen_at DESC LIMIT ?)",
+                     (channel, str(peer_id), channel, str(peer_id), MAX_SEEN))
+
+
+def remove_member(channel: str, peer_id: str, user_id) -> bool:
+    uid = _clean_user_id(user_id)
+    if uid is None:
+        return False
+    with db.db() as conn:
+        cur = conn.execute("DELETE FROM channel_members WHERE channel = ? AND peer_id = ? "
+                           "AND user_id = ?", (channel, str(peer_id), uid))
         return cur.rowcount == 1
 
 

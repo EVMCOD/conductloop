@@ -514,7 +514,7 @@ def note_ai(
 @app.command()
 def digest(
     date: str | None = typer.Option(None, "--date", "-d", help="YYYY-MM-DD (default: yesterday)"),
-    send: bool = typer.Option(True, "--send/--no-send", help="Send via webhook (Slack/Discord/Telegram)"),
+    send: bool = typer.Option(True, "--send/--no-send", help="Send via webhook (Slack/Discord)"),
     ai: bool = typer.Option(True, "--ai/--no-ai", help="Also generate AI-written exec summary"),
     ai_only: bool = typer.Option(False, "--ai-only", help="Skip standard digest, only generate AI summary"),
 ) -> None:
@@ -1213,7 +1213,7 @@ def sync_import_cmd(
 
 @app.command("briefing")
 def briefing_cmd(
-    channels: str = typer.Option("", "--channels", help="Comma list: telegram,discord"),
+    channels: str = typer.Option("", "--channels", help="Comma list: discord (telegram is skipped: it sends only run results)"),
 ) -> None:
     """Compose the morning briefing and write it to today's Obsidian daily note."""
     from . import briefing
