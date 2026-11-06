@@ -4,6 +4,12 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### Talk to your agents from Telegram
+
+- **A Telegram channel, off until you turn it on.** Create a bot with @BotFather and put its token in Credentials → Channels: it goes to the keychain (or the encrypted vault), never to the database, the configuration or a log. Turn the channel on (`POST /api/channels/telegram/enable` checks the token with Telegram first), create a pairing code, and send `/pair <code>` to your bot from Telegram. From then on `/agents` lists your agents, `/use <id>` picks one, and anything else you write goes to that agent; its answer comes back in the chat.
+- **Only your chats are answered.** The code is valid for 10 minutes, works once, and closes after 5 wrong guesses; only its hash is kept. Any other chat gets one fixed sentence and costs nothing (no agent, no provider call). Groups and channels are never answered.
+- **Nothing is exposed to the internet.** Messages are fetched from this machine (long polling): no webhook, no open port. Each message is answered at most once, even if the app stops in the middle. If a webhook is still set on the bot (the older Boardroom bridge), the status says so instead of retrying. `OPS_DISABLE_CHANNELS=1` keeps the channel stopped. There is no page for it yet: the status, the switch and the pairing code are in the API (`/api/channels`).
+
 ### CI: a hung package install fails in minutes
 
 - **The Ubuntu `test` job gives the apt install of bubblewrap and ffmpeg 10 minutes.** On the hosted runner it sometimes hung for 15 to 30 minutes and held the required check until the whole job timed out. It now fails quickly and can be re-run. The job keeps its 45-minute cap and its GitHub-hosted runner.
