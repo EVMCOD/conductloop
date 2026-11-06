@@ -671,7 +671,7 @@ def test_people_not_on_the_list_get_a_fixed_notice_and_cost_nothing(env):
         _msg(32, -500, "/agents", "supergroup", sender=99, username="mallory"),
     ]
     env["poller"].run_once()
-    # One fixed notice for the first address; the other two stay quiet (rate limit).
+    # One fixed notice for the first address; the other two stay quiet (once ever).
     assert env["fake"].sent() == [(-500, telegram.NOT_ON_LIST)]
     assert env["ceo_asks"] == [] and env["wakes"] == []
     assert store.peer("telegram", "-500")["agent_id"] is None     # /use did nothing
@@ -872,24 +872,29 @@ def test_writing_to_the_bot_privately_clears_unreachable(env):
     assert {x["user_id"]: x for x in store.members("telegram", "-500")}["99"]["reachable"] is True
 
 
-def test_denied_notice_is_rate_limited_to_once_per_day(env, monkeypatch):
+def test_denied_notice_is_sent_once_ever_per_user_and_group(env, monkeypatch):
     _turn_on(env)
     _pair_group(env)
     env["fake"].calls.clear()
     env["fake"].updates = [_msg(90, -500, "@my_cl_bot hey", "supergroup", sender=99)]
     env["poller"].run_once()
     assert env["fake"].sent() == [(-500, telegram.NOT_ON_LIST)]
+    seen = {m["user_id"]: m for m in store.members("telegram", "-500")}
+    assert seen["99"]["denied_notice_at"]
     env["fake"].calls.clear()
     env["fake"].updates = [_msg(91, -500, "@my_cl_bot again", "supergroup", sender=99)]
     env["poller"].run_once()
-    assert env["fake"].sent() == []                      # still inside the window
-    # After the period, another notice is allowed.
+    assert env["fake"].sent() == []                      # already told: never again
+    # Even a day later, still quiet — denied_notice_at is the once-ever marker.
     real_now = store._now()
-    monkeypatch.setattr(store, "_now", lambda: real_now + store.DENIED_NOTICE_EVERY + 1)
+    monkeypatch.setattr(store, "_now", lambda: real_now + 7 * 24 * 60 * 60)
     env["fake"].updates = [_msg(92, -500, "@my_cl_bot later", "supergroup", sender=99)]
     env["poller"].run_once()
+    assert env["fake"].sent() == []
+    # A different person still gets their one notice.
+    env["fake"].updates = [_msg(93, -500, "@my_cl_bot hi", "supergroup", sender=88)]
+    env["poller"].run_once()
     assert env["fake"].sent() == [(-500, telegram.NOT_ON_LIST)]
-    assert store.DENIED_NOTICE_EVERY == 24 * 60 * 60
 
 
 def test_re_pairing_a_group_keeps_its_list(env):

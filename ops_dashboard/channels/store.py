@@ -273,10 +273,7 @@ def remove_member(channel: str, peer_id: str, user_id) -> bool:
         return cur.rowcount == 1
 
 
-# ── reachability + denied-notice clock (migration 35) ───────────────────
-
-DENIED_NOTICE_EVERY = 24 * 60 * 60   # seconds: one "not on the list" notice per user per group
-
+# ── reachability + once-ever denied notice (migration 35) ────────────────
 
 def member_reachable(channel: str, peer_id: str, user_id) -> bool | None:
     """True / False / None (never tried) for an allowed member's DM."""
@@ -320,7 +317,12 @@ def note_user_can_receive_dm(channel: str, user_id) -> None:
 
 
 def should_send_denied_notice(channel: str, peer_id: str, user_id) -> bool:
-    """True when this not-on-list person has not been told within DENIED_NOTICE_EVERY."""
+    """True when this not-on-list person has never been told in this group.
+
+    ``denied_notice_at`` is the once-ever marker: set after the fixed notice
+    goes out, and never cleared while the row exists (re-pairing keeps the
+    list; only Unpair deletes it).
+    """
     uid = _clean_user_id(user_id)
     if uid is None:
         return False
@@ -330,8 +332,7 @@ def should_send_denied_notice(channel: str, peer_id: str, user_id) -> bool:
                            (channel, str(peer_id), uid)).fetchone()
     if row is None:
         return True
-    last = int(row["denied_notice_at"] or 0)
-    return (_now() - last) >= DENIED_NOTICE_EVERY
+    return not row["denied_notice_at"]
 
 
 def record_denied_notice(channel: str, peer_id: str, user_id) -> None:

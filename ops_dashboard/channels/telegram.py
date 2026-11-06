@@ -18,7 +18,7 @@ How it works:
   mentions it (``@botname``), and only from the people on that group's list
   (``channel_members``, managed on the Channels page; the person who paired
   the group is put on it). Anyone else who addresses the bot gets a short
-  fixed notice (no agent, no provider call), at most once per 24 hours.
+  fixed notice (no agent, no provider call), once ever per person and group.
 * Who answers: the agent picked in the chat (``/agents``, ``/use <id>``),
   else the channel's default agent, else the Holding CEO (the member set as
   Holding CEO, or the Boardroom's Holding CEO reply). An agent is woken with
@@ -58,7 +58,7 @@ IDLE_WAIT = 5.0              # seconds between checks while the channel is off
 MAX_CHUNK = 4000             # Telegram's limit is 4096 characters per message
 MAX_CHUNKS = 4               # longer answers are cut, and say so
 STRANGER_REPLY_EVERY = 600   # seconds: one "this bot is private" per chat
-# One "not on this group's list" notice per user per group; period lives in store.
+# One "not on this group's list" notice per user per group, ever (denied_notice_at).
 NOT_ON_LIST = ("You're not on this group's list in ConductLoop. Ask someone who is "
                "to add you on the Channels page.")
 
@@ -320,7 +320,7 @@ class Handler:
 
         if chat_type in GROUP_TYPES:
             # Only the group's list may talk to the agents; others get a fixed
-            # notice (no agent, no provider call), at most once per 24 h.
+            # notice (no agent, no provider call), once ever for that person in this group.
             sender = msg.get("from") or {}
             if sender.get("is_bot") or sender.get("id") is None:
                 return "ignored:not-a-person"     # bots, anonymous admins

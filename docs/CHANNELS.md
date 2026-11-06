@@ -54,7 +54,7 @@ the first channel; Discord comes next.
   In a group the bot answers only commands and messages that mention it
   (`@yourbot …`), and only from the people on that group's list. Someone not
   on the list who addresses the bot gets a short fixed notice (no agent, no
-  provider call), at most once per 24 hours (`store.DENIED_NOTICE_EVERY`).
+  provider call), once ever for that person in that group (`denied_notice_at`).
 - **A group's list.** Whoever sent the pairing code in the group is put on
   it. Add or remove others on the Channels page by Telegram user id. The
   easy way to find one: they mention the bot in the group; they get the

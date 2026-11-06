@@ -118,7 +118,7 @@
     if (asked.length) {
       var t2 = document.createElement("p");
       t2.className = "hint";
-      t2.textContent = "Wrote to the bot here but are not on the list (told once per day):";
+      t2.textContent = "Wrote to the bot here but are not on the list (told once):";
       box.appendChild(t2);
       asked.forEach(function (m) {
         var row = document.createElement("div");
