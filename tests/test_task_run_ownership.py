@@ -331,6 +331,27 @@ def test_approve_route_names_the_task_and_the_run(env):
         server.shutdown()
 
 
+def test_owner_liveness_does_not_signal_the_process(monkeypatch):
+    """Windows maps os.kill(pid, 0) to TerminateProcess. Asking whether the
+    owner is alive must not do that, including for this process."""
+    from ops_dashboard import db_tasks, parent_watch
+    seen: list[int] = []
+
+    def boom(*_a, **_k):
+        raise AssertionError("os.kill must not be used to test a run owner")
+
+    monkeypatch.setattr(os, "kill", boom)
+    monkeypatch.setattr(parent_watch, "alive", lambda pid: seen.append(pid) or True)
+    assert db_tasks.owner_is_alive(db_tasks.process_owner_token()) is True
+    assert seen == []
+    assert db_tasks.owner_is_alive(f"{os.getpid()}:previous-boot") is False
+    assert seen == []
+    assert db_tasks.owner_is_alive("4242:other") is True
+    assert seen == [4242]
+    assert db_tasks._pid_alive(4242) is True
+    assert seen == [4242, 4242]
+
+
 def test_the_approval_button_posts_the_task_and_the_run():
     src = (WEB / "app.js").read_text(encoding="utf-8")
     start = src.index("async function renderTaskDetail")

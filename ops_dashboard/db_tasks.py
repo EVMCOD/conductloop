@@ -112,29 +112,31 @@ def _split_owner(token: str | None) -> tuple[int | None, str | None]:
 
 
 def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True  # the process exists; it just is not ours to signal
-    except OSError:
-        return False
-    return True
+    """Whether ``pid`` is a live process other than a signal to it.
+
+    ``os.kill(pid, 0)`` is a liveness check on POSIX. On Windows, CPython turns
+    every signal except the console events into ``TerminateProcess``, so the
+    check would kill the process it is asking about (this server, or another
+    live owner). ``parent_watch.alive`` already uses a handle wait there.
+    """
+    from .parent_watch import alive
+    return alive(pid)
 
 
 def owner_is_alive(token: str | None) -> bool:
     """True when the process that started the run is still this one, or another
     live process. A missing token, a dead pid, or this pid with a different
-    boot token means the run has nobody left to finish it."""
+    boot token means the run has nobody left to finish it.
+
+    This process is recognised from the pid and the boot token before any
+    liveness call, so recovery never signals the server that is running it.
+    """
     pid, uid = _split_owner(token)
     if pid is None or uid is None:
         return False
-    if not _pid_alive(pid):
-        return False
     if pid == os.getpid():
         return uid == _PROCESS_OWNER_ID
-    return True
+    return _pid_alive(pid)
 
 
 @contextmanager
