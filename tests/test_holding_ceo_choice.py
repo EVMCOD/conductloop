@@ -3,7 +3,9 @@
 ``boardroom_settings.holding_ceo_id`` is set from the Boardroom page through
 ``/api/boardroom/holding-ceo``: only an existing AI agent, or nothing (the
 Boardroom's own Holding CEO reply answers). Migration 34 lets the singleton
-row exist on a local install with no user accounts.
+row exist on a local install with no user accounts, and lets every change be
+written to ``boardroom_decisions`` even then (``user_id`` NULL, ``body`` =
+``local``).
 """
 from __future__ import annotations
 
@@ -110,10 +112,32 @@ def test_a_remote_chairman_is_logged_in_the_decisions(env):
     assert h.code == 200
     with dbmod.db() as conn:
         row = conn.execute("SELECT * FROM boardroom_settings WHERE id = 1").fetchone()
-        dec = conn.execute("SELECT kind, title, member_id FROM boardroom_decisions "
+        dec = conn.execute("SELECT kind, title, member_id, user_id, body FROM boardroom_decisions "
                            "WHERE kind = 'holding_ceo_changed'").fetchall()
     assert row["chairman_user_id"] == uid
-    assert [tuple(d) for d in dec] == [("holding_ceo_changed", "Holding CEO: Atlas", env["agent"])]
+    assert [tuple(d) for d in dec] == [
+        ("holding_ceo_changed", "Holding CEO: Atlas", env["agent"], uid, None)]
+
+
+def test_a_local_install_with_no_account_still_logs_the_change(env):
+    """No users table row: set and clear both go to the decision log as actor 'local'."""
+    with dbmod.db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+    h = _call("POST", {"member_id": env["agent"]})          # local, no user
+    assert h.code == 200 and h.out["holding_ceo"]["id"] == env["agent"]
+    h = _call("POST", {"member_id": None})
+    assert h.code == 200 and h.out["holding_ceo"] is None
+    with dbmod.db() as conn:
+        dec = conn.execute(
+            "SELECT kind, title, member_id, user_id, body FROM boardroom_decisions "
+            "WHERE kind = 'holding_ceo_changed' ORDER BY id").fetchall()
+        settings = conn.execute("SELECT chairman_user_id, holding_ceo_id FROM boardroom_settings "
+                                "WHERE id = 1").fetchone()
+    assert settings["chairman_user_id"] is None and settings["holding_ceo_id"] is None
+    assert [tuple(d) for d in dec] == [
+        ("holding_ceo_changed", "Holding CEO: Atlas", env["agent"], None, "local"),
+        ("holding_ceo_changed", "Holding CEO cleared (the Boardroom answers)", None, None, "local"),
+    ]
 
 
 def test_deleting_the_member_clears_it(env):
@@ -142,15 +166,32 @@ def test_migration_34_makes_the_chairman_optional_and_keeps_the_row(tmp_path):
         " updated_at INTEGER NOT NULL,"
         " FOREIGN KEY (chairman_user_id) REFERENCES users(id) ON DELETE CASCADE,"
         " FOREIGN KEY (holding_ceo_id) REFERENCES team_members(id) ON DELETE SET NULL);"
-        "INSERT INTO boardroom_settings VALUES (1, 3, 9, 100, 200);")
+        "INSERT INTO boardroom_settings VALUES (1, 3, 9, 100, 200);"
+        "CREATE TABLE boardroom_decisions ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, member_id INTEGER,"
+        " kind TEXT NOT NULL, title TEXT NOT NULL, body TEXT, created_at INTEGER NOT NULL,"
+        " FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,"
+        " FOREIGN KEY (member_id) REFERENCES team_members(id) ON DELETE SET NULL);"
+        "INSERT INTO boardroom_decisions (user_id, member_id, kind, title, body, created_at) "
+        "VALUES (3, 9, 'note', 'kept', NULL, 50);"
+        "CREATE INDEX idx_boardroom_decisions_user ON boardroom_decisions(user_id, created_at DESC);"
+        "CREATE INDEX idx_boardroom_decisions_member ON boardroom_decisions(member_id, created_at DESC);")
     fn = {v: f for v, _d, f in migrations.MIGRATIONS}[34]
     for _ in range(2):                                    # idempotent
         fn(conn)
     cols = {r[1]: r for r in conn.execute("PRAGMA table_info(boardroom_settings)")}
     assert cols["chairman_user_id"][3] == 0               # nullable now
     assert tuple(conn.execute("SELECT * FROM boardroom_settings").fetchone()) == (1, 3, 9, 100, 200)
+    dcols = {r[1]: r for r in conn.execute("PRAGMA table_info(boardroom_decisions)")}
+    assert dcols["user_id"][3] == 0                       # nullable now
+    kept = conn.execute("SELECT user_id, kind, title FROM boardroom_decisions").fetchone()
+    assert tuple(kept) == (3, "note", "kept")
+    # A local row (no user) can now be inserted.
+    conn.execute("INSERT INTO boardroom_decisions (user_id, member_id, kind, title, body, created_at) "
+                 "VALUES (NULL, NULL, 'holding_ceo_changed', 'Holding CEO cleared', 'local', 60)")
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
-    assert "boardroom_settings_new" not in names
+    assert "boardroom_settings_new" not in names and "boardroom_decisions_new" not in names
+    assert "idx_boardroom_decisions_user" in names and "idx_boardroom_decisions_member" in names
     conn.commit()                                         # (the pragma is a no-op inside a transaction)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("DELETE FROM team_members WHERE id = 9")  # the foreign keys came along
@@ -160,7 +201,9 @@ def test_migration_34_makes_the_chairman_optional_and_keeps_the_row(tmp_path):
 def test_a_fresh_database_allows_no_chairman(env):
     with dbmod.db() as conn:
         cols = {r[1]: r for r in conn.execute("PRAGMA table_info(boardroom_settings)")}
+        dcols = {r[1]: r for r in conn.execute("PRAGMA table_info(boardroom_decisions)")}
     assert cols["chairman_user_id"][3] == 0
+    assert dcols["user_id"][3] == 0
 
 
 def test_the_boardroom_page_has_the_picker_without_inline_code():

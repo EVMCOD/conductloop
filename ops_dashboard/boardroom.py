@@ -1293,11 +1293,12 @@ def set_holding_ceo(member_id: int | None, *, user: dict | None = None) -> dict 
             conn.execute("UPDATE boardroom_settings SET holding_ceo_id = ?, updated_at = ? "
                          "WHERE id = 1", (member_id, now))
             uid = uid or current["chairman_user_id"]
-        if uid:   # the decision log needs a user; a local install may have none
-            conn.execute(
-                "INSERT INTO boardroom_decisions (user_id, member_id, kind, title, body, created_at) "
-                "VALUES (?, ?, 'holding_ceo_changed', ?, NULL, ?)",
-                (uid, member_id,
-                 f"Holding CEO: {name}" if member_id is not None
-                 else "Holding CEO cleared (the Boardroom answers)", now))
+        # Always write the decision log. A local install has no user account:
+        # user_id stays NULL and body records the actor as "local".
+        title = (f"Holding CEO: {name}" if member_id is not None
+                 else "Holding CEO cleared (the Boardroom answers)")
+        conn.execute(
+            "INSERT INTO boardroom_decisions (user_id, member_id, kind, title, body, created_at) "
+            "VALUES (?, ?, 'holding_ceo_changed', ?, ?, ?)",
+            (uid, member_id, title, None if uid else "local", now))
     return holding_ceo()

@@ -824,11 +824,11 @@ CREATE INDEX IF NOT EXISTS idx_ceo_messages_user   ON ceo_messages(user_id);
 
 CREATE TABLE IF NOT EXISTS boardroom_decisions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id     INTEGER NOT NULL,                            -- chairman who created/logged it
+    user_id     INTEGER,                                     -- chairman who logged it; NULL = local / no account (migration 34)
     member_id   INTEGER,                                     -- optional CEO this decision touches
-    kind        TEXT    NOT NULL,                            -- 'ceo_created' | 'autonomy_changed' | 'tier_advanced' | 'note'
+    kind        TEXT    NOT NULL,                            -- 'ceo_created' | 'autonomy_changed' | 'tier_advanced' | 'note' | 'holding_ceo_changed'
     title       TEXT    NOT NULL,
-    body        TEXT,
+    body        TEXT,                                        -- optional; 'local' when there is no user account
     created_at  INTEGER NOT NULL,
     FOREIGN KEY (user_id)   REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (member_id) REFERENCES team_members(id) ON DELETE SET NULL
