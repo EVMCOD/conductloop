@@ -4,6 +4,10 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### A scheduled agent cannot hang the scheduler
+
+- **An agent wake now has a deadline.** A provider call that never answered kept the scheduler waiting for ever, so every later trigger and system job (briefing, backup, library index) stopped until the app restarted. The wake now gives up after `BRAIN_LLM_TIMEOUT` seconds (90 by default; `OPS_AGENT_WAKE_TIMEOUT` overrides it, up to an hour), logs an error that says no output was produced, and marks the trigger as failed. An answer that arrives after the deadline is dropped, not recorded as a run.
+
 ### A cron fires once per minute, even across a restart
 
 - **A restart no longer fires the same cron twice.** The scheduler remembered "already fired this minute" only in memory. When the app restarted inside a minute that matched (an update, a crash, a relaunch), every agent trigger and system job for that minute ran again: a second briefing, a second paid agent wake. The mark is now kept in the database (`scheduler_fires`), so a restarted app, or a second process on the same database, skips what already ran. If the mark cannot be written, the scheduler keeps going and falls back to the in-memory mark.

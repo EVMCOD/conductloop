@@ -272,6 +272,30 @@ def _match_field(field: str, value: int, dow_field: bool = False,
     return False
 
 
+# Upper bound for OPS_AGENT_WAKE_TIMEOUT: a typo such as 100000 must not turn
+# the deadline back into "wait for ever".
+_WAKE_TIMEOUT_MAX = 3600.0
+
+
+def _wake_timeout() -> float:
+    """Seconds one agent wake may wait for its provider.
+
+    ``OPS_AGENT_WAKE_TIMEOUT`` overrides it; anything that is not a positive
+    number falls back to the brain's own deadline (``BRAIN_LLM_TIMEOUT``).
+    """
+    default = float(brain.LLM_TIMEOUT)
+    raw = (os.environ.get("OPS_AGENT_WAKE_TIMEOUT") or "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    if not value > 0:
+        return default
+    return min(value, _WAKE_TIMEOUT_MAX)
+
+
 def _wake_agent(agent_id: int, prompt: str, trigger_id: int | None = None) -> dict:
     """Wake an agent: fetch member + memory + chain, ask brain, log result."""
     t0 = time.time()
@@ -324,7 +348,21 @@ def _wake_agent(agent_id: int, prompt: str, trigger_id: int | None = None) -> di
             )
 
         messages = [{"role": "user", "content": prompt or "(no prompt) — continue from memory"}]
-        text = prov.ask(system_prompt, messages)
+        # The scheduler ticks on one thread: a call that never returns would
+        # stop every later trigger and system job. The abandoned call is not
+        # joined; whatever it returns later is dropped, not logged as a run.
+        limit = _wake_timeout()
+        try:
+            text = brain.ask_with_deadline(prov, system_prompt, messages, seconds=limit)
+        except TimeoutError:
+            duration = int((time.time() - t0) * 1000)
+            msg = (f"the provider did not answer within {limit:g}s, so the agent did not "
+                   f"run. No output was produced.")
+            db.log_agent_action(agent_id, "error", trigger_id=trigger_id,
+                                summary=msg[:200], duration_ms=duration)
+            log.warning("agent %s wake timed out after %ss", agent_id, limit)
+            return {"ok": False, "error": msg, "timeout": True,
+                    "duration_ms": duration, "log_id": log_id}
 
         # Log completion
         duration = int((time.time() - t0) * 1000)
