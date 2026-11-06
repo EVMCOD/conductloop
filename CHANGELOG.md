@@ -4,6 +4,10 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### A task stuck behind a dependency says why
+
+- **A task whose dependency failed, was cancelled or got blocked is now "blocked", with the reason.** It used to stay "queued" with no explanation: it looked ready, but no session would ever take it. It now reads, for example, "blocked by dependency: #12 is failed" (a dependency that no longer exists is "missing"), and a chain of tasks behind it follows. If the dependency goes back to the queue, the task does too. Tasks already stuck this way get their reason the next time a session looks for work.
+
 ### A task run has one owner
 
 - **Approving a run now records the decision.** The Approve button sent the run's id to an address that expected a task id, and the server answered success without updating the row. The run stayed "needs approval". Approval now names the task and the run, and the screen says when it did not stick.

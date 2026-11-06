@@ -104,6 +104,57 @@ class SessionStore:
     def _row(row: sqlite3.Row | None) -> dict | None:
         return dict(row) if row is not None else None
 
+    # A task cannot start until every dependency is ``done``. One that is
+    # failed, cancelled, blocked or gone will not get there on its own, so the
+    # task behind it is ``blocked`` with this reason instead of looking ready
+    # in the queue. The prefix is how a dependency block is told apart from
+    # the other reasons a task is blocked (a conflict, a worktree error).
+    DEPENDENCY_BLOCK_PREFIX = "blocked by dependency: "
+    _BAD_DEPENDENCY = ("failed", "cancelled", "blocked")
+
+    def _reconcile_dependencies(self, c: sqlite3.Connection, now: int) -> None:
+        """Block queued tasks behind a dependency that cannot finish, and give
+        back to the queue the ones whose dependencies recovered. Repeats until
+        nothing changes, so a whole chain follows. Runs inside the caller's
+        write transaction."""
+        bad = ",".join(f"'{s}'" for s in self._BAD_DEPENDENCY)
+        prefix = self.DEPENDENCY_BLOCK_PREFIX
+        for _ in range(1000):  # a chain longer than this is not realistic
+            rows = c.execute(
+                "SELECT t.id AS id, d.value AS dep, x.status AS dep_status "
+                "FROM session_tasks t, json_each(t.depends_on) d "
+                "LEFT JOIN session_tasks x ON x.id = d.value "
+                "WHERE t.owner_session_id IS NULL AND (t.status = 'queued' "
+                "  OR (t.status = 'blocked' AND substr(t.result_summary, 1, ?) = ?)) "
+                f"AND (x.id IS NULL OR x.status IN ({bad})) "
+                "ORDER BY t.id, d.key", (len(prefix), prefix)).fetchall()
+            reasons: dict[int, list[str]] = {}
+            for r in rows:
+                reasons.setdefault(int(r["id"]), []).append(
+                    f"#{r['dep']} is {r['dep_status'] or 'missing'}")
+            changed = 0
+            for tid, why in reasons.items():
+                # Also refreshes the reason of a task already blocked by a
+                # dependency when another one goes bad; unchanged rows are
+                # not counted, so the loop ends.
+                reason = prefix + ", ".join(why)
+                changed += c.execute(
+                    "UPDATE session_tasks SET status = 'blocked', result_summary = ?, "
+                    "updated_at = ? WHERE id = ? AND owner_session_id IS NULL "
+                    "AND (status = 'queued' OR (status = 'blocked' "
+                    "  AND substr(result_summary, 1, ?) = ? AND result_summary <> ?))",
+                    (reason, now, tid, len(prefix), prefix, reason)).rowcount
+            changed += c.execute(
+                "UPDATE session_tasks SET status = 'queued', result_summary = NULL, "
+                "updated_at = ? WHERE status = 'blocked' AND owner_session_id IS NULL "
+                "AND substr(result_summary, 1, ?) = ? "
+                "AND NOT EXISTS (SELECT 1 FROM json_each(session_tasks.depends_on) d "
+                "  LEFT JOIN session_tasks x ON x.id = d.value "
+                f"  WHERE x.id IS NULL OR x.status IN ({bad}))",
+                (now, len(prefix), prefix)).rowcount
+            if not changed:
+                return
+
     # ── repos (D7) ────────────────────────────────────────────────────────
     def mark_repo(self, repo_path: str, *, project_key: str | None = None,
                   enabled: bool = True) -> str:
@@ -287,6 +338,7 @@ class SessionStore:
                 c.execute("UPDATE session_tasks SET status = 'queued', owner_session_id = NULL, "
                           "updated_at = ? WHERE owner_session_id = ? "
                           "AND status IN ('claimed', 'running', 'blocked')", (now, session_id))
+                self._reconcile_dependencies(c, now)
             return cur.rowcount == 1
 
     # ── tasks (D8: user assigns in v1) ────────────────────────────────────
@@ -309,6 +361,7 @@ class SessionStore:
                 "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (title.strip(), prompt or "", role_hint, hints, assigned_session_id, int(priority),
                  deps, legacy_task_id, created_by, now, now))
+            self._reconcile_dependencies(c, now)
             return int(cur.lastrowid or 0)
 
     def assign_task(self, task_id: int, session_id: int | None) -> bool:
@@ -346,6 +399,7 @@ class SessionStore:
                 return False
             c.execute("UPDATE path_claims SET released_at = ? WHERE task_id = ? "
                       "AND released_at IS NULL", (now, task_id))
+            self._reconcile_dependencies(c, now)
             return True
 
     def review_task(self, task_id: int, *, accept: bool, note: str | None = None) -> bool:
@@ -366,6 +420,7 @@ class SessionStore:
                 return False
             c.execute("UPDATE path_claims SET released_at = ? WHERE task_id = ? "
                       "AND released_at IS NULL", (now, task_id))
+            self._reconcile_dependencies(c, now)
             return True
 
     def get_task(self, task_id: int) -> dict | None:
@@ -395,6 +450,9 @@ class SessionStore:
                "attempts = attempts + 1, claimed_at = :now, updated_at = :now "
                f"WHERE {pick} AND {self._CLAIM_WHERE}")
         with self._tx() as c:
+            # Tasks left queued behind a dead dependency (databases from
+            # before this was tracked) get their reason before the pick.
+            self._reconcile_dependencies(c, params["now"])
             if _RETURNING:
                 row = c.execute(sql + " RETURNING *", params).fetchone()
                 return self._row(row)
@@ -428,6 +486,7 @@ class SessionStore:
             if release:
                 c.execute("UPDATE path_claims SET released_at = ? "
                           "WHERE task_id = ? AND released_at IS NULL", (now, task_id))
+            self._reconcile_dependencies(c, now)
             return True
 
     # ── path claims (D3) ──────────────────────────────────────────────────
