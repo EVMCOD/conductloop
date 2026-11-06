@@ -74,9 +74,13 @@ def ask_with_connector_tools(provider, system: str, messages: list[dict], *,
 
     names = [_tname(t) for t in prov_tools]
     has_connectors = any(n.startswith("connector_") for n in names)
-    has_browse = "browse" in names
+    # browse is always in the registry, but only macOS can run it: do not
+    # force a tool round-trip (and drop streaming) on Linux/Windows for a
+    # tool that would only refuse.
+    from . import platform_caps
+    has_browse = "browse" in names and platform_caps.browser_supported()
     if not has_connectors and not has_browse:
-        # Nothing to offer: do not pay for an empty tool list.
+        # Nothing useful to offer: do not pay for an empty tool list.
         return provider.ask(system, messages), False
 
     from . import browse_tools
@@ -84,7 +88,8 @@ def ask_with_connector_tools(provider, system: str, messages: list[dict], *,
     block = prompt_block()
     if block:
         system = system + block
-    system = system + browse_tools.prompt_block()
+    if has_browse:
+        system = system + browse_tools.prompt_block()
     answer = provider.ask_with_tools(system, messages, prov_tools, on_tool_call=on_tool_call)
     return answer, True
 

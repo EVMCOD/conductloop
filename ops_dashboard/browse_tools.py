@@ -115,14 +115,12 @@ def call(name: str, args: dict | None) -> dict[str, Any]:
 
 
 def browse(args: dict[str, Any]) -> dict[str, Any]:
-    """Run one browsing task and return a text summary (or a clear refusal)."""
-    if not platform_caps.browser_supported():
-        return {
-            "ok": False,
-            "error": "platform_unsupported",
-            "message": platform_caps.browser_message(),
-        }
+    """Run one browsing task and return a text summary (or a clear refusal).
 
+    Arguments are checked first so a bad call is ``bad_request`` on every
+    platform; ``platform_unsupported`` is only for a well-formed call on a
+    machine without the in-app browser.
+    """
     task = (args.get("task") if isinstance(args.get("task"), str) else "") or ""
     task = task.strip()
     if not task:
@@ -144,6 +142,13 @@ def browse(args: dict[str, Any]) -> dict[str, Any]:
 
     title = args.get("title") if isinstance(args.get("title"), str) else None
     title = ((title or "").strip() or task[:80])[:200]
+
+    if not platform_caps.browser_supported():
+        return {
+            "ok": False,
+            "error": "platform_unsupported",
+            "message": platform_caps.browser_message(),
+        }
 
     try:
         return _run_delegated(task=task, title=title, start_url=start_url, mode=mode)

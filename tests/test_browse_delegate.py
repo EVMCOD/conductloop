@@ -172,7 +172,7 @@ def test_mock_provider_refused_without_allow(monkeypatch):
 
 
 def test_ask_with_connector_tools_offers_browse_without_connectors(monkeypatch):
-    """Team chat / Telegram Holding CEO path: browse alone is enough to use tools."""
+    """On macOS, browse alone is enough to enter the tools path."""
     from ops_dashboard import brain
 
     offered = {}
@@ -193,6 +193,7 @@ def test_ask_with_connector_tools_offers_browse_without_connectors(monkeypatch):
             ]
             return "ok"
 
+    monkeypatch.setattr(platform_caps, "browser_supported", lambda: True)
     # No connectors connected: _connector_tools is empty, browse remains.
     monkeypatch.setattr("ops_dashboard.tools._connector_tools", lambda: [])
     text, used = brain.ask_with_connector_tools(
@@ -202,3 +203,27 @@ def test_ask_with_connector_tools_offers_browse_without_connectors(monkeypatch):
     assert "browse" in offered["names"]
     assert "BROWSER" in offered["system"]
     assert "browse" in offered["system"]
+
+
+def test_ask_with_connector_tools_skips_tools_off_macos_without_connectors(monkeypatch):
+    """Linux/Windows with no connectors keep the plain ask (streaming) path."""
+    from ops_dashboard import brain
+
+    class Prov:
+        name = "openai"
+
+        def supports_tools(self):
+            return True
+
+        def ask(self, *a, **k):
+            return "plain"
+
+        def ask_with_tools(self, *a, **k):
+            raise AssertionError("must not use tools when browse cannot run")
+
+    monkeypatch.setattr(platform_caps, "browser_supported", lambda: False)
+    monkeypatch.setattr("ops_dashboard.tools._connector_tools", lambda: [])
+    text, used = brain.ask_with_connector_tools(
+        Prov(), "sys", [{"role": "user", "content": "hi"}])
+    assert used is False
+    assert text == "plain"

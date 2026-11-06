@@ -470,12 +470,16 @@ class ChatTurn:
         the common case (no connector connected) keeps streaming exactly as
         before.
         """
-        from . import browse_tools as bt
         from . import connector_tools as ct
+        from . import platform_caps
 
-        # Connectors and/or browse: both go through ask_with_connector_tools
-        # (browse is always offered; on non-macOS it refuses clearly).
-        if ct.available_tools() or bt.available_tools():
+        # Connectors, or browse on macOS — only when the provider can call tools.
+        # Otherwise keep streaming (FakeProvider / providers without tools).
+        try:
+            can_tools = bool(self.provider.supports_tools())
+        except Exception:
+            can_tools = False
+        if can_tools and (ct.available_tools() or platform_caps.browser_supported()):
             try:
                 answer, _used = brain.ask_with_connector_tools(
                     self.provider, system, messages)
