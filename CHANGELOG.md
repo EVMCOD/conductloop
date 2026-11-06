@@ -4,6 +4,10 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### CI: a hung package install fails in minutes
+
+- **The Ubuntu `test` job gives the apt install of bubblewrap and ffmpeg 10 minutes.** On the hosted runner it sometimes hung for 15 to 30 minutes and held the required check until the whole job timed out. It now fails quickly and can be re-run. The job keeps its 45-minute cap and its GitHub-hosted runner.
+
 ### A scheduled agent cannot hang the scheduler
 
 - **An agent wake now has a deadline.** A provider call that never answered kept the scheduler waiting for ever, so every later trigger and system job (briefing, backup, library index) stopped until the app restarted. The wake now gives up after `BRAIN_LLM_TIMEOUT` seconds (90 by default; `OPS_AGENT_WAKE_TIMEOUT` overrides it, up to an hour), logs an error that says no output was produced, and marks the trigger as failed. An answer that arrives after the deadline is dropped, not recorded as a run.
