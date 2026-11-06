@@ -26,10 +26,11 @@ INTERRUPTED_ERROR = (
     "interrupted: the process running this task is gone, so no result was produced"
 )
 
-# Which run states an outcome is allowed to leave. ``done`` is also how a
-# person records approval of a run that stopped at ``needs_approval``.
+# An outcome can only close a run that is still ``running``. Approval of a
+# run that stopped at ``needs_approval`` is ``record_approval``: it keeps the
+# run's metrics, tool log and artifact fields instead of resetting them.
 _FINISH_FROM = {
-    "done": ("running", "needs_approval"),
+    "done": ("running",),
     "error": ("running",),
     "needs_approval": ("running",),
 }
@@ -296,6 +297,34 @@ def finish_run(run_id: int, *, status: str, output_path: str | None = None,
                 f"WHERE {owns} AND status = 'running'",
                 (now, run_id, run_id),
             )
+        return True
+
+
+def record_approval(run_id: int, output_text: str) -> bool:
+    """Mark a ``needs_approval`` run as ``done`` and say so in its text.
+
+    Only the status and the text change: tokens, duration, the tool log and
+    the artifact fields are what the run actually did and stay as recorded.
+    Returns False when the run is not waiting for approval any more. The task
+    follows only when this is its latest run and it is still waiting too.
+    """
+    now = int(time.time())
+    with _immediate() as conn:
+        cur = conn.execute(
+            "UPDATE runs SET status = 'done', output_text = ? "
+            "WHERE id = ? AND status = 'needs_approval'",
+            (output_text, run_id),
+        )
+        if cur.rowcount != 1:
+            return False
+        conn.execute(
+            "UPDATE tasks SET status = 'done', output_summary = ?, updated_at = ? "
+            "WHERE id = (SELECT task_id FROM runs WHERE id = ?) "
+            "AND status = 'needs_approval' "
+            "AND NOT EXISTS (SELECT 1 FROM runs newer "
+            "WHERE newer.task_id = tasks.id AND newer.id > ?)",
+            ((output_text or "")[:280] or None, now, run_id, run_id),
+        )
         return True
 
 

@@ -2004,6 +2004,7 @@ from .db_tasks import (  # noqa: E402,F401
     latest_pending_approval,
     list_runs,
     list_tasks,
+    record_approval,
     recover_interrupted_runs,
     start_run,
     task_stats,

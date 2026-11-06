@@ -392,7 +392,7 @@ def approve_run(run_id: int | None = None, task_id: int | None = None) -> dict:
     text = run.get("output_text") or ""
     if APPROVAL_NOTE not in text:
         text = (text + "\n\n" + APPROVAL_NOTE).strip()
-    wrote = db.finish_run(int(run["id"]), status="done", output_text=text, error=None)
+    wrote = db.record_approval(int(run["id"]), text)
     if not wrote:
         return {"ok": False, "error": "run is no longer awaiting approval"}
     return {

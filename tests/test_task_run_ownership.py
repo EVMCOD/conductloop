@@ -146,7 +146,7 @@ def test_a_late_finish_does_not_overwrite_a_newer_attempt(env):
     assert newer and newer != older
     # Approving the older run while the newer one is in flight records that
     # run, and leaves the task with the attempt that is still running.
-    assert env.finish_run(older, status="done", output_text="OLD result\n\n[approved]")
+    assert env.record_approval(older, "OLD result\n\n[approved]")
     assert env.get_run(older)["status"] == "done"
     assert env.get_run(newer)["status"] == "running"
     assert env.get_task(tid)["status"] == "running"
@@ -156,6 +156,7 @@ def test_a_late_finish_does_not_overwrite_a_newer_attempt(env):
     # And once the newer attempt has finished, a repeated delivery of the
     # older one still cannot replace it.
     assert env.finish_run(older, status="done", output_text="OLD result again") is False
+    assert env.record_approval(older, "OLD result again") is False
     assert env.get_task(tid)["output_summary"] == "NEW result"
     assert env.get_run(newer)["status"] == "done"
 
@@ -350,6 +351,51 @@ def test_owner_liveness_does_not_signal_the_process(monkeypatch):
     assert seen == [4242]
     assert db_tasks._pid_alive(4242) is True
     assert seen == [4242, 4242]
+
+
+def test_on_windows_owner_liveness_uses_the_handle_check_and_never_os_kill(monkeypatch):
+    """The real Windows branch of ``parent_watch.alive``: a handle wait, no signal."""
+    import sys
+
+    from ops_dashboard import db_tasks, parent_watch
+    asked: list[int] = []
+
+    def boom(*_a, **_k):
+        raise AssertionError("os.kill would TerminateProcess on Windows")
+
+    monkeypatch.setattr(os, "kill", boom)
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(parent_watch, "_alive_windows",
+                        lambda pid: asked.append(pid) or pid == 4242)
+    assert db_tasks.owner_is_alive(db_tasks.process_owner_token()) is True
+    assert db_tasks.owner_is_alive(f"{os.getpid()}:previous-boot") is False
+    assert asked == []
+    assert db_tasks.owner_is_alive("4242:other") is True
+    assert db_tasks.owner_is_alive("4343:gone") is False
+    assert asked == [4242, 4343]
+
+
+def test_approval_keeps_what_the_run_recorded(env):
+    """Approving changes the status and the text, not the run's own record."""
+    from ops_dashboard import orchestrator
+    tid = _task(env)
+    rid = env.start_run(tid, "mock", "mock-1")
+    calls = [{"name": "write_artifact", "ok": True, "args": {"staged": True}}]
+    assert env.finish_run(rid, status="needs_approval", output_text="draft",
+                          tokens_in=11, tokens_out=22, duration_ms=333,
+                          tool_calls=calls)
+    before = env.get_run(rid)
+    res = orchestrator.approve_run(task_id=tid, run_id=rid)
+    assert res["ok"] is True
+    after = env.get_run(rid)
+    assert after["status"] == "done"
+    for field in ("tokens_in", "tokens_out", "duration_ms", "tool_calls",
+                  "finished_at", "output_path", "artifact_doc_id", "error"):
+        assert after[field] == before[field], field
+    assert json.loads(after["tool_calls"]) == calls
+    # An outcome cannot be forced over a finished run through finish_run.
+    assert env.finish_run(rid, status="done", output_text="again") is False
+    assert env.get_run(rid)["output_text"] == after["output_text"]
 
 
 def test_the_approval_button_posts_the_task_and_the_run():
