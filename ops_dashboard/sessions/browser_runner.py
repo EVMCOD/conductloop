@@ -69,7 +69,7 @@ MODE_LINES = {
     "read": "You can only read pages in this mode: you cannot click, type, log in, buy or post "
             "anything.",
     "act": "You can click, type and choose options (select) on elements by their [ref] from your "
-           "LAST read. Anything with "
+           "LAST read. Every select, and anything with "
            "an effect (submitting forms, buying, posting, sending, deleting, sensitive pages) "
            "waits for the user's approval; you never type passwords or card data. After every "
            "click/type, read the page again before the next action.",

@@ -6,8 +6,8 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ### The browsing agent can go back, scroll and pick from drop-downs
 
-- **Three more tools for browser sessions.** `back` goes back one page and `scroll` moves about one screen up or down (for pages that load more as you scroll); both are allowed in *read* mode. `select` chooses an option of a drop-down by its visible text, in *act* mode only. Each read now lists the options of a drop-down and the one chosen (never for card-payment fields).
-- **Same safeguards as click and type.** `select` goes through the same check, in the app and again in the desktop side on the live page: a card-payment drop-down, or any choice on a page with a password or payment field, waits for your approval; anything that is not a drop-down is refused. A step back onto a site that was never opened in the session is stopped and asked about, like any other new site. You can still watch the agent's tab, pause it or take control at any time.
+- **Three more tools for browser sessions.** `back` goes back one page and `scroll` moves about one screen up or down (for pages that load more as you scroll); both are allowed in *read* mode. `select` chooses an option of a drop-down by its visible text, in *act* mode only, and always waits for your approval. Each read now lists the options of a drop-down and the one chosen (never for card-payment fields).
+- **Every choice from a drop-down is approved by you.** `select` goes through the same check as click and type, in the app and again in the desktop side on the live page, and always waits for your approval, on any page (a choice can change what an order or a form does); the approval says when it is a card-payment field or a page with a password or payment field. Anything that is not a drop-down is refused. A step back onto a site that was never opened in the session is stopped and asked about, like any other new site. You can still watch the agent's tab, pause it or take control at any time.
 
 ### Telegram: groups, the Holding CEO, and run results
 

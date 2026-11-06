@@ -2,7 +2,7 @@
 
 Same gates as the first tools: ``back``/``scroll`` belong to ``read`` mode,
 ``select`` to ``act`` mode and goes through the shared effect classifier and
-the approval queue (payment selects, sensitive pages). No desktop app: the
+the approval queue (every select, on any page). No desktop app: the
 bridge is an in-process fake, and the Rust/JS side is checked from source.
 """
 from __future__ import annotations
@@ -196,14 +196,27 @@ def test_scroll_validates_the_direction_and_reports_the_end(store):
 
 # ── select ───────────────────────────────────────────────────────────────────
 
-def test_select_goes_through_when_allowed(store):
+def test_every_select_waits_for_the_user_even_on_a_normal_page(store):
     sid = session(store)
     br = FakeBridge()
     t = tools_for(store, sid, br)
+    answer_first_approval(store, sid, "approve")
     r = t.select(2, " Large ")
-    assert r["ok"] and br.ops("select") == [("select", {"ref": 2, "text": "Large"})]
-    assert sb.pending_browser_approvals(store, sid) == []
+    assert r["ok"]
+    # Never sent unconfirmed: only after the approval, with confirmed=True.
+    assert br.ops("select") == [("select", {"ref": 2, "text": "Large", "confirmed": True})]
+    ev = [e for e in store.list_events(sid) if e["kind"] == "browser.approval_pending"]
+    assert len(ev) == 1 and "confirm:select" in json.dumps(ev)
     assert t.select(2, "Medium")["error"] == "read the page first"
+
+
+def test_an_unanswered_select_does_nothing(store):
+    sid = session(store)
+    br = FakeBridge()
+    t = sb.BrowserTools(store, sid, bridge=br, approval_timeout=0.05)  # type: ignore[arg-type]
+    assert t.read()["ok"]
+    assert t.select(2, "Large")["error"] == "nobody approved it in time"
+    assert br.ops("select") == []
 
 
 def test_select_refuses_bad_options_and_non_selects(store):
@@ -243,7 +256,10 @@ def test_classifier_select_rules():
     page = fx.Page(host="shop.example", has_password=False, has_payment=False)
     sel = fx.Element(tag="select", typ="", role="", name="Size", autocomplete="", in_form=True,
                      href=None, payment=False)
-    assert fx.classify("select", sel, page) == "allow"
+    assert fx.classify("select", sel, page) == "confirm:select"
+    assert fx.classify("select", fx.Element(tag="select", typ="", role="", name="Sort by",
+                                            autocomplete="", in_form=False, href=None,
+                                            payment=False), page) == "confirm:select"
     assert fx.classify("select", sel, fx.Page(host="shop.example", has_password=True,
                                               has_payment=False)) == "confirm:sensitive_page"
     inp = fx.Element(tag="input", typ="text", role="", name="Size", autocomplete="",
@@ -273,9 +289,13 @@ def test_runner_uses_scroll_select_and_back(store):
                      J("back"), J(final="chose Large")])
     store.enqueue_task(title="t", prompt="pick size Large on shop.example", assigned_session_id=sid)
     task = store.claim_task(sid)
+    answer_first_approval(store, sid, "approve")  # the select always asks
     out = BrowserRunner(store, sid, provider_factory=lambda s: prov, bridge=br).run_task(task)  # type: ignore[arg-type]
     assert out.task_status == "needs_review"
     assert [c[0] for c in br.calls if c[0] in ("scroll", "select", "back")] == ["scroll", "select", "back"]
+    assert br.ops("select") == [("select", {"ref": 2, "text": "Large", "confirmed": True})]
+    # back and scroll stay plain read tools: never asked about.
+    assert all("confirmed" not in a for op, a in br.ops("back", "scroll"))
     msgs = prov.calls[-1][1]
     for name in ("scroll", "select", "back"):
         assert any(m["content"].startswith(f"TOOL_RESULT {name}:") and '"ok": true' in m["content"]

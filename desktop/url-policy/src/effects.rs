@@ -34,7 +34,8 @@ pub enum Action {
     Type {
         submit: bool,
     },
-    /// Choose an option of a `<select>` (no submit).
+    /// Choose an option of a `<select>` (no submit). Never `Allow`: always
+    /// needs the user's approval.
     Select,
 }
 
@@ -242,8 +243,9 @@ pub fn classify(action: Action, el: &Element, page: &Page) -> Effect {
     let typ = el.typ.to_ascii_lowercase();
     match action {
         Action::Select => {
-            // Choosing an option submits nothing; a page that navigates on
-            // change is stopped by the new-site gate like any other.
+            // Always confirmed (decision of 2026-11-06): a choice can change
+            // what an order or a form does, so the user approves every one,
+            // on any page. The reason is the most specific that applies.
             if tag != "select" {
                 return Effect::Deny("not_a_select");
             }
@@ -253,7 +255,7 @@ pub fn classify(action: Action, el: &Element, page: &Page) -> Effect {
             if page.has_password || page.has_payment {
                 return Effect::Confirm("sensitive_page");
             }
-            Effect::Allow
+            Effect::Confirm("select")
         }
         Action::Type { submit } => {
             if is_password(el) {

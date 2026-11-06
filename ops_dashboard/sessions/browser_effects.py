@@ -166,15 +166,16 @@ def classify(action: str, el: Element, page: Page, *, submit: bool = False) -> s
     """``action``: 'click' | 'type' | 'select' (choose an option of a <select>)."""
     tag, typ = el.tag.lower(), el.typ.lower()
     if action == "select":
-        # Choosing an option submits nothing; a page that navigates on change
-        # is stopped by the new-site gate like any page-started navigation.
+        # Always confirmed (decision of 2026-11-06): a choice can change what an
+        # order or a form does, so the user approves every one, on any page.
+        # The reason is the most specific that applies.
         if tag != "select":
             return "deny:not_a_select"
         if _is_payment(el):
             return "confirm:payment_field"
         if page.has_password or page.has_payment:
             return "confirm:sensitive_page"
-        return "allow"
+        return "confirm:select"
     if action == "type":
         if _is_password(el):
             return "deny:password_field"

@@ -28,7 +28,8 @@
   is on screen, not the site's data; a step back onto a site never opened is
   stopped by Rust like any page navigation) and ``select`` (``act`` mode:
   choose an option of a ``<select>`` by its visible text, through the same
-  classifier and approvals as click/type).
+  classifier and approvals as click/type; every select waits for the user's
+  approval, on any page).
 * ``create_browser_session`` / ``set_browser_mode``: browser sessions have no
   repo (``repo_path`` NULL, migration 20) — a session is either code or
   browser, never both. Only the human changes ``browser_mode`` (local API).

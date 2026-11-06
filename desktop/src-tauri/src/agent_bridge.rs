@@ -23,8 +23,8 @@
 //! `on_navigation` still stops a step back onto a site never opened),
 //! `scroll` (`direction` up|down, a fixed script: nothing from the model is
 //! run) and `select` (choose an option of a `<select>` by its visible text,
-//! on a `ref`, classified like click/type: payment selects and sensitive
-//! pages need `confirmed`).
+//! on a `ref`, classified like click/type: it always needs `confirmed`,
+//! on every page).
 //!
 //! New-site gate (B10): an agent tab only goes to registrable domains opened
 //! in the session (`TabInfo.sites`, seeded by the backend from the user's
@@ -640,7 +640,7 @@ mod tests {
         use conductloop_url_policy::effects::Effect;
         let size =
             json!({"tag": "select", "name": "Size", "in_form": true, "page_host": "shop.example"});
-        assert_eq!(effect_of("select", false, &size), Effect::Allow);
+        assert_eq!(effect_of("select", false, &size), Effect::Confirm("select"));
         let month = json!({"tag": "select", "autocomplete": "cc-exp-month", "payment": true,
                            "page_host": "shop.example"});
         assert_eq!(
