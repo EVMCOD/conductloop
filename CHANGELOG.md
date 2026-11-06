@@ -4,6 +4,11 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### The browsing agent can go back, scroll and pick from drop-downs
+
+- **Three more tools for browser sessions.** `back` goes back one page and `scroll` moves about one screen up or down (for pages that load more as you scroll); both are allowed in *read* mode. `select` chooses an option of a drop-down by its visible text, in *act* mode only, and always waits for your approval. Each read now lists the options of a drop-down and the one chosen (never for card-payment fields).
+- **Every choice from a drop-down is approved by you.** `select` goes through the same check as click and type, in the app and again in the desktop side on the live page, and always waits for your approval, on any page (a choice can change what an order or a form does); the approval says when it is a card-payment field or a page with a password or payment field. Anything that is not a drop-down is refused. A step back onto a site that was never opened in the session is stopped and asked about, like any other new site. You can still watch the agent's tab, pause it or take control at any time.
+
 ### Telegram: groups, the Holding CEO, and run results
 
 - **The Holding CEO answers by default.** A paired chat no longer has to pick an agent first: the member set as Holding CEO answers (or the Boardroom's Holding CEO reply when none is set). `/use <id>` still picks another agent, `/use ceo` goes back, and the default can be changed for every chat.

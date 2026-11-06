@@ -24,6 +24,12 @@
   reports as ``pending_nav``) asks the user through the same queue, bound to
   the current page and single use; Rust refuses an unconfirmed navigation to
   a new site and does not read or act on a page that landed off-site.
+* Agent tools v2: ``back`` and ``scroll`` (``read`` mode: they change what
+  is on screen, not the site's data; a step back onto a site never opened is
+  stopped by Rust like any page navigation) and ``select`` (``act`` mode:
+  choose an option of a ``<select>`` by its visible text, through the same
+  classifier and approvals as click/type; every select waits for the user's
+  approval, on any page).
 * ``create_browser_session`` / ``set_browser_mode``: browser sessions have no
   repo (``repo_path`` NULL, migration 20) — a session is either code or
   browser, never both. Only the human changes ``browser_mode`` (local API).
@@ -49,12 +55,14 @@ from .store import SessionStore
 
 SOCK_ENV, TOKEN_ENV = "CONDUCTLOOP_BROWSER_SOCK", "CONDUCTLOOP_BROWSER_TOKEN"
 BROWSER_MODES = ("off", "read", "act")
-READ_TOOLS = ("open", "navigate", "read")
-ACT_TOOLS = ("click", "type")            # PR 9
+READ_TOOLS = ("open", "navigate", "read", "back", "scroll")
+ACT_TOOLS = ("click", "type", "select")  # PR 9 (+ select)
+SCROLL_DIRECTIONS = ("down", "up")
 MAX_RESPONSE = 4 * 1024 * 1024
 MAX_SNAPSHOT_TEXT = 12_000
 MAX_ELEMENTS = 150
 MAX_TYPE_CHARS = 2000                    # same cap as agent_bridge.rs
+MAX_OPTION_CHARS = 200                   # same cap as agent_bridge.rs
 APPROVAL_TIMEOUT_S = 600.0
 APPROVAL_POLL_S = 1.0
 APPROVAL_PREFIX = "browser."
@@ -166,6 +174,11 @@ def format_snapshot(snap: dict) -> tuple[str, str]:
         if e.get("filled"):
             bits.append("filled")
         bits.append(json.dumps(s(e.get("name"), 120), ensure_ascii=False))
+        opts = e.get("options")
+        if isinstance(opts, list) and opts:
+            bits.append("options=" + json.dumps([s(o, 80) for o in opts[:30]], ensure_ascii=False))
+            if e.get("selected"):
+                bits.append("selected=" + json.dumps(s(e.get("selected"), 80), ensure_ascii=False))
         if e.get("href"):
             bits.append("→ " + s(e.get("href"), 300))
         lines.append("  " + " ".join(bits))
@@ -360,6 +373,10 @@ class BrowserTools:
             return {"ok": False, "error": "ref: a number from the last read"}
         if op == "type" and (not isinstance(text, str) or len(text) > MAX_TYPE_CHARS):
             return {"ok": False, "error": f"text: a string of at most {MAX_TYPE_CHARS} characters"}
+        if op == "select" and (not isinstance(text, str) or not text.strip()
+                               or len(text) > MAX_OPTION_CHARS):
+            return {"ok": False, "error": f"option: the visible text of one option "
+                                           f"(at most {MAX_OPTION_CHARS} characters)"}
         snap, h = self.last_snapshot, self.last_hash
         if snap is None or h is None:
             return {"ok": False, "error": "read the page first"}
@@ -375,6 +392,8 @@ class BrowserTools:
         args: dict[str, Any] = {"ref": ref}
         if op == "type":
             args.update(text=text, submit=bool(submit))
+        elif op == "select":
+            args.update(text=str(text).strip())
         if effect == "allow":
             r = self.bridge.call(op, self.session_id, **args)
             err = str(r.get("error") or "")
@@ -391,7 +410,8 @@ class BrowserTools:
             **base, "effect": effect, "dom_hash": h,
             "element": {k: el.get(k) for k in ("tag", "type", "role", "name", "href", "in_form",
                                                 "payment") if el.get(k) not in (None, "", False)},
-            **({"text": text, "submit": bool(submit)} if op == "type" else {})},
+            **({"text": text, "submit": bool(submit)} if op == "type" else {}),
+            **({"option": str(text).strip()} if op == "select" else {})},
             reason=_describe(op, el, text, effect))
         self.store.record_event(self.session_id, "browser.approval_pending",
                                 {**base, "effect": effect, "approval_id": aid})
@@ -452,6 +472,47 @@ class BrowserTools:
 
     def type(self, ref: Any, text: Any, submit: Any = False) -> dict:
         return self._act("type", ref, text if isinstance(text, str) else None, bool(submit))
+
+
+    def select(self, ref: Any, option: Any) -> dict:
+        """Choose the option whose visible text is ``option`` in <select> [ref]."""
+        return self._act("select", ref, option if isinstance(option, str) else None)
+
+
+    # ── back / scroll (read mode) ───────────────────────────────────────────
+
+    def back(self) -> dict:
+        """History back in the agent tab. Rust stops a step back onto a new
+        site (pending_nav), which the next read asks the user about."""
+        self._check("back")
+        r = self.bridge.call("back", self.session_id)
+        ok = bool(r.get("ok"))
+        self.store.record_event(self.session_id, "browser.back", {"ok": ok, "error": r.get("error")})
+        self.last_snapshot = None
+        out: dict[str, Any] = {"ok": ok, **({"error": str(r["error"])[:200]} if r.get("error") else {})}
+        if ok:
+            out["note"] = "went back; read the page before the next action"
+        return out
+
+
+    def scroll(self, direction: Any = "down") -> dict:
+        """Scroll the page about one screen (pages that load more as you go).
+        Refs from the last read stay valid; read again to see what loaded."""
+        self._check("scroll")
+        d = str(direction or "down").strip().lower()
+        if d not in SCROLL_DIRECTIONS:
+            return {"ok": False, "error": "direction: \"down\" or \"up\""}
+        r = self.bridge.call("scroll", self.session_id, direction=d)
+        ok = bool(r.get("ok"))
+        self.store.record_event(self.session_id, "browser.scroll",
+                                {"direction": d, "ok": ok, "error": r.get("error")})
+        if not ok:
+            return {"ok": False, "error": str(r.get("error") or "scroll failed")[:200]}
+        y, top = r.get("y"), r.get("max")
+        out: dict[str, Any] = {"ok": True, "note": "read the page to see what is there now"}
+        if isinstance(y, int) and isinstance(top, int):
+            out.update(y=y, max=top, at_end=(y >= top) if d == "down" else (y <= 0))
+        return out
 
 
 def create_browser_session(store: SessionStore, *, name: str, role: str, provider: str, model: str,
@@ -549,7 +610,10 @@ def _element(snap: dict, ref: int) -> dict | None:
 
 def _describe(op: str, el: dict, text: str | None, effect: str) -> str:
     name = str(el.get("name") or el.get("tag") or "element")[:80]
-    what = f'click "{name}"' if op == "click" else f'type into "{name}"'
+    if op == "select":
+        what = f'choose {str(text or "")[:80]!r} in "{name}"'
+    else:
+        what = f'click "{name}"' if op == "click" else f'type into "{name}"'
     if op == "type" and text is not None:
         what += f": {text[:80]!r}"
     return f"Browser agent wants to {what} ({effect.split(':', 1)[-1]})"

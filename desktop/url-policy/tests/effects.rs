@@ -16,6 +16,7 @@ fn shared_vectors() {
             "click" => Action::Click,
             "type" => Action::Type { submit: false },
             "type+submit" => Action::Type { submit: true },
+            "select" => Action::Select,
             other => panic!("action {other}"),
         };
         let el = Element {

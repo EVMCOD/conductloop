@@ -1,7 +1,7 @@
 # Shared test vectors for the effect classifier (Rust: tests/effects.rs,
 # Python: tests/test_browser_act.py). One per line:
 # action | tag | type | role | name | autocomplete | in_form | href | payment | page_host | page_password | page_payment => expected
-# action: click | type | type+submit ; booleans: 0/1 ; empty field = empty string ; href "-" = none
+# action: click | type | type+submit | select ; booleans: 0/1 ; empty field = empty string ; href "-" = none
 click | a |  |  | Docs |  | 0 | https://example.com/docs | 0 | www.example.com | 0 | 0 => allow
 click | a |  |  | Other site |  | 0 | https://evil.example/x | 0 | example.com | 0 | 0 => confirm:cross_domain
 click | a |  |  | js |  | 0 | javascript:alert(1) | 0 | example.com | 0 | 0 => confirm:non_http_link
@@ -47,3 +47,9 @@ click | button | button |  | Aceptar |  | 0 | - | 0 | example.com | 0 | 0 => con
 click | button | button |  | Browse docs |  | 0 | - | 0 | example.com | 0 | 0 => allow
 click | button | button |  | Show more |  | 0 | - | 0 | example.com | 0 | 0 => allow
 click | a |  |  | Docs |  | 0 | https://example.com/docs | 0 | www.example.com | 0 | 0 => allow
+select | select |  |  | Size |  | 1 | - | 0 | shop.example | 0 | 0 => confirm:select
+select | select |  |  | Sort by |  | 0 | - | 0 | shop.example | 0 | 0 => confirm:select
+select | select |  |  | Expiry month | cc-exp-month | 1 | - | 1 | shop.example | 0 | 1 => confirm:payment_field
+select | select |  |  | Country |  | 1 | - | 0 | shop.example | 1 | 0 => confirm:sensitive_page
+select | input | text |  | Size |  | 1 | - | 0 | shop.example | 0 | 0 => deny:not_a_select
+select | div |  | listbox | Size |  | 0 | - | 0 | shop.example | 0 | 0 => deny:not_a_select

@@ -1,7 +1,8 @@
 // Browser design PR 9 — describe or act on ONE element chosen by the agent
 // through its `ref` (data-cl-ref from the last read). Injected by
 // agent_bridge.rs, which replaces the ARGS placeholder in the last line with a JSON object:
-//   {"ref": n, "op": "describe" | "click" | "type", "text": "...", "submit": bool}
+//   {"ref": n, "op": "describe" | "click" | "type" | "select", "text": "...", "submit": bool}
+// `select` chooses the option of a <select> whose visible text (or value) is `text`.
 // No selectors, no eval from the model. Synthetic events (isTrusted=false).
 (function (args) {
   "use strict";
@@ -12,7 +13,7 @@
   if (args.op === "describe") {
     var name = el.getAttribute("aria-label") || el.getAttribute("title") || el.getAttribute("alt") ||
       (el.labels && el.labels.length ? el.labels[0].textContent : "") ||
-      (tag !== "input" && tag !== "textarea" ? el.textContent : "") ||
+      (tag !== "input" && tag !== "textarea" && tag !== "select" ? el.textContent : "") ||
       el.getAttribute("placeholder") || el.getAttribute("name") || "";
     return {
       ok: true, tag: tag, type: (el.getAttribute("type") || "").toLowerCase(),
@@ -60,6 +61,21 @@
       if (go && form) { if (form.requestSubmit) form.requestSubmit(); else form.submit(); }
     }
     return { ok: true };
+  }
+  if (args.op === "select") {
+    if (tag !== "select") return { ok: false, error: "not_a_select" };
+    var want = clip(args.text, 200), opts = el.options, idx = -1, i;
+    for (i = 0; i < opts.length && idx < 0; i++) if (clip(opts[i].text, 200) === want) idx = i;
+    for (i = 0; i < opts.length && idx < 0; i++) if (String(opts[i].value) === want) idx = i;
+    if (idx < 0) return { ok: false, error: "no_such_option" };
+    if (opts[idx].disabled) return { ok: false, error: "disabled_option" };
+    el.focus();
+    // Native setter so frameworks (React…) see the change.
+    var sel = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
+    sel.call(el, opts[idx].value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    return { ok: true, chosen: clip(opts[idx].text, 120) };
   }
   return { ok: false, error: "unknown_op" };
 })(__ARGS__)

@@ -39,6 +39,16 @@
     if (el.form || el.closest("form")) item.in_form = true;
     if (tag === "a") item.href = String(el.href || el.getAttribute("href") || "").slice(0, 500);
     if (tag === "input" || tag === "textarea" || tag === "select") item.filled = !!el.value;
+    // Options of a <select> (visible labels, for the `select` tool). The
+    // chosen one is a label the page shows, not a typed value; never for
+    // payment selects.
+    if (tag === "select" && (el.getAttribute("autocomplete") || "").toLowerCase().indexOf("cc-") !== 0) {
+      var opl = [];
+      for (var k = 0; k < el.options.length && opl.length < 30; k++)
+        if (!el.options[k].disabled) opl.push(clip(el.options[k].text, 80));
+      item.options = opl;
+      if (el.selectedIndex >= 0 && el.options[el.selectedIndex]) item.selected = clip(el.options[el.selectedIndex].text, 80);
+    }
     var ac = (el.getAttribute("autocomplete") || "").toLowerCase();
     if (ac.indexOf("cc-") === 0) item.payment = true;
     if (ac.indexOf("cc-") === 0 || ac.indexOf("password") >= 0) item.ac = ac.slice(0, 40);

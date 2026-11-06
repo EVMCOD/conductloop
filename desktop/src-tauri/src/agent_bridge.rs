@@ -19,6 +19,13 @@
 //! in the backend) is refused with `confirmation_required:<reason>`.
 //! There is still no eval op and no free selectors.
 //!
+//! Agent tools v2: `back` (history back; the new-site gate in
+//! `on_navigation` still stops a step back onto a site never opened),
+//! `scroll` (`direction` up|down, a fixed script: nothing from the model is
+//! run) and `select` (choose an option of a `<select>` by its visible text,
+//! on a `ref`, classified like click/type: it always needs `confirmed`,
+//! on every page).
+//!
 //! New-site gate (B10): an agent tab only goes to registrable domains opened
 //! in the session (`TabInfo.sites`, seeded by the backend from the user's
 //! task). `open`/`navigate` to a new site without `confirmed` →
@@ -31,10 +38,12 @@ use serde_json::{json, Value};
 use crate::browser::{self, BrowserState};
 
 pub const MAX_REQUEST: usize = 64 * 1024;
-pub const OPS: [&str; 7] = [
-    "open", "navigate", "read", "status", "close", "click", "type",
+pub const OPS: [&str; 10] = [
+    "open", "navigate", "read", "status", "close", "click", "type", "back", "scroll", "select",
 ];
 pub const MAX_TYPE_CHARS: usize = 2000;
+/// Longest option text `select` accepts (same cap as the Python side).
+pub const MAX_OPTION_CHARS: usize = 200;
 const SNAPSHOT_JS: &str = include_str!("agent_snapshot.js");
 
 /// Snapshot script with the visibility helper inlined (built once).
@@ -63,6 +72,8 @@ pub struct Request {
     pub submit: bool,
     pub confirmed: bool,
     pub sites: Vec<String>,
+    /// `scroll`: +1 down, -1 up (validated; never text from the model).
+    pub direction: i8,
 }
 
 pub const MAX_SEED_SITES: usize = 32;
@@ -93,7 +104,7 @@ pub fn parse_request(line: &str, token: &str) -> Result<Request, String> {
         .get("ref")
         .and_then(Value::as_i64)
         .filter(|r| *r > 0 && *r < 100_000);
-    if matches!(op, "click" | "type") && elem.is_none() {
+    if matches!(op, "click" | "type" | "select") && elem.is_none() {
         return Err("ref_required".into());
     }
     let text = v.get("text").and_then(Value::as_str).map(str::to_string);
@@ -104,6 +115,19 @@ pub fn parse_request(line: &str, token: &str) -> Result<Request, String> {
     {
         return Err("bad_text".into());
     }
+    if op == "select"
+        && text
+            .as_ref()
+            .is_none_or(|t| t.trim().is_empty() || t.chars().count() > MAX_OPTION_CHARS)
+    {
+        return Err("bad_text".into());
+    }
+    let direction = match (op, v.get("direction").and_then(Value::as_str)) {
+        ("scroll", Some("down")) => 1,
+        ("scroll", Some("up")) => -1,
+        ("scroll", _) => return Err("bad_direction".into()),
+        _ => 0,
+    };
     Ok(Request {
         op: op.to_string(),
         session,
@@ -124,7 +148,19 @@ pub fn parse_request(line: &str, token: &str) -> Result<Request, String> {
                     .collect()
             })
             .unwrap_or_default(),
+        direction,
     })
+}
+
+/// Fixed scroll script; `direction` is +1 or -1 (never spliced text).
+pub fn scroll_script(direction: i8) -> String {
+    let d = if direction < 0 { -1 } else { 1 };
+    format!(
+        "(function(d){{var h=Math.max(200,Math.round(window.innerHeight*0.8));\
+window.scrollBy(0,d*h);var se=document.scrollingElement||document.documentElement;\
+return {{ok:true,y:Math.round(window.scrollY),\
+max:Math.max(0,Math.round(se.scrollHeight-window.innerHeight))}};}})({d})"
+    )
 }
 
 /// Script for one element op; args are serialised JSON (never spliced text).
@@ -153,10 +189,10 @@ pub fn effect_of(op: &str, submit: bool, d: &Value) -> conductloop_url_policy::e
         has_password: b("has_password"),
         has_payment: b("has_payment"),
     };
-    let action = if op == "type" {
-        Action::Type { submit }
-    } else {
-        Action::Click
+    let action = match op {
+        "type" => Action::Type { submit },
+        "select" => Action::Select,
+        _ => Action::Click,
     };
     classify(action, &el, &page)
 }
@@ -252,7 +288,37 @@ pub fn handle(app: &tauri::AppHandle, req: Request) -> Value {
                 Err(e) => err(&e),
             },
         },
-        "click" | "type" => match tab {
+        "back" => match tab {
+            None => err("tab_closed"),
+            Some(t) if !browser::agent_may_act(t.control.as_deref()) => err("not_in_control"),
+            // Allowed off-site too: it is the way back to a known site. A step
+            // back onto a new site is stopped by `on_navigation` (pending_nav).
+            Some(t) => match browser::webview_for(app, &t.id)
+                .and_then(|wv| wv.eval("history.back()").map_err(|e| e.to_string()))
+            {
+                Ok(()) => json!({"ok": true, "tab": tab_json(&t)}),
+                Err(e) => err(&e),
+            },
+        },
+        "scroll" => match tab {
+            None => err("tab_closed"),
+            Some(t) if !browser::agent_may_act(t.control.as_deref()) => err("not_in_control"),
+            Some(t) if browser::off_site(&t) => err("off_site"),
+            Some(t) if t.loading => err("loading"),
+            Some(t) => match browser::webview_for(app, &t.id).and_then(|wv| {
+                browser::eval_json_blocking(
+                    &wv,
+                    &scroll_script(req.direction),
+                    std::time::Duration::from_secs(15),
+                )
+            }) {
+                Ok(v) if v.get("ok").and_then(Value::as_bool) == Some(true) => json!({
+                    "ok": true, "y": v.get("y"), "max": v.get("max"), "tab": tab_json(&t)}),
+                Ok(_) => err("bad_result"),
+                Err(e) => err(&e),
+            },
+        },
+        "click" | "type" | "select" => match tab {
             None => err("tab_closed"),
             Some(t) if !browser::agent_may_act(t.control.as_deref()) => err("not_in_control"),
             Some(t) if browser::off_site(&t) => err("off_site"),
@@ -416,7 +482,8 @@ mod tests {
                 text: None,
                 submit: false,
                 confirmed: false,
-                sites: vec![]
+                sites: vec![],
+                direction: 0
             }
         );
     }
@@ -506,6 +573,84 @@ mod tests {
         assert_eq!(
             effect_of("click", false, &js),
             Effect::Confirm("non_http_link")
+        );
+    }
+
+    #[test]
+    fn back_scroll_and_select_requests() {
+        let r = |body: &str| parse_request(&format!(r#"{{"token":"{T}",{body}}}"#), T);
+        assert_eq!(r(r#""op":"back","session":1"#).unwrap().op, "back");
+        assert_eq!(
+            r(r#""op":"scroll","session":1,"direction":"down""#)
+                .unwrap()
+                .direction,
+            1
+        );
+        assert_eq!(
+            r(r#""op":"scroll","session":1,"direction":"up""#)
+                .unwrap()
+                .direction,
+            -1
+        );
+        assert_eq!(
+            r(r#""op":"scroll","session":1"#).unwrap_err(),
+            "bad_direction"
+        );
+        assert_eq!(
+            r(r#""op":"scroll","session":1,"direction":"0);alert(1""#).unwrap_err(),
+            "bad_direction"
+        );
+        assert_eq!(
+            r(r#""op":"select","session":1,"text":"M""#).unwrap_err(),
+            "ref_required"
+        );
+        assert_eq!(
+            r(r#""op":"select","session":1,"ref":2"#).unwrap_err(),
+            "bad_text"
+        );
+        assert_eq!(
+            r(r#""op":"select","session":1,"ref":2,"text":"  ""#).unwrap_err(),
+            "bad_text"
+        );
+        let long = "x".repeat(MAX_OPTION_CHARS + 1);
+        assert_eq!(
+            r(&format!(
+                r#""op":"select","session":1,"ref":2,"text":"{long}""#
+            ))
+            .unwrap_err(),
+            "bad_text"
+        );
+        let ok = r(r#""op":"select","session":1,"ref":2,"text":"Large""#).unwrap();
+        assert!(ok.elem == Some(2) && ok.text.as_deref() == Some("Large") && ok.direction == 0);
+    }
+
+    #[test]
+    fn scroll_script_is_fixed() {
+        let down = scroll_script(1);
+        assert!(down.trim_end().ends_with("})(1)") && down.contains("scrollBy"));
+        assert!(scroll_script(-1).trim_end().ends_with("})(-1)"));
+        assert!(scroll_script(7).trim_end().ends_with("})(1)"));
+        for forbidden in [".click(", "dispatchEvent", ".submit(", "fetch(", "location"] {
+            assert!(!down.contains(forbidden), "{forbidden}");
+        }
+    }
+
+    #[test]
+    fn select_is_reclassified_on_the_live_element() {
+        use conductloop_url_policy::effects::Effect;
+        let size =
+            json!({"tag": "select", "name": "Size", "in_form": true, "page_host": "shop.example"});
+        assert_eq!(effect_of("select", false, &size), Effect::Confirm("select"));
+        let month = json!({"tag": "select", "autocomplete": "cc-exp-month", "payment": true,
+                           "page_host": "shop.example"});
+        assert_eq!(
+            effect_of("select", false, &month),
+            Effect::Confirm("payment_field")
+        );
+        let input = json!({"tag": "input", "type": "text", "page_host": "shop.example"});
+        assert_eq!(
+            effect_of("select", false, &input),
+            Effect::Deny("not_a_select")
         );
     }
 

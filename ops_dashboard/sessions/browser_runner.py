@@ -68,7 +68,8 @@ will take control. Never ask for or repeat passwords, keys or codes.
 MODE_LINES = {
     "read": "You can only read pages in this mode: you cannot click, type, log in, buy or post "
             "anything.",
-    "act": "You can click and type on elements by their [ref] from your LAST read. Anything with "
+    "act": "You can click, type and choose options (select) on elements by their [ref] from your "
+           "LAST read. Every select, and anything with "
            "an effect (submitting forms, buying, posting, sending, deleting, sensitive pages) "
            "waits for the user's approval; you never type passwords or card data. After every "
            "click/type, read the page again before the next action.",
@@ -78,9 +79,14 @@ TOOL_DOCS = {
     "open": '  open      {"url": "https://..."}   open your tab (first call) at a URL',
     "navigate": '  navigate  {"url": "https://..."}   go to another URL in your tab',
     "read": '  read      {}   read the current page: text + numbered interactive elements',
+    "back": '  back      {}   go back one page in your tab (like the Back button)',
+    "scroll": '  scroll    {"direction": "down"}   scroll about one screen ("down" or "up"), then read'
+              ' again (for pages that load more as you scroll)',
     "click": '  click     {"ref": 12}   click element [12] of your last read',
     "type": '  type      {"ref": 7, "text": "...", "submit": false}   replace the text of field [7]'
             ' (submit=true presses Enter)',
+    "select": '  select    {"ref": 9, "option": "Large"}   choose an option of drop-down [9] by its'
+              ' visible text (the options are listed in the read)',
 }
 
 
@@ -116,6 +122,12 @@ class BrowserRunner(SessionRunner):
                 return tools.click(args.get("ref"))
             if name == "type":
                 return tools.type(args.get("ref"), args.get("text"), bool(args.get("submit")))
+            if name == "select":
+                return tools.select(args.get("ref"), args.get("option", args.get("text")))
+            if name == "back":
+                return tools.back()
+            if name == "scroll":
+                return tools.scroll(args.get("direction") or "down")
             tools._check(name)  # any unknown name → denied
             return {"ok": False, "error": f"unknown tool {name!r}"}
         except BrowserDenied as e:
