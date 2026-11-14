@@ -1050,7 +1050,14 @@
     "save_failed_prefix": "save failed: ",
     "min_ago": "{n}m ago",
     "hour_ago": "{n}h ago",
-    "day_ago": "{n}d ago"
+    "day_ago": "{n}d ago",
+    "tree_collapse": "Collapse",
+    "tree_expand": "Expand",
+    "tree_reports": "{n} in this branch",
+    "tree_unassigned": "No reporting line",
+    "tree_unassigned_hint": "Turn on Edit and drag each one onto the person they report to.",
+    "confirm_unassign": "Take {source} out of the reporting line?",
+    "reparent_loop": "That would make a loop: they are already above them in the tree."
   },
   "skills": {
     "body": "Body",

@@ -5790,51 +5790,111 @@ function renderAgentsMount(mount, data) {
   html += '<button id="agent-add-btn" class="ui-btn is-primary">' + esc(tr('dashboard.new_agent')) + '</button>';
   html += '</div>';
 
-  // Two columns: the organisation as a source list, the selected agent beside it.
+  // Two columns: the organisation as a tree (who reports to whom), the
+  // selected agent beside it.
   html += '<div class="agents-layout">';
-  html += '<div class="agents-tree org-tree">';
+  html += '<div class="agents-tree org-tree" role="tree">';
 
-  function renderTeam(t, orphan) {
-    var out = '<div class="agents-team' + (orphan ? ' is-orphan' : '') + '" data-team-id="' + t.id + '" draggable="' + (_agentEditing ? 'true' : 'false') + '">';
-    out += '<div class="agents-team-name">' + (t.icon ? '<span aria-hidden="true">' + esc(t.icon) + '</span>' : '') + '<span>' + esc(t.name) + '</span></div>';
-    (t.members || []).forEach(function(m) { out += renderMember(m); });
-    out += '</div>';
-    return out;
+  // Every member once, with where it sits (team, project) for its subtitle.
+  var byId = {};
+  function collect(teams, projectName) {
+    (teams || []).forEach(function(t) {
+      (t.members || []).forEach(function(m) {
+        if (byId[m.id]) return;
+        byId[m.id] = Object.assign({}, m, { _team: t.name || '', _project: projectName || '' });
+      });
+    });
+  }
+  projects.forEach(function(p) { collect(p.teams, p.name); });
+  collect(orphans, '');
+
+  var children = {};
+  Object.keys(byId).forEach(function(id) {
+    var m = byId[id];
+    var mgr = m.manager_id;
+    if (mgr != null && byId[mgr] && mgr !== m.id) (children[mgr] = children[mgr] || []).push(m);
+  });
+  var LEVEL_RANK = { ceo: 0, vp: 1, director: 2, manager: 3, agent: 4, observer: 5 };
+  function sortMembers(list) {
+    return list.sort(function(a, b) {
+      var ra = LEVEL_RANK[a.level] != null ? LEVEL_RANK[a.level] : 9;
+      var rb = LEVEL_RANK[b.level] != null ? LEVEL_RANK[b.level] : 9;
+      return ra - rb || String(a.name).localeCompare(String(b.name));
+    });
+  }
+  function teamSize(id, seen) {
+    seen = seen || {};
+    if (seen[id]) return 0;
+    seen[id] = true;
+    return (children[id] || []).reduce(function(n, c) { return n + 1 + teamSize(c.id, seen); }, 0);
+  }
+  function isCeo(m) {
+    return !!m.is_ceo && (m.level === 'ceo' || String(m.role || '').toLowerCase() === 'ceo');
   }
 
-  function renderNode(node) {
-    var out = '';
-    if (node._kind === 'project') {
-      out += '<div class="agents-project" data-project-id="' + (node.id || '') + '">';
-      out += '<div class="agents-project-name">' + esc(node.name) + '</div>';
-      (node.teams || []).forEach(function(t) { out += renderTeam(t, false); });
-      out += '</div>';
-    } else if (node._kind === 'orphan') {
-      out += '<div class="agents-project" data-orphan-group="1">';
-      out += '<div class="agents-project-name">' + esc(tr('dashboard.orphan_teams')) + '</div>';
-      (node.teams || []).forEach(function(t) { out += renderTeam(t, true); });
-      out += '</div>';
+  // The tops of the tree: whoever has people under them, or leads (a CEO);
+  // the biggest organisation first, so the Holding CEO opens the list.
+  var roots = Object.keys(byId).map(function(id) { return byId[id]; })
+    .filter(function(m) { return m.manager_id == null || !byId[m.manager_id]; });
+  var tops = roots.filter(function(m) { return children[m.id] || isCeo(m); })
+    .sort(function(a, b) { return teamSize(b.id) - teamSize(a.id) || String(a.name).localeCompare(String(b.name)); });
+  var loose = roots.filter(function(m) { return tops.indexOf(m) < 0; });
+  // Whoever no top reaches (a loop drawn before loops were refused) still shows.
+  var reached = {};
+  (function mark(list) {
+    list.forEach(function(m) { if (!reached[m.id]) { reached[m.id] = true; mark(children[m.id] || []); } });
+  })(tops.concat(loose));
+  Object.keys(byId).forEach(function(id) { if (!reached[id]) loose.push(byId[id]); });
+  loose = sortMembers(loose);
+
+  var collapsed = {};
+  try { collapsed = JSON.parse(localStorage.getItem('cl.agentTree.collapsed') || '{}') || {}; } catch (e) { collapsed = {}; }
+
+  function renderBranch(m, path) {
+    path = path || {};
+    var kids = path[m.id] ? [] : sortMembers((children[m.id] || []).slice());
+    var open = kids.length && !collapsed[m.id];
+    var out = '<li role="treeitem"' + (kids.length ? ' aria-expanded="' + (open ? 'true' : 'false') + '"' : '') + '>';
+    out += renderMember(m, kids.length, !!open);
+    if (open) {
+      var next = Object.assign({}, path); next[m.id] = true;
+      out += '<ul class="org-branch" role="group">' + kids.map(function(k) { return renderBranch(k, next); }).join('') + '</ul>';
     }
-    return out;
+    return out + '</li>';
   }
 
-  function renderMember(m) {
+  function renderMember(m, kidCount, open) {
     var status = m.status === 'active' ? ' is-active' : m.status === 'paused' ? ' is-paused' : '';
     var selected = _agentSelectedId === m.id;
+    var where = m._project || m._team;
+    // "vp_mobile" reads "VP Mobile"; left out when the name already says it ("Mira (CMO)").
+    var words = String(m.role || '').split(/[_\s]+/).filter(Boolean);
+    var role = words.map(function(w) { return w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
+    var lowName = String(m.name || '').toLowerCase();
+    if (words.length && words.every(function(w) { return lowName.indexOf(w.toLowerCase()) >= 0; })) role = '';
+    var sub = [role, where].filter(Boolean).join(' · ');
+    var toggle = kidCount
+      ? '<button class="org-toggle' + (open ? ' is-open' : '') + '" data-org-toggle="' + m.id + '" aria-label="' +
+        esc(tr(open ? 'dashboard.tree_collapse' : 'dashboard.tree_expand')) + '"><svg class="cl-icon"><use href="#i-chevron"/></svg></button>'
+      : '<span class="org-toggle is-leaf" aria-hidden="true"></span>';
     return '<div class="agents-member' + (selected ? ' is-selected' : '') + '" data-member-id="' + m.id + '" data-member-name="' + esc(m.name) + '" data-member-type="' + esc(m.type) + '" ' +
       'draggable="' + (_agentEditing ? 'true' : 'false') + '">'
+      + toggle
       + agentAvatar(m.type)
       + '<div class="agents-member-body"><div class="agents-member-name">' + esc(m.name) + '</div>'
-      + (m.role ? '<div class="agents-member-role">' + esc(m.role) + '</div>' : '') + '</div>'
+      + (sub ? '<div class="agents-member-role">' + esc(sub) + '</div>' : '') + '</div>'
+      + (kidCount ? '<span class="org-count" title="' + esc(tr('dashboard.tree_reports', { n: teamSize(m.id) })) + '">' + teamSize(m.id) + '</span>' : '')
       + '<span class="agents-status' + status + '" title="' + esc(m.status || '') + '"></span>'
       + '</div>';
   }
 
-  projects.forEach(function(p) {
-    html += renderNode(Object.assign({}, p, { _kind: 'project' }));
-  });
-  if (orphans.length) {
-    html += renderNode({ _kind: 'orphan', teams: orphans });
+  html += '<ul class="org-roots" role="group">' + tops.map(function(m) { return renderBranch(m); }).join('') + '</ul>';
+  if (loose.length) {
+    html += '<div class="org-loose" data-org-unassign="1">';
+    html += '<div class="agents-project-name">' + esc(tr('dashboard.tree_unassigned')) + '</div>';
+    html += '<div class="org-loose-hint">' + esc(tr('dashboard.tree_unassigned_hint')) + '</div>';
+    html += '<ul class="org-roots" role="group">' + loose.map(function(m) { return '<li role="treeitem">' + renderMember(m, 0, false) + '</li>'; }).join('') + '</ul>';
+    html += '</div>';
   }
   html += '</div>';  // .agents-tree
 
@@ -5876,6 +5936,32 @@ function renderAgentsMount(mount, data) {
     });
   });
 
+  // Fold or unfold a branch; remembered across visits.
+  mount.querySelectorAll('[data-org-toggle]').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var id = btn.dataset.orgToggle;
+      var state = {};
+      try { state = JSON.parse(localStorage.getItem('cl.agentTree.collapsed') || '{}') || {}; } catch (err) { state = {}; }
+      if (state[id]) delete state[id]; else state[id] = true;
+      try { localStorage.setItem('cl.agentTree.collapsed', JSON.stringify(state)); } catch (err) {}
+      renderAgentsView();
+    });
+  });
+
+  // In edit mode, dropping a member on "No reporting line" removes its manager.
+  var looseBox = mount.querySelector('[data-org-unassign]');
+  if (looseBox) {
+    looseBox.addEventListener('dragover', function(e) { if (_agentEditing) { e.preventDefault(); looseBox.classList.add('is-drop'); } });
+    looseBox.addEventListener('dragleave', function() { looseBox.classList.remove('is-drop'); });
+    looseBox.addEventListener('drop', function(e) {
+      if (e.target.closest('[data-member-id]')) return;  // dropped on a member: that member's handler reparents
+      e.preventDefault();
+      looseBox.classList.remove('is-drop');
+      window._agentDrop(null, e);
+    });
+  }
+
   // Edit mode toggle
   document.getElementById('agent-edit-toggle').addEventListener('click', function() {
     _agentEditing = !_agentEditing;
@@ -5911,13 +5997,21 @@ window._agentDrop = async function(targetMemberId, ev) {
   window._agentDragId = null;
   if (!sourceId || sourceId === targetMemberId) return;
   if (!_agentEditing) { notify(tr('dashboard.enable_edit_mode')); return; }
-  if (!await confirmAction(tr('dashboard.confirm_reparent', { source: sourceId, target: targetMemberId }))) return;
+  // The question names the people, not their database ids.
+  function nameOf(id) {
+    var el = document.querySelector('[data-member-id="' + id + '"]');
+    return el ? el.dataset.memberName : '#' + id;
+  }
+  var question = targetMemberId == null
+    ? tr('dashboard.confirm_unassign', { source: nameOf(sourceId) })
+    : tr('dashboard.confirm_reparent', { source: nameOf(sourceId), target: nameOf(targetMemberId) });
+  if (!await confirmAction(question)) return;
   fetch('/api/members/' + sourceId, {
     method: 'PUT', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({manager_id: targetMemberId})
   }).then(function(r) {
     if (r.ok) renderAgentsView();
-    else notify(tr('dashboard.reparent_failed'));
+    else notify(tr(r.status === 409 ? 'dashboard.reparent_loop' : 'dashboard.reparent_failed'));
   });
 };
 
