@@ -307,6 +307,13 @@ def seed_starter_pack(conn: sqlite3.Connection, *, chairman_user_id: int, dry_ru
         summary["created"].append({"name": agent["name"], "id": ceo_id})
         newly_created.append((agent["role"], ceo_id))
 
+    # Reporting lines: the twelve used to arrive with nobody reporting to
+    # anybody, so the agent panel had no tree and team mode no line to
+    # delegate along. Only lines that are missing are written.
+    if newly_created:
+        from . import org_defaults
+        org_defaults.fill_missing_managers(conn)
+
     # The agent's role playbook (L7): a CFO arrives knowing how this
     # business does unit economics, without the founder installing twelve
     # packs by hand. Only agents whose role has a pack get one, and only

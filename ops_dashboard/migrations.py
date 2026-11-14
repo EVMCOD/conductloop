@@ -1314,3 +1314,26 @@ def _mig_41_agent_trigger_source(conn: sqlite3.Connection) -> None:
 
 MIGRATIONS.append((41, "agent_triggers: where the trigger came from",
                     _mig_41_agent_trigger_source))
+
+
+def _mig_42_default_reporting_lines(conn: sqlite3.Connection) -> None:
+    """Reporting lines for members that have none (org_defaults).
+
+    The starter C-Suite and the project CEOs were created with manager_id
+    NULL, so the agent panel could not draw the organisation as a tree. Only
+    missing lines are filled; a line the person drew is never changed.
+    """
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='team_members'"
+    ).fetchone()
+    if row is None:
+        return
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(team_members)")}
+    if not {"manager_id", "level", "role", "team_id", "type"} <= cols:
+        return
+    from . import org_defaults
+    org_defaults.fill_missing_managers(conn)
+
+
+MIGRATIONS.append((42, "team_members: default reporting lines (C-Suite under the Holding CEO)",
+                    _mig_42_default_reporting_lines))

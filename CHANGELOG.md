@@ -2,6 +2,15 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.25 — 2026-11-14 — The agent panel shows the organisation as a tree
+
+### The agent panel shows the organisation as a tree
+
+- **Who reports to whom, at a glance.** The agent panel drew a flat list per project and team. It now draws the organisation: each CEO at the top and, joined by lines, whoever reports to it, and theirs below them. Each branch folds and unfolds (remembered), shows how many people are in it, and reads "VP Mobile" rather than "vp_mobile". Whoever has no manager yet waits under "No reporting line", ready to be dragged onto one in Edit mode, or dragged back there to take them out.
+- **The C-Suite arrives with its reporting lines.** The twelve executives were created with nobody reporting to anybody, so there was no tree to draw. Where a line is missing, the C-level and the project CEOs now report to the Holding CEO, the VPs to the CTO, and an agent in a team with a CEO to that CEO — for an existing library too. A line you drew is never changed, and people are never moved.
+- **A CEO delegates to its whole branch** in team mode, not only to its direct reports, so the Holding CEO still reaches the VPs under the CTO.
+- **No more loops.** Dragging a manager onto someone below it used to make them report to each other, and both vanished from the tree. It is refused now, with a message; the question before moving someone names them instead of showing database numbers.
+
 ## 1.2.24 — 2026-11-14 — Google Analytics and Search Console work in the app again
 
 ### Google Analytics and Search Console work in the app again

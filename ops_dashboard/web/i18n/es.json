@@ -1050,7 +1050,14 @@
     "save_failed_prefix": "no se pudo guardar: ",
     "min_ago": "hace {n} min",
     "hour_ago": "hace {n} h",
-    "day_ago": "hace {n} d"
+    "day_ago": "hace {n} d",
+    "tree_collapse": "Contraer",
+    "tree_expand": "Desplegar",
+    "tree_reports": "{n} en esta rama",
+    "tree_unassigned": "Sin línea de mando",
+    "tree_unassigned_hint": "Activa Editar y arrastra cada uno sobre la persona de la que depende.",
+    "confirm_unassign": "¿Sacar a {source} de la línea de mando?",
+    "reparent_loop": "Eso crearía un bucle: ya está por encima en el árbol."
   },
   "skills": {
     "body": "Cuerpo",

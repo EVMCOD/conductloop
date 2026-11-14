@@ -62,6 +62,7 @@
     ['sidebar', '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16"/>'],
     ['inspector', '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/>'],
     ['back', '<path d="m15 18-6-6 6-6"/>'],
+    ['chevron', '<path d="m9 6 6 6-6 6"/>'],
     ['doc', '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'],
     ['send', '<path d="M21 3 3 10.5l7.5 3L14 21z"/><path d="m10.5 13.5 4-4"/>']
   ];

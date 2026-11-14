@@ -241,12 +241,24 @@ def _find(agents: list[dict], key: str) -> dict | None:
 
 
 def team_of(lead: dict, agents: list[dict]) -> list[dict]:
-    """Who the lead can delegate to: its direct reports, else everyone else."""
+    """Who the lead can delegate to: everyone in its branch of the org (direct
+    reports first, then theirs), else everyone else.
+
+    The whole branch, not only the direct reports: with the C-Suite under the
+    Holding CEO and the VPs under the CTO, a direct-reports-only team would
+    have cut the VPs off from the Holding CEO."""
     others = [a for a in agents if a["key"] not in (lead["key"], BRAIN_KEY)]
     if lead.get("kind") == "member":
-        reports = [a for a in others if a.get("manager_id") == lead.get("id")]
-        if reports:
-            return reports
+        branch: list[dict] = []
+        frontier = [lead.get("id")]
+        seen = {lead.get("id")}
+        while frontier:
+            level = [a for a in others if a.get("manager_id") in frontier and a.get("id") not in seen]
+            branch.extend(level)
+            seen.update(a.get("id") for a in level)
+            frontier = [a.get("id") for a in level]
+        if branch:
+            return branch
     return others
 
 

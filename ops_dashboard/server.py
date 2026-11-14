@@ -2393,14 +2393,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._boardroom_set_autonomy()
                 return
             if path.startswith("/api/members/"):
+                # One path for every member update, so a manager change always
+                # goes through the loop check in _member_action.
                 try:
-                    mid = int(path[len("/api/members/"):])
-                    payload = self._read_json()
-                    ok = db.update_member(mid, **payload)
-                    if not ok: self._send(404, b'{"error":"not found"}', "application/json"); return
-                    self._send(200, b'{"ok":true}', "application/json")
-                except ValueError:
-                    self._send(400, b'{"error":"bad id"}', "application/json")
+                    self._member_action(path[len("/api/members/"):])
                 except Exception as e:
                     self._send(400, json.dumps({"error": str(e)}).encode(), "application/json")
                 return
@@ -3823,7 +3819,21 @@ class DashboardHandler(BaseHTTPRequestHandler):
         except ValueError: self._send(400, b'{"error":"bad id"}', "application/json"); return
         if self.command == "PUT":
             data = self._read_json()
-            if not db.update_member(mid, **data): self._send(404, b'{"error":"not found"}', "application/json"); return
+            if not db.get_member(mid): self._send(404, b'{"error":"not found"}', "application/json"); return
+            # A new manager goes through the loop check: dragging a manager onto
+            # someone in its own branch used to write A→B→A, and the tree lost both.
+            if "manager_id" in data:
+                mgr = data.pop("manager_id")
+                try:
+                    mgr = None if mgr in (None, "") else int(mgr)
+                except (TypeError, ValueError):
+                    self._send(400, b'{"error":"bad manager_id"}', "application/json"); return
+                if mgr is not None and not db.get_member(mgr):
+                    self._send(400, b'{"error":"manager not found"}', "application/json"); return
+                if not db.set_member_manager(mid, mgr):
+                    self._send(409, b'{"error":"that would make a loop"}', "application/json"); return
+            if data and not db.update_member(mid, **data):
+                self._send(404, b'{"error":"not found"}', "application/json"); return
             self._send(200, b'{"ok": true}', "application/json")
         elif self.command == "DELETE":
             if not db.delete_member(mid): self._send(404, b'{"error":"not found"}', "application/json"); return
