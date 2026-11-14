@@ -23,6 +23,16 @@ from .. import db
 # (detection runs on every dashboard load, digest and briefing).
 FEED_DEDUPE_SECONDS = 24 * 3600
 
+# A series whose last finished day is older than this has stopped updating.
+# Comparing that day with the week before it says nothing about today: when
+# the GA sync broke on 22 Oct mid-day, its half-synced day (66 users vs ~227)
+# showed as a 71% drop, every day, for weeks, and nothing could clear it.
+STALE_AFTER_DAYS = 3
+
+# GA4 closes a day 24-48 h after it ends: its anomalies look at the day before
+# yesterday, not at a yesterday that is still filling in.
+GA_SETTLE_DAYS = 1
+
 # The words of the anomaly messages, in the language the person chose. The
 # module that owns the words owns the dictionary.
 #
@@ -43,6 +53,8 @@ _WORDS: dict[str, dict[str, str]] = {
         "url_unhealthy": "URL {name} unhealthy: {status}",
         "http": "HTTP {code}",
         "no_response": "no response",
+        "ga_stale": "Google Analytics has not updated since {date}",
+        "last_error": " (last error: {err})",
     },
     "es": {
         "revenue_total": "Ingresos totales",
@@ -56,6 +68,8 @@ _WORDS: dict[str, dict[str, str]] = {
         "url_unhealthy": "URL {name} no responde: {status}",
         "http": "HTTP {code}",
         "no_response": "sin respuesta",
+        "ga_stale": "Google Analytics no se actualiza desde el {date}",
+        "last_error": " (último error: {err})",
     },
 }
 
@@ -119,11 +133,40 @@ def _complete_days(series: list[dict]) -> list[dict]:
     return series[:end]
 
 
+def _is_stale(last_date: str | None, today: dt.date | None = None) -> bool:
+    """True when the last finished day is more than STALE_AFTER_DAYS old."""
+    if not last_date:
+        return False
+    try:
+        last = dt.date.fromisoformat(str(last_date)[:10])
+    except ValueError:
+        return False
+    return ((today or dt.date.today()) - last).days > STALE_AFTER_DAYS
+
+
+def _settled(series: list[dict], settle_days: int) -> list[dict]:
+    """Drop finished days that are still being processed at the source.
+
+    GA4 takes 24-48 h to close a day, and the poll runs in the morning: the
+    day that has just ended is usually short, and comparing it read as a drop."""
+    if settle_days <= 0:
+        return series
+    cutoff = (min(dt.date.today(), dt.datetime.now(dt.UTC).date())
+              - dt.timedelta(days=settle_days)).isoformat()
+    end = len(series)
+    while end and str(series[end - 1].get("date") or "") >= cutoff:
+        end -= 1
+    return series[:end]
+
+
 def _check_series(series: list[dict], value_key: str, kind: str, project: str,
-                  label: str | None = None) -> list[dict]:
-    """Given a list of {date, x, y} points, check the latest complete day vs baseline."""
-    series = _complete_days(series)
-    if len(series) < 3:
+                  label: str | None = None, settle_days: int = 0) -> list[dict]:
+    """Given a list of {date, x, y} points, check the latest settled day vs baseline.
+
+    Data that stopped updating is not compared: its last day says nothing
+    about today (the caller reports the stop itself)."""
+    series = _settled(_complete_days(series), settle_days)
+    if len(series) < 3 or _is_stale(series[-1].get("date")):
         return []
     current = series[-1].get(value_key, 0) or 0
     prior = [s.get(value_key, 0) or 0 for s in series[:-1]]
@@ -148,6 +191,31 @@ def _check_series(series: list[dict], value_key: str, kind: str, project: str,
             "message": f"{label or _label_for_kind(kind)} {'↑' if z > 0 else '↓'} {detail}",
         })
     return anomalies
+
+
+def _ga_stale_alert(total_history: list[dict]) -> dict | None:
+    """One alert when GA data stopped arriving, with the sync's own error.
+
+    Only for sites that are still enabled: a person who removed GA is not told
+    it stopped."""
+    finished = _complete_days(total_history)
+    if not finished or not _is_stale(finished[-1].get("date")):
+        return None
+    try:
+        sites = db.list_ga_sites(enabled_only=True)
+    except Exception:
+        sites = []
+    if not sites:
+        return None
+    last = str(finished[-1].get("date"))[:10]
+    w = _words()
+    errors = [s.get("last_poll_error") for s in sites if s.get("last_poll_error")]
+    detail = w["last_error"].format(err=max(set(errors), key=errors.count)[:160]) if errors else ""
+    return {
+        "kind": "ga_stale", "project": "all", "severity": "medium",
+        "date": last, "label": w["ga_stale"].format(date=last),
+        "message": w["ga_stale"].format(date=last) + detail,
+    }
 
 
 def _log_to_feed(anomalies) -> None:
@@ -197,10 +265,14 @@ def detect_recent_anomalies() -> dict:
             gf = db.ga_forecast(days=1, metric="users", project_key=p.key)
             gh = gf.get("history", [])
             anomalies.extend(_check_series(gh, "y", f"ga_users_{p.key}", p.key,
-                                           _metric_label("ga_users", p.name)))
+                                           _metric_label("ga_users", p.name), settle_days=GA_SETTLE_DAYS))
         gf_total = db.ga_forecast(days=1, metric="users", project_key=None)
-        anomalies.extend(_check_series(gf_total.get("history", []), "y", "ga_users_total", "all",
-                                       _metric_label("ga_users", None)))
+        total_history = gf_total.get("history", [])
+        anomalies.extend(_check_series(total_history, "y", "ga_users_total", "all",
+                                       _metric_label("ga_users", None), settle_days=GA_SETTLE_DAYS))
+        stale = _ga_stale_alert(total_history)
+        if stale:
+            anomalies.append(stale)
     except Exception as e:
         anomalies.append({"kind": "ga_check", "severity": "info",
                           "message": _words()["ga_check_failed"].format(err=e)})

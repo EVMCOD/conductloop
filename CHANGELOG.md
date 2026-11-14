@@ -2,6 +2,15 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.24 — 2026-11-14 — Google Analytics and Search Console work in the app again
+
+### Google Analytics and Search Console work in the app again
+
+- **GA and Search Console had stopped updating in the desktop app.** They were read through Google's client libraries, which the packaged app does not include, so every daily poll failed with "No module named 'google.analytics'" (or 'google.auth') from the day you moved to the app. They now talk to Google over plain HTTPS with what the app already ships, the same way for a Google sign-in or a service account key; Google Play revenue does too.
+- **An alert that could never go away.** The last GA day stored before the sync broke had been read at mid-day, so it showed as a drop of about 70% against the week before it, every day, for weeks. Data that has not updated for more than three days is no longer compared: you get one alert that says since when Google Analytics has not updated, and the sync's last error.
+- **The first poll after an outage fills the gap**, from the last day it had (up to 90 days back), and re-reads that half-synced day whole.
+- **No false drops from yesterday.** GA4 takes a day or two to close a day, so its alerts now look at the day before yesterday.
+
 ## 1.2.23 — 2026-11-14 — Security updates, and the network is your choice
 
 ### Security updates, and the network is your choice

@@ -21,8 +21,9 @@ CLI:
 from __future__ import annotations
 
 import datetime as dt
-import json
 import urllib.parse
+
+import httpx
 
 from .. import db
 
@@ -32,18 +33,11 @@ SCOPES = ["https://www.googleapis.com/auth/webmasters"]
 API_BASE = "https://searchconsole.googleapis.com/webmasters/v3"
 
 
-def _session(credentials_json: str):
-    from google.auth.transport.requests import AuthorizedSession
-    info = json.loads(credentials_json)
-    # authorized_user files don't always carry a "type" field — detect by
-    # refresh_token (same convention as indexers/ga.py).
-    if info.get("type") == "authorized_user" or "refresh_token" in info:
-        from google.oauth2.credentials import Credentials
-        creds = Credentials.from_authorized_user_info(info, scopes=SCOPES)
-    else:
-        from google.oauth2 import service_account
-        creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
-    return AuthorizedSession(creds)
+def _headers(credentials_json: str) -> dict[str, str]:
+    # A token from google_oauth over plain HTTPS: the packaged app does not ship
+    # google-auth, and every poll there failed with "No module named 'google.auth'".
+    from .. import google_oauth
+    return {"Authorization": f"Bearer {google_oauth.access_token(credentials_json, SCOPES)}"}
 
 
 class GSCSource:
@@ -55,9 +49,8 @@ class GSCSource:
         self.credentials_json = site_row.get("credentials_json") or ""
 
     def _query(self, body: dict) -> dict:
-        sess = _session(self.credentials_json)
         url = f"{API_BASE}/sites/{urllib.parse.quote(self.site_url, safe='')}/searchAnalytics/query"
-        resp = sess.post(url, json=body, timeout=30)
+        resp = httpx.post(url, json=body, headers=_headers(self.credentials_json), timeout=30)
         resp.raise_for_status()
         return resp.json()
 

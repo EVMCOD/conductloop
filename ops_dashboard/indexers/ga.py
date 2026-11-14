@@ -22,7 +22,18 @@ import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+import httpx
+
 from .. import db
+
+
+def _api_error(r) -> str:
+    """Google's own message for a failed API call (status and reason)."""
+    try:
+        err = r.json().get("error") or {}
+        return f"HTTP {r.status_code}: {err.get('status') or ''} {err.get('message') or ''}".strip()
+    except ValueError:
+        return f"HTTP {r.status_code}: {r.text[:200]}"
 
 
 @dataclass
@@ -104,82 +115,76 @@ class GA4Source(BaseSource):
         # service account JSON is stored on the site_row itself
         self.sa_json = (site_row.get("service_account_json") or "") or (credentials or {}).get("service_account_json", "")
 
-    def _client(self):
-        from google.analytics.data_v1beta import BetaAnalyticsDataClient
-        info = json.loads(self.sa_json)
-        scopes = ["https://www.googleapis.com/auth/analytics.readonly"]
-        # The credential JSON can be either a service account key or an OAuth
-        # authorized_user blob — both are accepted here. authorized_user files
-        # don't always carry a "type" field, so detect by refresh_token.
-        if info.get("type") == "authorized_user" or "refresh_token" in info:
-            from google.oauth2.credentials import Credentials
-            creds = Credentials.from_authorized_user_info(info, scopes=scopes)
-        else:
-            from google.oauth2 import service_account
-            creds = service_account.Credentials.from_service_account_info(info, scopes=scopes)
-        return BetaAnalyticsDataClient(credentials=creds)
+    API = "https://analyticsdata.googleapis.com/v1beta"
+    SCOPES = ["https://www.googleapis.com/auth/analytics.readonly"]
+
+    def _headers(self) -> dict[str, str]:
+        # REST with a token from google_oauth, not google-analytics-data: the
+        # packaged app does not ship Google's client libraries, and every poll
+        # there failed with "No module named 'google.analytics'".
+        from .. import google_oauth
+        return {"Authorization": f"Bearer {google_oauth.access_token(self.sa_json, self.SCOPES)}"}
 
     def test(self) -> tuple[bool, str]:
         if not self.sa_json:
             return False, "missing service_account_json on site row or in connection credentials"
         try:
-            client = self._client()
             # Check that the property is accessible via a metadata call.
-            from google.analytics.data_v1beta.types import GetMetadataRequest
-            req = GetMetadataRequest(name=f"{self.property_id}/metadata")
-            md = client.get_metadata(request=req)
-            return True, f"GA4 property {self.property_id} accessible ({len(md.dimensions)} dimensions, {len(md.metrics)} metrics)"
+            r = httpx.get(f"{self.API}/{self.property_id}/metadata", headers=self._headers(), timeout=20)
+            if r.status_code != 200:
+                return False, _api_error(r)
+            md = r.json()
+            return True, (f"GA4 property {self.property_id} accessible "
+                          f"({len(md.get('dimensions') or [])} dimensions, {len(md.get('metrics') or [])} metrics)")
         except Exception as e:
             return False, f"{type(e).__name__}: {e}"
 
     def fetch_metrics(self, days: int = 7) -> list[GAMetricsDay]:
-        from google.analytics.data_v1beta.types import (
-            DateRange,
-            Dimension,
-            Metric,
-            RunReportRequest,
-        )
         if not self.sa_json:
             return []
-        client = self._client()
-        # We pull a single 'today' report with session-scoped traffic source breakdown
-        # to keep the request count low. For multi-day, we use date as dimension.
-        request = RunReportRequest(
-            property=self.property_id,
-            dimensions=[
-                Dimension(name="date"),
-                Dimension(name="sessionDefaultChannelGroup"),  # organic/direct/referral/social/email/paid
-                Dimension(name="country"),                       # for top_country
+        # One report with date as a dimension, plus the session channel and the
+        # country so the traffic sources and the top country come in the same call.
+        body = {
+            "dimensions": [
+                {"name": "date"},
+                {"name": "sessionDefaultChannelGroup"},  # organic/direct/referral/social/email/paid
+                {"name": "country"},                       # for top_country
             ],
-            metrics=[
-                Metric(name="totalUsers"),
-                Metric(name="newUsers"),
-                Metric(name="sessions"),
-                Metric(name="screenPageViews"),
-                Metric(name="eventCount"),
-                Metric(name="engagementRate"),
-                Metric(name="averageSessionDuration"),
-                Metric(name="bounceRate"),
+            "metrics": [
+                {"name": "totalUsers"},
+                {"name": "newUsers"},
+                {"name": "sessions"},
+                {"name": "screenPageViews"},
+                {"name": "eventCount"},
+                {"name": "engagementRate"},
+                {"name": "averageSessionDuration"},
+                {"name": "bounceRate"},
             ],
-            date_ranges=[DateRange(start_date=f"{days}daysAgo", end_date="today")],
-            limit=100000,
-        )
-        response = client.run_report(request)
+            "dateRanges": [{"startDate": f"{days}daysAgo", "endDate": "today"}],
+            "limit": 100000,
+        }
+        r = httpx.post(f"{self.API}/{self.property_id}:runReport", json=body,
+                       headers=self._headers(), timeout=60)
+        if r.status_code != 200:
+            raise RuntimeError(_api_error(r))
+        rows = r.json().get("rows") or []
         # Aggregate per (date) so we get one row per day per site.
         per_day: dict[str, GAMetricsDay] = {}
         # Per-date channel sums and per-date country sums for top_country
-        for row in response.rows:
-            date_str = self._parse_ga_date(row.dimension_values[0].value)
-            channel = row.dimension_values[1].value
-            country = row.dimension_values[2].value
-            users = int(row.metric_values[0].value or 0)
-            new_users = int(row.metric_values[1].value or 0)
-            sessions = int(row.metric_values[2].value or 0)
-            page_views = int(row.metric_values[3].value or 0)
-            events = int(row.metric_values[4].value or 0)
-            engagement_rate = float(row.metric_values[5].value or 0)
-            avg_dur = float(row.metric_values[6].value or 0)
-            bounce = float(row.metric_values[7].value or 0)
+        for row in rows:
+            dims = [d.get("value") or "" for d in row.get("dimensionValues") or []]
+            vals = [m.get("value") or 0 for m in row.get("metricValues") or []]
+            date_str = self._parse_ga_date(dims[0])
+            channel = dims[1]
+            country = dims[2]
+            users = int(vals[0] or 0)
+            new_users = int(vals[1] or 0)
+            sessions = int(vals[2] or 0)
+            page_views = int(vals[3] or 0)
+            events = int(vals[4] or 0)
+            engagement_rate = float(vals[5] or 0)
+            avg_dur = float(vals[6] or 0)
+            bounce = float(vals[7] or 0)
             d = per_day.setdefault(date_str, GAMetricsDay(
                 site_id=self.site_row["id"],
                 property_id=self.property_id,
@@ -319,6 +324,30 @@ def get_source(site_row: dict) -> BaseSource | None:
     return cls(site_row, {})
 
 
+# After an outage, how far back a poll may reach to fill the gap.
+MAX_BACKFILL_DAYS = 90
+
+
+def _days_to_fetch(site_id: int, days: int, today: dt.date | None = None) -> int:
+    """`days`, or back to the last day stored for the site if that is older.
+
+    A poll reads the last `days` days, so after a sync outage the days in
+    between never arrived, and the day the outage began stayed half-synced
+    (22 Oct 2026: 66 users stored at mid-day). Reaching back to the last
+    stored day refetches it whole and fills the gap, up to MAX_BACKFILL_DAYS."""
+    try:
+        with db.db() as conn:
+            row = conn.execute("SELECT MAX(date) FROM ga_metrics_daily WHERE site_id = ?",
+                               (site_id,)).fetchone()
+        last = dt.date.fromisoformat(row[0]) if row and row[0] else None
+    except Exception:
+        last = None
+    if not last:
+        return days
+    gap = ((today or dt.date.today()) - last).days
+    return max(days, min(gap, MAX_BACKFILL_DAYS))
+
+
 def run(site_id: int | None = None, days: int = 7) -> dict:
     """Poll one or all enabled sites. Returns aggregate counters."""
     if site_id:
@@ -335,7 +364,7 @@ def run(site_id: int | None = None, days: int = 7) -> dict:
         if not src:
             results.append({"site": row["display_name"], "ok": False, "error": f"unknown source_type: {row['source_type']}"})
             continue
-        res = src.run(days=days)
+        res = src.run(days=_days_to_fetch(row["id"], days))
         res["site"] = row["display_name"]
         results.append(res)
         agg["fetched"] += res.get("fetched", 0)

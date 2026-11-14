@@ -171,14 +171,9 @@ class GoogleSource(BaseSource):
         self.package_name = c.get("package_name", "")
 
     def _access_token(self) -> str:
-        from google.auth.transport.requests import Request as GRequest
-        from google.oauth2 import service_account
-        info = json.loads(self.sa_json)
-        creds = service_account.Credentials.from_service_account_info(
-            info, scopes=["https://www.googleapis.com/auth/androidpublisher"],
-        )
-        creds.refresh(GRequest())
-        return creds.token
+        # Plain HTTPS (google_oauth), not google-auth: the packaged app does not ship it.
+        from .. import google_oauth
+        return google_oauth.access_token(self.sa_json, ["https://www.googleapis.com/auth/androidpublisher"])
 
     def test(self) -> tuple[bool, str]:
         if not self.sa_json:
