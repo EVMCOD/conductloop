@@ -55,15 +55,15 @@ def _ids(db):
 
 def test_default_lines_draw_the_organisation(org):
     with org.get_connection() as c:
-        corp, train = _team(c, "corp"), _team(c, "train")
+        corp, mosaic = _team(c, "corp"), _team(c, "mosaic")
         holding = _member(c, corp, "Holding CEO", "ceo", "ceo")
         _member(c, corp, "Atlas (CTO)", "cto", "ceo")
         _member(c, corp, "Mira (CMO)", "cmo", "ceo")
         _member(c, corp, "Ada (VP Mobile)", "vp_mobile", "vp")
         _member(c, corp, "Priya (Head of Product)", "head_product", "director")
-        _member(c, train, "CEO TrainCurve", "CEO")
-        _member(c, train, "Workout AI", "agent")
-        _member(c, train, "Enrique", "founder", "ceo", type_="human")
+        _member(c, mosaic, "CEO Mosaic", "CEO")
+        _member(c, mosaic, "Planner AI", "agent")
+        _member(c, mosaic, "Founder", "founder", "ceo", type_="human")
         _member(c, corp, "Growth Lead", "manager", "manager")
         _member(c, corp, "SEO Bot", "agent", manager=holding)        # a line the person drew
         c.execute("INSERT OR REPLACE INTO boardroom_settings (id, holding_ceo_id, updated_at) VALUES (1, ?, 0)",
@@ -72,10 +72,10 @@ def test_default_lines_draw_the_organisation(org):
         c.commit()
     ids, mgr = _ids(org), _managers(org)
     assert mgr["Atlas (CTO)"] == mgr["Mira (CMO)"] == mgr["Priya (Head of Product)"] == ids["Holding CEO"]
-    assert mgr["CEO TrainCurve"] == ids["Holding CEO"]
+    assert mgr["CEO Mosaic"] == ids["Holding CEO"]
     assert mgr["Ada (VP Mobile)"] == ids["Atlas (CTO)"]
-    assert mgr["Workout AI"] == ids["CEO TrainCurve"]
-    assert mgr["Holding CEO"] is None and mgr["Enrique"] is None        # the top, and a person: untouched
+    assert mgr["Planner AI"] == ids["CEO Mosaic"]
+    assert mgr["Holding CEO"] is None and mgr["Founder"] is None        # the top, and a person: untouched
     assert mgr["Growth Lead"] is None                                     # no rule fits: left for the person
     assert mgr["SEO Bot"] == ids["Holding CEO"]
     assert len(written) == 6
