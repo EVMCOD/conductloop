@@ -2,6 +2,15 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.26 — 2026-11-14 — The organisation as a tree diagram
+
+### The organisation as a tree diagram
+
+- **Drawn like a tree, top-down.** The agent panel showed who reports to whom as an indented list. It is now a diagram: the Holding CEO at the top and, in the row below, its reports, each joined to it by a straight line, and theirs in the row below them. Each person is a circle with their name and role under it; a manager's branch folds into a "+N" and unfolds again.
+- **The whole width for the tree.** The agent's card opens beside it only when you choose someone, and closes with ✕. The tree opens centred on the Holding CEO and keeps where you scrolled.
+- **Zoom.** − and + scale the diagram, and Fit shows the whole organisation at once; the zoom is remembered.
+- Whoever has no manager waits in its own box under the tree, so it never scrolls away.
+
 ## 1.2.25 — 2026-11-14 — The agent panel shows the organisation as a tree
 
 ### The agent panel shows the organisation as a tree
