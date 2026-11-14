@@ -1,6 +1,6 @@
 [package]
 name = "conductloop-desktop"
-version = "1.2.26"
+version = "1.2.27"
 description = "ConductLoop — local-first second-brain for macOS, Windows, and Linux"
 authors = ["ConductLoop"]
 edition = "2021"

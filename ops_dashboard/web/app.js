@@ -5730,6 +5730,8 @@ var _agentTreeZoom = (function() {
   try { var z = parseFloat(localStorage.getItem('cl.agentTree.zoom')); return z > 0 ? z : 1; } catch (e) { return 1; }
 })();
 var ORG_SLOT = 150, ORG_LEVEL = 200;  // tree diagram: column width, row height
+var ORG_ZOOM_MIN = 0.25, ORG_ZOOM_MAX = 2;
+var _agentTreeLastFocus;      // the branch the diagram last showed (null: the whole organisation)
 var _agentChatHistory = {};   // member_id -> [{role, content}]
 var _agentEditing = false;
 var _agentTab = 'edit';       // 'edit' | 'chat' | 'activity'
@@ -5793,8 +5795,9 @@ function renderAgentsMount(mount, data) {
   html += '<div class="spacer"></div>';
   html += '<div class="org-zoom" role="group" aria-label="Zoom">'
     + '<button class="ui-btn is-quiet" data-org-zoom="out" title="' + esc(tr('dashboard.zoom_out')) + '" aria-label="' + esc(tr('dashboard.zoom_out')) + '">−</button>'
-    + '<button class="ui-btn is-quiet" data-org-zoom="fit" title="' + esc(tr('dashboard.zoom_fit')) + '">' + esc(tr('dashboard.zoom_fit')) + '</button>'
+    + '<button class="ui-btn is-quiet org-zoom-level" id="org-zoom-level" data-org-zoom="reset" title="' + esc(tr('dashboard.zoom_reset')) + '">' + Math.round(_agentTreeZoom * 100) + '%</button>'
     + '<button class="ui-btn is-quiet" data-org-zoom="in" title="' + esc(tr('dashboard.zoom_in')) + '" aria-label="' + esc(tr('dashboard.zoom_in')) + '">+</button>'
+    + '<button class="ui-btn is-quiet" data-org-zoom="fit" title="' + esc(tr('dashboard.zoom_fit_hint')) + '">' + esc(tr('dashboard.zoom_fit')) + '</button>'
     + '</div>';
   html += '<button id="agent-edit-toggle" class="ui-btn' + (_agentEditing ? ' is-on' : '') + '">' + esc(tr(_agentEditing ? 'dashboard.edit_mode_on' : 'dashboard.edit_mode')) + '</button>';
   html += '<button id="agent-add-btn" class="ui-btn is-primary">' + esc(tr('dashboard.new_agent')) + '</button>';
@@ -5805,8 +5808,6 @@ function renderAgentsMount(mount, data) {
   // agent's card opens beside it.
   html += '<div class="agents-layout' + (_agentSelectedId ? ' has-detail' : '') + '">';
   html += '<div class="org-col">';
-  html += '<div class="org-wrap" id="org-wrap">';
-  if (!_agentSelectedId) html += '<p class="org-hint">' + esc(tr('dashboard.select_agent')) + '</p>';
 
   // Every member once, with where it sits (team, project) for its subtitle.
   var byId = {};
@@ -5869,6 +5870,37 @@ function renderAgentsMount(mount, data) {
   Object.keys(byId).forEach(function(id) { if (!reached[id]) loose.push(byId[id]); });
   loose = sortMembers(loose);
 
+  // With an agent selected the tree starts from it: only its branch shows.
+  // One with nobody under it shows under its manager, beside its peers. The
+  // path above leads back up, and to the whole organisation.
+  var focusId = null;
+  var sel = _agentSelectedId != null ? byId[_agentSelectedId] : null;
+  if (sel) {
+    if (children[sel.id]) focusId = sel.id;
+    else if (sel.manager_id != null && byId[sel.manager_id]) focusId = sel.manager_id;
+  }
+  if (focusId != null) {
+    tops = [byId[focusId]];
+    loose = [];
+    var chain = [], seenUp = {};
+    for (var up = byId[focusId]; up && !seenUp[up.id]; up = up.manager_id != null ? byId[up.manager_id] : null) {
+      seenUp[up.id] = true;
+      chain.unshift(up);
+    }
+    if (sel.id !== focusId) chain.push(sel);
+    html += '<nav class="org-path" aria-label="' + esc(tr('dashboard.tree_path')) + '">'
+      + '<button class="org-path-item" data-org-focus="">' + esc(tr('dashboard.tree_whole')) + '</button>';
+    chain.forEach(function(m) {
+      html += '<span class="org-path-sep" aria-hidden="true">›</span>';
+      html += m.id === sel.id
+        ? '<span class="org-path-item is-current" aria-current="page">' + esc(m.name) + '</span>'
+        : '<button class="org-path-item" data-org-focus="' + m.id + '">' + esc(m.name) + '</button>';
+    });
+    html += '</nav>';
+  }
+  html += '<div class="org-wrap" id="org-wrap">';
+  if (!_agentSelectedId) html += '<p class="org-hint">' + esc(tr('dashboard.select_agent')) + '</p>';
+
   var collapsed = {};
   try { collapsed = JSON.parse(localStorage.getItem('cl.agentTree.collapsed') || '{}') || {}; } catch (e) { collapsed = {}; }
 
@@ -5877,7 +5909,7 @@ function renderAgentsMount(mount, data) {
   var SLOT = ORG_SLOT, LEVEL = ORG_LEVEL, PAD = 24, GAP = 56;
   var pos = {}, edges = [], nextX = PAD, maxDepth = 0;
   function place(m, depth, path) {
-    var kids = (path[m.id] || collapsed[m.id]) ? [] : sortMembers((children[m.id] || []).slice());
+    var kids = (path[m.id] || (collapsed[m.id] && m.id !== focusId)) ? [] : sortMembers((children[m.id] || []).slice());
     maxDepth = Math.max(maxDepth, depth);
     if (!kids.length) {
       pos[m.id] = { x: nextX + SLOT / 2, depth: depth };
@@ -5908,7 +5940,7 @@ function renderAgentsMount(mount, data) {
       + '<span class="org-dot">' + agentAvatar(m.type) + '<span class="agents-status' + status + '" title="' + esc(m.status || '') + '"></span></span>'
       + '<span class="org-name">' + esc(m.name) + '</span>'
       + (sub ? '<span class="org-sub">' + esc(sub) + '</span>' : '')
-      + (kids ? '<button class="org-fold' + (folded ? ' is-folded' : '') + '" data-org-toggle="' + id + '" title="' + esc(tr('dashboard.tree_reports', { n: teamSize(+id) })) + '" aria-label="' +
+      + (kids && +id !== focusId ? '<button class="org-fold' + (folded ? ' is-folded' : '') + '" data-org-toggle="' + id + '" title="' + esc(tr('dashboard.tree_reports', { n: teamSize(+id) })) + '" aria-label="' +
           esc(tr(folded ? 'dashboard.tree_expand' : 'dashboard.tree_collapse')) + '">' + (folded ? '+' + teamSize(+id) : '−') + '</button>' : '')
       + '</div>';
   });
@@ -5965,6 +5997,7 @@ function renderAgentsMount(mount, data) {
       svg.appendChild(line);
     });
     var wrap = document.getElementById('org-wrap');
+    var zoomLevel = document.getElementById('org-zoom-level');
     // Zoom scales the whole diagram, lines included (CSS zoom keeps the
     // scroll area in step with it).
     canvas.style.zoom = _agentTreeZoom;
@@ -5972,29 +6005,103 @@ function renderAgentsMount(mount, data) {
       var top = canvas.querySelector('.org-node.is-first');
       if (top) wrap.scrollLeft = Math.max(0, (parseFloat(top.dataset.x) + ORG_SLOT / 2) * _agentTreeZoom - wrap.clientWidth / 2);
     }
+    // A new branch (or back to the whole organisation) starts at its top.
+    if (_agentTreeLastFocus !== focusId) {
+      _agentTreeScroll = null;
+      _agentTreeLastFocus = focusId;
+    }
     if (_agentTreeScroll) {
       wrap.scrollLeft = _agentTreeScroll.left;
       wrap.scrollTop = _agentTreeScroll.top;
     } else {
-      centreFirst();  // first visit: the first top (the Holding CEO) in the middle
+      centreFirst();  // the top of what shows (the Holding CEO, or the branch's head) in the middle
     }
     wrap.addEventListener('scroll', function() {
       _agentTreeScroll = { left: wrap.scrollLeft, top: wrap.scrollTop };
     });
+    // Zoom to z, keeping the point under (ax, ay) — the pointer, or the
+    // panel's centre — where it was.
+    function setZoom(z, ax, ay) {
+      z = Math.round(Math.min(ORG_ZOOM_MAX, Math.max(ORG_ZOOM_MIN, z)) * 100) / 100;
+      if (ax == null) { ax = wrap.clientWidth / 2; ay = wrap.clientHeight / 2; }
+      var old = _agentTreeZoom;
+      var px = (wrap.scrollLeft + ax) / old, py = (wrap.scrollTop + ay) / old;
+      _agentTreeZoom = z;
+      canvas.style.zoom = z;
+      wrap.scrollLeft = px * z - ax;
+      wrap.scrollTop = py * z - ay;
+      if (zoomLevel) zoomLevel.textContent = Math.round(z * 100) + '%';
+      try { localStorage.setItem('cl.agentTree.zoom', String(z)); } catch (e) {}
+    }
     mount.querySelectorAll('[data-org-zoom]').forEach(function(btn) {
       btn.addEventListener('click', function() {
-        var w = parseFloat(canvas.dataset.w) || 1;
-        var z = _agentTreeZoom;
-        if (btn.dataset.orgZoom === 'in') z = z * 1.2;
-        else if (btn.dataset.orgZoom === 'out') z = z / 1.2;
-        else z = (wrap.clientWidth - 8) / w;   // fit: the whole tree across the panel
-        _agentTreeZoom = Math.round(Math.min(1.5, Math.max(0.3, z)) * 100) / 100;
-        try { localStorage.setItem('cl.agentTree.zoom', String(_agentTreeZoom)); } catch (e) {}
-        canvas.style.zoom = _agentTreeZoom;
-        if (btn.dataset.orgZoom === 'fit') wrap.scrollLeft = 0; else centreFirst();
+        var how = btn.dataset.orgZoom;
+        if (how === 'in') setZoom(_agentTreeZoom * 1.2);
+        else if (how === 'out') setZoom(_agentTreeZoom / 1.2);
+        else if (how === 'reset') { setZoom(1); centreFirst(); }
+        else {  // fit: the whole of what shows inside the panel
+          var w = parseFloat(canvas.dataset.w) || 1, h = parseFloat(canvas.dataset.h) || 1;
+          setZoom(Math.min((wrap.clientWidth - 8) / w, (wrap.clientHeight - 24) / h, 1));
+          wrap.scrollLeft = 0;
+          wrap.scrollTop = 0;
+        }
       });
     });
+    function pointIn(e) {
+      var r = wrap.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    }
+    // Ctrl/⌘ + scroll, and a pinch on a trackpad in Chrome-based webviews.
+    wrap.addEventListener('wheel', function(e) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      var d = Math.max(-60, Math.min(60, e.deltaY));
+      var at = pointIn(e);
+      setZoom(_agentTreeZoom * Math.exp(-d * 0.004), at[0], at[1]);
+    }, { passive: false });
+    // A pinch in Safari's webview (macOS) arrives as gesture events.
+    var pinchFrom = null;
+    wrap.addEventListener('gesturestart', function(e) { e.preventDefault(); pinchFrom = _agentTreeZoom; });
+    wrap.addEventListener('gesturechange', function(e) {
+      e.preventDefault();
+      if (pinchFrom == null) return;
+      var at = pointIn(e);
+      setZoom(pinchFrom * e.scale, at[0], at[1]);
+    });
+    wrap.addEventListener('gestureend', function(e) { e.preventDefault(); pinchFrom = null; });
+    // Drag the background to move around the diagram.
+    var pan = null;
+    wrap.addEventListener('pointerdown', function(e) {
+      if (e.button !== 0 || e.target.closest('.org-node, button, a, input')) return;
+      var r = wrap.getBoundingClientRect();
+      if (e.clientX - r.left > wrap.clientWidth || e.clientY - r.top > wrap.clientHeight) return;  // the scrollbars
+      pan = { x: e.clientX, y: e.clientY, left: wrap.scrollLeft, top: wrap.scrollTop };
+      wrap.setPointerCapture(e.pointerId);
+      wrap.classList.add('is-panning');
+    });
+    wrap.addEventListener('pointermove', function(e) {
+      if (!pan) return;
+      wrap.scrollLeft = pan.left - (e.clientX - pan.x);
+      wrap.scrollTop = pan.top - (e.clientY - pan.y);
+    });
+    function endPan() { pan = null; wrap.classList.remove('is-panning'); }
+    wrap.addEventListener('pointerup', endPan);
+    wrap.addEventListener('pointercancel', endPan);
   }
+
+  // The path above a branch: up to a manager, or back to the whole organisation.
+  mount.querySelectorAll('[data-org-focus]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var id = btn.dataset.orgFocus ? parseInt(btn.dataset.orgFocus) : null;
+      _agentSelectedId = id;
+      if (id == null) _agentSelectedMember = null;
+      else {
+        _agentChatHistory[id] = _agentChatHistory[id] || [];
+        _agentTab = 'edit';
+      }
+      renderAgentsView();
+    });
+  });
 
   // Click member → select + show detail. In edit mode a member can be
   // dragged onto another to change who it reports to.
@@ -6656,7 +6763,9 @@ async function refreshAgentDetail() {
 // Patch renderAgentsMount to load detail async
 var _origRenderAgentsMount = renderAgentsMount;
 renderAgentsMount = function(mount, data) {
-  if (_agentSelectedId && !_agentSelectedMember) {
+  // Load the card when none is loaded, or when it is another agent's (the
+  // one picked before): it would show the previous agent's card.
+  if (_agentSelectedId && (!_agentSelectedMember || _agentSelectedMember.id !== _agentSelectedId)) {
     refreshAgentDetail().then(function() {
       _origRenderAgentsMount(mount, data);
     });
