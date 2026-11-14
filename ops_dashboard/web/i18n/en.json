@@ -981,7 +981,7 @@
     "enable_edit_mode": "enable edit mode to reparent",
     "confirm_reparent": "Make {source} report to {target}?",
     "reparent_failed": "reparent failed",
-    "select_agent": "Click an agent in the tree to open its card, or “New agent” to create one.",
+    "select_agent": "Click an agent to see only its branch and open its card. Zoom with the buttons, a trackpad pinch or Ctrl/⌘ + scroll; drag the background to move around.",
     "loading_agent": "loading agent…",
     "tab_edit": "Edit",
     "tab_chat": "Chat",
@@ -1061,7 +1061,11 @@
     "close": "Close",
     "zoom_in": "Zoom in",
     "zoom_out": "Zoom out",
-    "zoom_fit": "Fit"
+    "zoom_fit": "Fit",
+    "tree_path": "Path in the organisation",
+    "tree_whole": "Whole organisation",
+    "zoom_reset": "Back to 100%",
+    "zoom_fit_hint": "Fit what shows inside the panel"
   },
   "skills": {
     "body": "Body",

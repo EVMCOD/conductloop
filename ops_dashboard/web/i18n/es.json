@@ -981,7 +981,7 @@
     "enable_edit_mode": "activa el modo edición para cambiar de jefe",
     "confirm_reparent": "¿Hacer que {source} reporte a {target}?",
     "reparent_failed": "no se pudo cambiar de jefe",
-    "select_agent": "Pulsa un agente del árbol para abrir su ficha, o «Nuevo agente» para crear uno.",
+    "select_agent": "Pulsa un agente para ver solo su rama y abrir su ficha. Acerca o aleja con los botones, pellizcando el trackpad o con Ctrl/⌘ + rueda; arrastra el fondo para moverte.",
     "loading_agent": "cargando el agente…",
     "tab_edit": "Editar",
     "tab_chat": "Chat",
@@ -1061,7 +1061,11 @@
     "close": "Cerrar",
     "zoom_in": "Acercar",
     "zoom_out": "Alejar",
-    "zoom_fit": "Ajustar"
+    "zoom_fit": "Ajustar",
+    "tree_path": "Ruta en la organización",
+    "tree_whole": "Toda la organización",
+    "zoom_reset": "Volver al 100 %",
+    "zoom_fit_hint": "Ajustar lo que se ve al panel"
   },
   "skills": {
     "body": "Cuerpo",
