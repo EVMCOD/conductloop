@@ -1,0 +1,25 @@
+{
+  "status": {
+    "title": "System Status — ConductLoop",
+    "description": "Live status of all public services.",
+    "overall_ok": "All systems operational",
+    "subtitle": "Real-time status of ConductLoop public services",
+    "loading": "Loading…",
+    "operational": "operational",
+    "degraded": "degraded",
+    "down": "down",
+    "services": "Services",
+    "footer": "Status updated every 5 minutes via ops-dashboard.",
+    "dashboard": "Dashboard",
+    "never": "never",
+    "checked_at": "checked {time}",
+    "no_services": "No services configured yet.",
+    "service_down_one": "{n} service down",
+    "services_down": "{n} services down",
+    "service_degraded_one": "{n} service degraded",
+    "services_degraded": "{n} services degraded",
+    "last_updated": "Last updated: {time}",
+    "latest_poll": "Status data from latest poll",
+    "could_not_load": "Could not load status."
+  }
+}

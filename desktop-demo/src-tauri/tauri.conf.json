@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ConductLoop Demo",
+  "version": "1.0.0",
+  "identifier": "com.conductloop.desktop.demo",
+  "build": {
+    "frontendDist": "loading"
+  },
+  "app": {
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "ConductLoop Demo",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "url": "index.html",
+        "visible": true,
+        "decorations": true,
+        "titleBarStyle": "Visible"
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Productivity",
+    "shortDescription": "ConductLoop demo - trial build with sample data",
+    "longDescription": "ConductLoop Demo - experience the product with sample data. No signup, no personal information. Local-first.",
+    "macOS": {
+      "entitlements": "entitlements.plist",
+      "minimumSystemVersion": "10.15"
+    }
+  }
+}

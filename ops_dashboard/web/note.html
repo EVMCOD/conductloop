@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/csrf.js" defer></script>
+  <script src="/i18n.js" data-i18n-pages="note" defer></script>
+  <script src="/locale-switch.js" data-locale-switch="#controls" defer></script>
+  <meta charset="UTF-8" />
+<link rel="icon" href="data:," />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-i18n="note.doc_title">Note · ConductLoop</title>
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="stylesheet" href="/theme.css" />
+  <style>
+    /* Legacy tokens are aliases of the shared design system in /theme.css. */
+    :root{--bg: var(--cl-bg);--bg-soft: var(--cl-bg-soft);--bg-card: var(--cl-bg-2);--border: var(--cl-border);--ink: var(--cl-ink);--muted: var(--cl-ink-muted);--blue: var(--cl-info);--green: var(--cl-ok);--amber: var(--cl-warn);--red: var(--cl-danger)}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;height:100vh;overflow:hidden}
+    .layout{display:grid;grid-template-columns:1fr 380px;grid-template-rows:48px 1fr;height:100vh}
+    .topbar{grid-column:1/3;display:flex;align-items:center;padding:0 20px;background:var(--bg-soft);border-bottom:1px solid var(--border);gap:14px}
+    .topbar h1{font-size:14px;font-weight:600;margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .topbar a{color:var(--blue);text-decoration:none;font-size:13px}
+    .topbar a:hover{text-decoration:underline}
+    .editor-wrap{overflow:auto;padding:24px 32px}
+    textarea{width:100%;min-height:80vh;background:transparent;color:var(--ink);border:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;line-height:1.7;outline:none;resize:none;font-family:inherit}
+    textarea:focus{outline:none}
+    .sidebar{background:var(--bg-soft);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+    .sidebar-tabs{display:flex;border-bottom:1px solid var(--border)}
+    .sidebar-tab{flex:1;padding:12px;text-align:center;cursor:pointer;font-size:12px;color:var(--muted);background:transparent;border:none;border-bottom:2px solid transparent}
+    .sidebar-tab.active{color:var(--blue);border-bottom-color:var(--blue);background:var(--bg-card)}
+    .sidebar-content{flex:1;overflow:auto;padding:14px}
+    .ai-action{padding:10px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;cursor:pointer;text-align:left;width:100%;transition:all 0.1s}
+    .ai-action:hover{background:var(--bg);border-color:var(--blue)}
+    .ai-action:disabled{opacity:0.5;cursor:not-allowed}
+    .ai-action .title{font-size:13px;font-weight:500;color:var(--ink)}
+    .ai-action .desc{font-size:11px;color:var(--muted);margin-top:2px}
+    .ai-result{background:var(--bg-card);border:1px solid var(--blue);border-radius:6px;padding:12px;margin-top:12px;font-size:13px;line-height:1.6;white-space:pre-wrap;max-height:50vh;overflow:auto}
+    .ai-result-actions{display:flex;gap:6px;margin-top:8px}
+    .ai-result-actions button{padding:5px 10px;font-size:11px;background:var(--bg-soft);color:var(--ink);border:1px solid var(--border);border-radius:4px;cursor:pointer}
+    .ai-result-actions button:hover{background:var(--bg)}
+    .ai-result-actions button.primary{background:var(--blue);color:white;border:none}
+    .backlinks-section{margin-top:20px}
+    .backlinks-section h3{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:0 0 10px 0}
+    .backlink{background:var(--bg-card);border:1px solid var(--border);border-radius:5px;padding:8px 10px;margin-bottom:5px;cursor:pointer;font-size:12px}
+    .backlink:hover{border-color:var(--blue)}
+    .backlink .title{font-weight:500;color:var(--ink)}
+    .backlink .meta{color:var(--muted);font-size:10px;margin-top:2px}
+    .status{padding:8px 12px;font-size:12px;border-radius:4px;margin-bottom:8px}
+    .status.saving{background:rgba(59,130,246,0.1);color:var(--blue)}
+    .status.saved{background:rgba(34,197,94,0.1);color:var(--green)}
+    .status.error{background:rgba(239,68,68,0.1);color:var(--red)}
+    .empty{color:var(--muted);font-size:13px;text-align:center;padding:20px}
+    .meta-bar{padding:8px 14px;background:var(--bg-card);border-top:1px solid var(--border);font-size:11px;color:var(--muted);display:flex;justify-content:space-between}
+    .ai-empty{color:var(--muted);font-size:12px;text-align:center;padding:24px 8px}
+    .lang-pill{padding:2px 8px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;font-size:10px;color:var(--muted);display:inline-block;margin-left:6px}
+  </style>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<script src="/app-nav.js"></script>
+<div class="layout">
+  <div class="topbar" id="controls">
+    <a href="/" data-i18n="note.back">← Dashboard</a>
+    <h1 id="title" data-i18n="note.title_loading">Loading…</h1>
+    <span class="lang-pill" id="lang-pill">—</span>
+    <button id="save-btn" style="background:var(--blue);color:white;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:12px" data-i18n="note.save">Save (⌘S)</button>
+  </div>
+
+  <div class="editor-wrap">
+    <div id="status" style="display:none" class="status"></div>
+    <textarea id="content" placeholder="Loading note…" data-i18n-ph="note.content_ph"></textarea>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-tabs">
+      <button class="sidebar-tab active" data-tab="ai">🤖 <span data-i18n="note.tab_ai">AI Actions</span></button>
+      <button class="sidebar-tab" data-tab="links">🔗 <span data-i18n="note.tab_links">Backlinks</span></button>
+    </div>
+    <div class="sidebar-content">
+      <div id="ai-pane">
+        <div id="ai-actions">
+          <button class="ai-action" data-action="key_points" data-lang="auto">
+            <div class="title">🔑 <span data-i18n="note.key_points">Key points</span> <span class="lang-pill"></span></div>
+            <div class="desc" data-i18n="note.key_points_desc">Extract 3-7 main takeaways</div>
+          </button>
+          <button class="ai-action" data-action="summarize" data-lang="auto">
+            <div class="title">📝 <span data-i18n="note.summarize">Summarize</span> <span class="lang-pill"></span></div>
+            <div class="desc" data-i18n="note.summarize_desc">3-5 bullet summary</div>
+          </button>
+          <button class="ai-action" data-action="action_items" data-lang="auto">
+            <div class="title">☑️ <span data-i18n="note.action_items">Action items</span> <span class="lang-pill"></span></div>
+            <div class="desc" data-i18n="note.action_items_desc">Extract TODOs / next steps</div>
+          </button>
+          <button class="ai-action" data-action="expand" data-lang="auto">
+            <div class="title">✍️ <span data-i18n="note.expand">Expand</span> <span class="lang-pill"></span></div>
+            <div class="desc" data-i18n="note.expand_desc">More detail + structure</div>
+          </button>
+          <button class="ai-action" data-action="translate" data-lang="es">
+            <div class="title">🌐 <span data-i18n="note.translate_es">Translate to ES</span></div>
+            <div class="desc" data-i18n="note.translate_desc">Preserves markdown, code, links</div>
+          </button>
+          <button class="ai-action" data-action="translate" data-lang="en">
+            <div class="title">🌐 <span data-i18n="note.translate_en">Translate to EN</span></div>
+            <div class="desc" data-i18n="note.translate_desc">Preserves markdown, code, links</div>
+          </button>
+          <button class="ai-action" data-action="title_suggest" data-lang="en">
+            <div class="title">✨ <span data-i18n="note.suggest_titles">Suggest titles</span></div>
+            <div class="desc" data-i18n="note.suggest_titles_desc">3 alternative titles</div>
+          </button>
+        </div>
+        <div id="ai-result"></div>
+      </div>
+
+      <div id="links-pane" style="display:none">
+        <h3 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:0 0 10px 0" data-i18n="note.backlinks_incoming">Backlinks (incoming)</h3>
+        <div id="backlinks-list"></div>
+        <h3 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px 0" data-i18n="note.outgoing_links">Outgoing links</h3>
+        <div id="outgoing-list"></div>
+      </div>
+    </div>
+    <div class="meta-bar">
+      <span id="meta-chars" data-i18n="note.chars">0 chars</span>
+      <span id="meta-saved">—</span>
+    </div>
+  </aside>
+</div>
+
+<script src="/provider-errors.js"></script>
+<script>
+const docId = parseInt(location.pathname.split('/')[2] || '0', 10);
+const $ = id => document.getElementById(id);
+let originalContent = '';
+let isDirty = false;
+let savedAt = null;
+
+// The language is the person's choice: the words of this page live in its own
+// dictionary and the page paints them when they arrive.
+const tr = (key, vars) => (window._i18n && window._i18n.t ? window._i18n.t(key, vars) : key);
+
+function setStatus(msg, type) {
+  const el = $('status');
+  if (!msg) { el.style.display = 'none'; return; }
+  el.className = 'status ' + type;
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function loadNote() {
+  try {
+    const r = await fetch('/api/notes/' + docId + '/backlinks');  // reuse endpoint to verify doc exists
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    // Fetch the actual content via find/recent — but easier: read via a new endpoint
+    // Actually we need content. Let me hit the search endpoint for this doc.
+    // Simpler: hit /api/find with title filter, or add /api/notes/<id> GET endpoint.
+    // For now, use the indexer's GET endpoint we'll add.
+    const resp = await fetch('/api/notes/' + docId);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const d = await resp.json();
+    $('title').textContent = d.title || tr('note.fallback_title', {id: docId});
+    $('content').value = d.content || '';
+    $('lang-pill').textContent = 'doc #' + docId;
+    originalContent = d.content || '';
+    updateMeta();
+  } catch (e) {
+    setStatus(tr('note.load_failed', {msg: e.message}), 'error');
+  }
+}
+
+function updateMeta() {
+  const txt = $('content').value;
+  $('meta-chars').textContent = tr('note.chars', {n: txt.length});
+}
+
+let saveTimer = null;
+function scheduleAutoSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  setStatus(tr('note.editing'), 'saving');
+  saveTimer = setTimeout(save, 3000);
+}
+
+async function save() {
+  const content = $('content').value;
+  if (content === originalContent) {
+    setStatus(tr('note.saved'), 'saved');
+    setTimeout(() => setStatus(null), 1500);
+    return;
+  }
+  setStatus(tr('note.saving'), 'saving');
+  try {
+    const r = await fetch('/api/notes/' + docId + '/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ content }),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    originalContent = content;
+    savedAt = new Date();
+    $('meta-saved').textContent = tr('note.saved_at', {time: savedAt.toLocaleTimeString()});
+    setStatus(tr('note.saved_ok'), 'saved');
+    setTimeout(() => setStatus(null), 1800);
+  } catch (e) {
+    setStatus(tr('note.save_failed', {msg: e.message}), 'error');
+  }
+}
+
+// Sidebar tabs
+document.querySelectorAll('.sidebar-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.sidebar-tab').forEach(x => x.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    $('ai-pane').style.display = tab === 'ai' ? '' : 'none';
+    $('links-pane').style.display = tab === 'links' ? '' : 'none';
+    if (tab === 'links') loadBacklinks();
+  });
+});
+
+async function loadBacklinks() {
+  $('backlinks-list').innerHTML = '<div class="empty">' + tr('note.loading') + '</div>';
+  $('outgoing-list').innerHTML = '';
+  try {
+    const [incoming, outgoing] = await Promise.all([
+      fetch('/api/notes/' + docId + '/backlinks').then(r => r.json()),
+      fetch('/api/notes/' + docId + '/links').then(r => r.json()),
+    ]);
+    $('backlinks-list').innerHTML = incoming.backlinks.length
+      ? incoming.backlinks.map(renderBacklink).join('')
+      : '<div class="empty">' + tr('note.no_backlinks') + '</div>';
+    $('outgoing-list').innerHTML = outgoing.links.length
+      ? outgoing.links.map(r => '<div class="backlink"><div class="title">' + escapeHtml(r.target_title || r.target_path) + '</div><div class="meta">' + r.link_type + '</div></div>').join('')
+      : '<div class="empty">' + tr('note.no_outgoing') + '</div>';
+  } catch (e) {
+    $('backlinks-list').innerHTML = '<div class="empty">' + tr('note.error', {msg: escapeHtml(e.message)}) + '</div>';
+  }
+}
+
+function renderBacklink(r) {
+  const ctx = r.context ? escapeHtml(r.context.slice(0, 80)) : '';
+  return '<div class="backlink">' +
+    '<div class="title">' + escapeHtml(r.source_title || r.source_path.split('/').pop()) + '</div>' +
+    '<div class="meta">' + r.link_type + (ctx ? ' · "' + ctx + '…"' : '') + '</div>' +
+    '</div>';
+}
+
+// AI actions. Key points, Summarize, Action items and Expand answer in the
+// language of the app — the one the person chose, not the browser's. The
+// Translate buttons name their own.
+function uiLang(){
+  var w = window._i18n;
+  return (w && typeof w.getLocale === 'function' && w.getLocale() === 'es') ? 'es' : 'en';
+}
+function markAutoActions(){
+  const lang = uiLang();
+  document.querySelectorAll('.ai-action[data-lang="auto"]').forEach(b => {
+    b.dataset.lang = lang;
+    const pill = b.querySelector('.lang-pill');
+    if (pill) pill.textContent = lang.toUpperCase();
+  });
+}
+document.querySelectorAll('.ai-action').forEach(b => {
+  b.addEventListener('click', async () => {
+    const action = b.dataset.action;
+    const lang = b.dataset.lang || uiLang();
+    $('ai-actions').style.display = 'block';
+    document.querySelectorAll('.ai-action').forEach(x => x.disabled = true);
+    $('ai-result').innerHTML = '<div class="ai-empty">' + tr('note.thinking', {action: action, lang: lang}) + '</div>';
+    try {
+      const r = await fetch('/api/notes/' + docId + '/ai-action', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ action: action, lang: lang }),
+      });
+      const d = await r.json();
+      if (ProviderErrors.show($('ai-result'), d)) return;
+      if (d.error) throw new Error(d.error);
+      $('ai-result').innerHTML =
+        '<div class="ai-empty">' + d.action + ' · ' + d.model + ' · ' + d.took_ms + 'ms</div>' +
+        '<div class="ai-result">' + escapeHtml(d.result) + '</div>' +
+        '<div class="ai-result-actions">' +
+        '<button class="primary" data-append="1">' + tr('note.append_to_note') + '</button>' +
+        '<button data-copy="1">' + tr('note.copy') + '</button>' +
+        '</div>';
+      // Wire actions
+      $('ai-result').querySelector('[data-append]').addEventListener('click', () => {
+        const ta = $('content');
+        ta.value = ta.value + '\n\n' + tr('note.append_heading', {action: action, lang: lang}) + '\n\n' + d.result + '\n';
+        updateMeta();
+        scheduleAutoSave();
+      });
+      const copyBtn = $('ai-result').querySelector('[data-copy]');
+      copyBtn.addEventListener('click', async () => {
+        // The Copy button reports on itself (it used to relabel the AI
+        // action button), and a refused write says so instead of throwing.
+        try {
+          await navigator.clipboard.writeText(d.result);
+          copyBtn.textContent = '✓ Copied';
+          if (window._i18n) copyBtn.textContent = tr('note.copied');
+        } catch (e) {
+          copyBtn.textContent = '✗ ' + (e && e.message ? e.message : tr('note.copy_failed'));
+        }
+        setTimeout(() => copyBtn.textContent = tr('note.copy'), 1500);
+      });
+    } catch (e) {
+      $('ai-result').innerHTML = '<div class="status error">' + escapeHtml(e.message) + '</div>';
+    } finally {
+      document.querySelectorAll('.ai-action').forEach(x => x.disabled = false);
+    }
+  });
+});
+
+// Editor events
+$('content').addEventListener('input', () => {
+  updateMeta();
+  scheduleAutoSave();
+});
+
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+    e.preventDefault();
+    save();
+  }
+});
+
+$('save-btn').addEventListener('click', save);
+
+// The words arrive over the network: the page paints when they are here,
+// and paints again when the person changes the language. The note itself is
+// never reloaded: what is being edited stays untouched.
+function start() {
+  loadNote();
+  loadBacklinks();
+  markAutoActions();
+  if (window._i18n && window._i18n.onLocaleChange) {
+    window._i18n.onLocaleChange(function () {
+      updateMeta();
+      markAutoActions();
+      if (savedAt) $('meta-saved').textContent = tr('note.saved_at', {time: savedAt.toLocaleTimeString()});
+      loadBacklinks();
+    });
+  }
+}
+// The words arrive over the network: the page paints when they are here.
+// i18n.js is deferred, so it has run by the time the document is ready.
+function whenWords(){
+  var w = window._i18n;
+  if(w && w.ready) return w.ready().then(start, start);
+  return start();
+}
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', whenWords);
+else whenWords();
+</script>
+</body>
+</html>

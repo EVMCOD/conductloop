@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Welcome — ConductLoop</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/welcome.css" />
+  <script src="/i18n.js" defer></script>
+  <script src="/locale-switch.js" data-locale-switch="#lang-slot" defer></script>
+  <script src="/welcome.js" defer></script>
+</head>
+<body>
+<script src="/appearance.js"></script>
+  <main class="wrap">
+    <div id="lang-slot" class="lang-slot"></div>
+    <div id="global-error" class="error" role="alert" hidden></div>
+
+    <!-- Screen 1: what this is. The app asks for nothing until it has said
+         something about itself. -->
+    <section id="screen-intro">
+      <header>
+        <h1 data-welcome="title">Welcome to ConductLoop</h1>
+        <p class="lead" data-welcome="lead">Your computer becomes a private AI second brain. Your notes, your code and your numbers stay on your machine — and you can ask it questions from your phone.</p>
+      </header>
+      <ul class="value">
+        <li data-welcome="value1">It reads your notes and answers from them, with a link to the note each answer used.</li>
+        <li data-welcome="value2">A team of agents works on your projects while you get on with something else.</li>
+        <li data-welcome="value3">Nothing leaves your computer: no account, no cloud, no subscription, ever.</li>
+      </ul>
+      <div class="cta">
+        <button id="try-demo" data-welcome="try_demo">Try it with sample data</button>
+        <button id="setup" class="ghost" data-welcome="setup_now">Set up with my notes</button>
+        <span id="demo-status" class="status" role="status"></span>
+      </div>
+      <p class="hint" id="demo-hint" data-welcome="try_demo_hint">Sample data is fictional, and it is removed the moment you index your own notes.</p>
+      <p class="hint"><button id="skip" class="linklike" data-welcome="skip">Skip for now</button></p>
+    </section>
+
+    <!-- Screen 2: the two things to configure. -->
+    <section id="screen-setup" hidden>
+      <header>
+        <h2 class="step-title" data-welcome="setup_title">Two quick things and you are set</h2>
+        <p class="sub" data-welcome="subtitle">Both are optional, and everything stays on this computer.</p>
+      </header>
+
+      <section class="card" id="step-notes">
+        <h2 data-welcome="notes_title">1 · Your notes</h2>
+        <p class="hint" data-welcome="notes_hint">ConductLoop reads your notes to answer from them. It never writes into your notes folder: its own notes (daily briefing, agent notes) go to a folder of their own.</p>
+        <label for="notes-folder" data-welcome="notes_label">Folder with your notes, e.g. an Obsidian vault (optional)</label>
+        <input id="notes-folder" type="text" spellcheck="false" autocomplete="off" placeholder="~/Documents/Obsidian/MyVault" data-welcome-ph="notes_ph" />
+        <label for="write-folder" data-welcome="write_label">Folder for ConductLoop's own notes</label>
+        <input id="write-folder" type="text" spellcheck="false" autocomplete="off" />
+        <label class="check"><input id="create-folder" type="checkbox" checked /> <span data-welcome="create_label">Create it if it does not exist</span></label>
+        <p class="hint" id="write-note" hidden></p>
+        <p class="hint" id="demo-note" hidden></p>
+        <div class="row">
+          <button id="save-folders" data-welcome="save_folders">Save and index my notes</button>
+          <span id="folders-status" class="status" role="status"></span>
+        </div>
+      </section>
+
+      <section class="card" id="step-key">
+        <h2 data-welcome="key_title">2 · AI key (optional)</h2>
+        <p class="hint" data-welcome="key_hint">Search and notes work without it. To chat and summarise, paste a key from your AI provider. It is stored in the system keychain (the Keychain on a Mac), or in an encrypted file if there is none, and it is never shown again.</p>
+        <div id="passphrase-block" hidden>
+          <p class="hint" data-welcome="pass_hint">This computer has no system keychain available. Choose a passphrase so the key is stored in an encrypted file. You will be asked for it again next time you open the app.</p>
+          <label for="passphrase" data-welcome="pass_label">Passphrase for the encrypted file</label>
+          <input id="passphrase" type="password" spellcheck="false" autocomplete="new-password" />
+          <div class="row">
+            <button id="save-passphrase" type="button" data-welcome="save_pass">Create encrypted file</button>
+            <span id="pass-status" class="status" role="status"></span>
+          </div>
+        </div>
+        <label for="provider" data-welcome="provider_label">Provider</label>
+        <select id="provider">
+          <option value="anthropic">Anthropic</option>
+          <option value="openai">OpenAI</option>
+          <option value="minimax">MiniMax</option>
+          <option value="gateway">Gateway</option>
+        </select>
+        <label for="api-key" data-welcome="key_label">API key</label>
+        <input id="api-key" type="password" spellcheck="false" autocomplete="off" autocapitalize="off" />
+        <div class="row">
+          <button id="save-key" data-welcome="save_key">Save key</button>
+          <span id="key-status" class="status" role="status"></span>
+        </div>
+        <p class="hint" id="key-link" hidden><a href="/credentials" data-welcome="open_credentials">Open Credentials</a></p>
+      </section>
+
+      <footer class="actions">
+        <button id="finish" data-welcome="finish">Open ConductLoop</button>
+        <button id="back" class="ghost" data-welcome="back">Back</button>
+        <button id="skip-setup" class="ghost" data-welcome="skip">Skip for now</button>
+        <a class="link" href="/setup" data-welcome="open_setup">See the full setup checklist</a>
+      </footer>
+    </section>
+  </main>
+</body>
+</html>

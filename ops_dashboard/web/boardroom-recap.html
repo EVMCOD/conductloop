@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/toast.js"></script>
+  <script src="/csrf.js" defer></script>
+  <meta charset="utf-8" />
+<link rel="icon" href="data:," />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Daily Recap — ConductLoop</title>
+  <link rel="stylesheet" href="/theme.css" />
+  <style>
+    /* Legacy tokens are aliases of the shared design system in /theme.css. */
+    :root { --bg: var(--cl-bg); --card: var(--cl-bg-soft); --ink: var(--cl-ink); --muted: var(--cl-ink-muted); --brand: var(--cl-accent); --border: var(--cl-border); --ok: var(--cl-ok); --warn: var(--cl-warn); --bad: var(--cl-danger); }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .wrap{max-width:760px;margin:0 auto;padding:24px 20px 80px}
+    .head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px}
+    h1{font-size:24px;margin:0;font-weight:600}
+    .sub{color:var(--muted);font-size:13px;margin:2px 0 0}
+    .nav{display:flex;gap:8px;margin:18px 0;font-size:13px;flex-wrap:wrap}
+    .nav a{color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
+    .nav a:hover{color:var(--ink);border-color:var(--border)}
+    .nav a.active{color:var(--brand);border-color:var(--brand)}
+    section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}
+    h2{font-size:14px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin:0 0 10px;font-weight:600}
+    .kpi{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:14px}
+    .kpi:last-child{border-bottom:0}
+    .kpi .v{font-weight:600;color:var(--ink)}
+    .kpi .v.bad{color:var(--bad)}
+    .kpi .v.ok{color:var(--ok)}
+    .kpi .v.warn{color:var(--warn)}
+    .ceo-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--border);font-size:14px}
+    .ceo-row:last-child{border-bottom:0}
+    .ceo-row a{color:var(--ink);text-decoration:none}
+    .ceo-row a:hover{color:var(--brand)}
+    .icon{font-size:13px;width:18px;display:inline-block}
+    .empty{color:var(--muted);font-size:13px;padding:24px;text-align:center}
+    .note{background:var(--cl-bg-soft);border:0;border-radius:10px;padding:12px;font-size:13px;line-height:1.55;color:var(--ink)}
+    .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;margin-left:6px}
+    .badge.ok{background:rgba(34,197,94,.15);color:var(--ok)}
+    .badge.warn{background:rgba(245,158,11,.15);color:var(--warn)}
+    .badge.bad{background:rgba(239,68,68,.15);color:var(--bad)}
+  </style>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<script src="/app-nav.js"></script>
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <h1 data-i18n="boardroom-recap.title">Daily Recap</h1>
+        <p class="sub" id="sub">—</p>
+      </div>
+      <a class="badge" href="/boardroom" style="color:var(--muted);text-decoration:none" data-i18n="boardroom.back_inbox">← Inbox</a>
+    </div>
+
+    <div class="nav">
+      <a href="/boardroom"><span data-i18n="boardroom.nav_inbox">📥 Inbox</span></a>
+      <a href="/boardroom/directory"><span data-i18n="boardroom.nav_directory">👥 Directory</span></a>
+      <a href="/boardroom/vault"><span data-i18n="boardroom.nav_vault">📚 Vault</span></a>
+      <a href="/boardroom/portfolio"><span data-i18n="boardroom.nav_portfolio">🌐 Portfolio</span></a>
+      <a class="active"><span data-i18n="boardroom.nav_recap">📊 Daily Recap</span></a>
+      <a href="/boardroom/create"><span data-i18n="boardroom.nav_create">+ New CEO</span></a>
+    </div>
+
+    <section>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px">
+        <h2 style="margin:0" data-i18n="boardroom-recap.top_of_mind">🚨 Top of mind · Holding CEO synthesis</h2>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="source-badge" id="sourceBadge" style="display:none"></span>
+          <button class="ghost" id="refreshBtn" style="font-size:11px;padding:4px 10px" data-i18n="boardroom-recap.regenerate">↻ Regenerate</button>
+        </div>
+      </div>
+      <div class="note" id="topOfMind" style="white-space:pre-wrap" data-i18n="boardroom-recap.loading_synthesis">Loading Holding CEO synthesis…</div>
+    </section>
+
+    <section>
+      <h2 data-i18n="boardroom-recap.ceo_rollup">📈 C-Suite rollup</h2>
+      <div id="ceos"><div class="empty">No CEOs yet.</div></div>
+    </section>
+
+    <section>
+      <h2 data-i18n="boardroom-recap.recent_threads">🗨️ Recent CEO threads (7d)</h2>
+      <div id="messages"><div class="empty">No recent messages.</div></div>
+    </section>
+
+    <section>
+      <h2 data-i18n="boardroom-recap.recommendations">🎯 Today · Holding CEO recommendations</h2>
+      <div class="note" id="recs">
+        <ul style="margin:0;padding-left:18px;color:var(--ink)">
+          <li data-i18n="boardroom-recap.rec_1">Triage any 🟡 waiting CEOs — they may be paused on a chairman decision.</li>
+          <li data-i18n="boardroom-recap.rec_2">Resolve any 🔴 blocked CEOs first — they cannot proceed without input.</li>
+          <li data-i18n="boardroom-recap.rec_3">Talk to Holding CEO about portfolio-level changes (one-off).</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2 data-i18n="boardroom-recap.projects_section">📚 Projects on file</h2>
+      <div id="projects"><div class="empty">No projects discovered.</div></div>
+    </section>
+  </div>
+
+  <script>
+    // The words of the app: the dictionary when it has arrived, the English
+    // text written here when it has not.
+    const t = (key, fallback, vars) => (window.BoardroomI18n ? window.BoardroomI18n.t(key, fallback, vars)
+      : String(fallback == null ? key : fallback).replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] !== undefined ? vars[k] : m)));
+    function escapeHtml(s) { return (s || '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function statusIcon(s) { const m = { idle:'🟢', working:'🟢', waiting:'🟡', blocked:'🔴', paused:'⚪', active:'🟢' }; return m[(s||'').toLowerCase()] || '⚪'; }
+    function statusClass(s) { const x=(s||'').toLowerCase(); if (x==='blocked') return 'bad'; if (x==='waiting') return 'warn'; if (x==='paused') return ''; return 'ok'; }
+    function ago(ts) {
+      const diff = Math.max(0, Date.now() - ts * 1000);
+      const m = Math.floor(diff / 60000);
+      if (m < 1) return t('boardroom.just_now', 'just now');
+      if (m < 60) return t('boardroom.ago_minutes', '{n}m ago', {n: m});
+      const h = Math.floor(m / 60);
+      if (h < 24) return t('boardroom.ago_hours', '{n}h ago', {n: h});
+      const d = Math.floor(h / 24);
+      return t('boardroom.ago_days', '{n}d ago', {n: d});
+    }
+    const $ = (id) => document.getElementById(id);
+    async function load() {
+      let data;
+      try {
+        const r = await fetch('/api/boardroom/recap', { credentials: 'include' });
+        data = await r.json();
+      } catch (e) {
+        document.body.insertAdjacentHTML('beforeend', `<div class="empty">${t('boardroom-recap.could_not_load', 'Could not load recap.')}</div>`);
+        return;
+      }
+      render(data);
+    }
+    function render(data) {
+      $('sub').textContent = t('boardroom-recap.generated', 'Generated {ts}', {ts: ago(data.generated_at)});
+      // Top of mind: Holding CEO synthesis (LLM-cached)
+      const syn = data.synthesis || {};
+      const text = syn.text || t('boardroom-recap.no_synthesis', '(no synthesis yet)');
+      $('topOfMind').textContent = text;
+      const badge = $('sourceBadge');
+      if (syn.source === 'llm') {
+        badge.textContent = syn.cached
+          ? t('boardroom-recap.llm_cached', 'LLM · {provider} · cached', {provider: syn.provider || '?'})
+          : t('boardroom-recap.llm', 'LLM · {provider}', {provider: syn.provider || '?'});
+        badge.style.cssText = 'display:inline-block;padding:2px 7px;border-radius:5px;font-size:10px;background:rgba(34,197,94,.15);color:var(--ok);text-transform:uppercase;letter-spacing:.05em;font-weight:600';
+      } else if (syn.source === 'static') {
+        badge.textContent = t('boardroom-recap.static_badge', 'STATIC (no BYOK provider)');
+        badge.style.cssText = 'display:inline-block;padding:2px 7px;border-radius:5px;font-size:10px;background:rgba(245,158,11,.15);color:var(--warn);text-transform:uppercase;letter-spacing:.05em;font-weight:600';
+      } else {
+        badge.style.display = 'none';
+      }
+      // CEOs
+      const ceosEl = $('ceos');
+      if (!data.ceos || !data.ceos.length) {
+        ceosEl.innerHTML = `<div class="empty">${t('boardroom-recap.no_ceos', 'No CEOs yet. Create one to start.')}</div>`;
+      } else {
+        ceosEl.innerHTML = data.ceos.map(c => `
+          <div class="ceo-row">
+            <a href="/boardroom/ceo/${c.id}">
+              <span class="icon">${statusIcon(c.status)}</span>${escapeHtml(c.name)}
+              <span class="badge ${statusClass(c.status)}">${escapeHtml(c.status || 'idle')}</span>
+            </a>
+            <span style="color:var(--muted);font-size:12px">${escapeHtml(c.project_slug || c.role || '')}</span>
+          </div>
+        `).join('');
+      }
+      // Messages
+      const msgEl = $('messages');
+      if (!data.recent_messages || !data.recent_messages.length) {
+        msgEl.innerHTML = `<div class="empty">${t('boardroom-recap.no_messages_7d', 'No chairman ⇄ CEO messages in the last 7 days.')}</div>`;
+      } else {
+        msgEl.innerHTML = data.recent_messages.map(m => `
+          <div class="ceo-row">
+            <a href="/boardroom/ceo/${m.member_id || ''}" style="flex:1">
+              <strong>${escapeHtml(m.ceo_name || 'CEO')}</strong>: ${escapeHtml((m.content || '').slice(0,140))}
+            </a>
+            <span style="color:var(--muted);font-size:12px">${ago(m.created_at)}</span>
+          </div>
+        `).join('');
+      }
+      // Projects
+      const prEl = $('projects');
+      if (!data.projects || !data.projects.length) {
+        prEl.innerHTML = `<div class="empty">${t('boardroom-recap.no_projects', 'No projects discovered.')}</div>`;
+      } else {
+        prEl.innerHTML = data.projects.map(p => `
+          <div class="ceo-row">
+            <span>${escapeHtml(p.name)}</span>
+            <span style="color:var(--muted);font-size:12px">${escapeHtml(p.key || '')}</span>
+          </div>
+        `).join('');
+      }
+    }
+    $('refreshBtn').onclick = async () => {
+      $('refreshBtn').disabled = true;
+      $('refreshBtn').textContent = t('boardroom-recap.regenerating', '⟳ Regenerating...');
+      try {
+        const r = await fetch('/api/boardroom/recap/refresh', { method:'POST', credentials:'include' });
+        const d = await r.json();
+        if (d.synthesis && d.synthesis.text) {
+          // Reload the whole recap to get fresh data + the new synthesis
+          await load();
+        } else {
+          notifyError(t('boardroom-recap.refresh_failed', 'Refresh failed'));
+        }
+      } catch (e) {
+        notifyError(t('boardroom-recap.refresh_error', 'Refresh error: {msg}', {msg: e.message}));
+      } finally {
+        $('refreshBtn').disabled = false;
+        $('refreshBtn').textContent = t('boardroom-recap.regenerate', '↻ Regenerate');
+      }
+    };
+
+    // The words arrive over the network: paint when they are here, and paint
+    // again if the person changes the language.
+    function start() {
+      if (window.BoardroomI18n) {
+        BoardroomI18n.ready(load);
+        BoardroomI18n.onChange(load);
+      } else {
+        load();
+      }
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+    else start();
+  </script>
+
+  <script src="/boardroom-i18n.js" data-i18n-pages="boardroom boardroom-recap" defer></script>
+</body>
+</html>

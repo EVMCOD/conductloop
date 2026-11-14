@@ -1,0 +1,26 @@
+# Cargo configuration for the macOS desktop build.
+#
+# macOS 27's dyld refuses to dlopen() a dylib whose LC_SYMTAB string table is
+# not 8-byte aligned ("mis-aligned LINKEDIT string pool"). With the deployment
+# target that Tauri sets (13.0, from bundle.macOS.minimumSystemVersion), rustc
+# asks ld64 for chained fixups, and Xcode 27.2's ld64 (ld-27106) then lays out
+# __LINKEDIT so that the string table lands on 4 bytes for some crates and on 8
+# for others.
+#
+# rustc dlopen()s the proc-macro dylibs it has just built, so a misaligned one
+# kills the build with an error that names a crate that has nothing to do with
+# the problem:
+#
+#     error[E0463]: can't find crate for `phf_macros`
+#
+# -no_fixup_chains keeps the classic dyld info, whose layout is aligned, and
+# costs nothing on a macOS 13+ app: classic rebase opcodes have been supported
+# since macOS 10.6.
+#
+# The flag is ld64-only, so it is scoped to the Apple targets: on Linux and
+# Windows the linker would reject it.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-no_fixup_chains"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-no_fixup_chains"]

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+<link rel="icon" href="data:," />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-i18n="status.title">System Status — ConductLoop</title>
+  <meta name="description" content="Live status of all public services." />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="stylesheet" href="/theme.css" />
+  <script src="/i18n.js" data-i18n-pages="status" defer></script>
+  <script src="/locale-switch.js" defer></script>
+  <style>
+    /* Legacy tokens are aliases of the shared design system in /theme.css. */
+    :root {
+      --bg: var(--cl-bg);
+      --bg-soft: var(--cl-bg-soft);
+      --bg-card: var(--cl-bg-2);
+      --border: var(--cl-border);
+      --ink: var(--cl-ink);
+      --muted: var(--cl-ink-muted);
+      --green: var(--cl-ok);
+      --amber: var(--cl-warn);
+      --red: var(--cl-danger);
+      --blue: var(--cl-info);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+           background: var(--bg); color: var(--ink); line-height: 1.5; }
+    .container { max-width: 720px; margin: 0 auto; padding: 32px 20px 80px; }
+    h1 { font-size: 28px; margin: 0 0 8px 0; font-weight: 700; letter-spacing: -0.5px; }
+    h1 .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--green); margin-right: 8px; vertical-align: middle; box-shadow: 0 0 12px var(--green); }
+    .subtitle { color: var(--muted); margin: 0 0 32px 0; font-size: 14px; }
+    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 32px; }
+    .summary-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center; }
+    .summary-card .num { font-size: 28px; font-weight: 700; line-height: 1; }
+    .summary-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+    .summary-card.green .num { color: var(--green); }
+    .summary-card.amber .num { color: var(--amber); }
+    .summary-card.red .num { color: var(--red); }
+    .section-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin: 24px 0 12px 0; font-weight: 600; }
+    .service { display: flex; align-items: center; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; gap: 14px; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.ok { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .status-dot.fail { background: var(--red); box-shadow: 0 0 8px var(--red); }
+    .service-info { flex: 1; min-width: 0; }
+    .service-name { font-weight: 600; font-size: 14px; }
+    .service-url { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .service-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .service a { color: var(--blue); text-decoration: none; font-size: 12px; }
+    .service a:hover { text-decoration: underline; }
+    .footer { text-align: center; margin-top: 40px; color: var(--muted); font-size: 12px; }
+    .footer a { color: var(--blue); text-decoration: none; }
+    .empty { text-align: center; color: var(--muted); padding: 32px 20px; }
+    .last-update { color: var(--muted); font-size: 11px; text-align: center; margin-bottom: 24px; }
+    @media (max-width: 600px) {
+      .summary { grid-template-columns: 1fr; }
+      .container { padding: 20px 14px 60px; }
+      h1 { font-size: 22px; }
+    }
+  </style>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<script src="/app-nav.js"></script>
+  <div class="container">
+    <h1><span class="dot" id="overall-dot"></span><span id="overall-title" data-i18n="status.overall_ok">All systems operational</span></h1>
+    <p class="subtitle" data-i18n="status.subtitle">Real-time status of ConductLoop public services</p>
+    <p class="last-update" id="last-update" data-i18n="status.loading">Loading…</p>
+
+    <div class="summary">
+      <div class="summary-card green"><div class="num" id="ok-count">—</div><div class="label" data-i18n="status.operational">operational</div></div>
+      <div class="summary-card amber"><div class="num" id="warn-count">—</div><div class="label" data-i18n="status.degraded">degraded</div></div>
+      <div class="summary-card red"><div class="num" id="fail-count">—</div><div class="label" data-i18n="status.down">down</div></div>
+    </div>
+
+    <div class="section-title" data-i18n="status.services">Services</div>
+    <div id="services" data-i18n="status.loading">Loading…</div>
+
+    <div class="footer">
+      <p data-i18n="status.footer">Status updated every 5 minutes via ops-dashboard.</p>
+      <p><a href="/api/status.json">JSON</a> · <a href="/" data-i18n="status.dashboard">Dashboard</a></p>
+    </div>
+  </div>
+
+  <script>
+    // The language is the person's choice: the words of this page live in
+    // its own dictionary and the page paints them when they arrive.
+    const tr = (key, vars) => (window._i18n && window._i18n.t ? window._i18n.t(key, vars) : key);
+
+    const dot = document.getElementById('overall-dot');
+    const title = document.getElementById('overall-title');
+    const okCount = document.getElementById('ok-count');
+    const warnCount = document.getElementById('warn-count');
+    const failCount = document.getElementById('fail-count');
+    const services = document.getElementById('services');
+    const lastUpdate = document.getElementById('last-update');
+    let lastData = null;
+
+    function renderStatus(data) {
+      lastData = data;
+      let ok = 0, warn = 0, fail = 0;
+      const rows = [];
+      (data.rows || []).forEach(function(s) {
+        const healthy = s.ok === 1 || s.ok === true;
+        const status = s.status_code || 0;
+        const isOk = healthy && status >= 200 && status < 400;
+        if (isOk) ok++; else if (status >= 500 || status === 0) fail++; else warn++;
+        const checkedAt = s.checked_at ? new Date(s.checked_at * 1000).toLocaleString() : tr('status.never');
+        const statusClass = isOk ? 'ok' : 'fail';
+        const statusText = isOk ? tr('status.operational') : (status === 0 ? tr('status.down') : tr('status.degraded'));
+        rows.push('<div class="service">'
+          + '<div class="status-dot ' + statusClass + '"></div>'
+          + '<div class="service-info">'
+          + '<div class="service-name">' + escapeHtml(s.name) + '</div>'
+          + '<div class="service-url"><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener">' + escapeHtml(s.url) + '</a></div>'
+          + '<div class="service-meta">HTTP ' + (status || '—') + ' · ' + (s.latency_ms != null ? s.latency_ms + 'ms · ' : '') + tr('status.checked_at', {time: checkedAt}) + '</div>'
+          + '</div>'
+          + '<div style="font-size:11px;color:var(--muted);text-align:right"><div>' + statusText + '</div></div>'
+          + '</div>');
+      });
+      okCount.textContent = ok; warnCount.textContent = warn; failCount.textContent = fail;
+      services.innerHTML = rows.length ? rows.join('') : '<div class="empty">' + tr('status.no_services') + '</div>';
+      if (fail > 0) {
+        dot.style.background = 'var(--red)';
+        dot.style.boxShadow = '0 0 12px var(--red)';
+        title.textContent = fail === 1
+          ? tr('status.service_down_one', {n: fail}) : tr('status.services_down', {n: fail});
+      } else if (warn > 0) {
+        dot.style.background = 'var(--amber)';
+        dot.style.boxShadow = '0 0 12px var(--amber)';
+        title.textContent = warn === 1
+          ? tr('status.service_degraded_one', {n: warn}) : tr('status.services_degraded', {n: warn});
+      } else {
+        dot.style.background = 'var(--green)';
+        dot.style.boxShadow = '0 0 12px var(--green)';
+        title.textContent = tr('status.overall_ok');
+      }
+      if (data.checked_at) {
+        lastUpdate.textContent = tr('status.last_updated', {time: new Date(data.checked_at * 1000).toLocaleString()});
+      } else {
+        lastUpdate.textContent = tr('status.latest_poll');
+      }
+    }
+
+    function escapeHtml(s) {
+      if (s == null) return '';
+      return String(s).replace(/[&<>"']/g, function(c) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+      });
+    }
+
+    async function poll() {
+      try {
+        const r = await fetch('/api/status.json');
+        const data = await r.json();
+        renderStatus(data);
+      } catch (e) {
+        services.innerHTML = '<div class="empty">' + tr('status.could_not_load') + '</div>';
+      }
+    }
+
+    // The words arrive over the network: the page paints when they are here,
+    // and paints again when the person changes the language.
+    function start() {
+      document.title = tr('status.title');
+      const desc = document.querySelector('meta[name="description"]');
+      if (desc) desc.setAttribute('content', tr('status.description'));
+      poll();
+      if (window._i18n && window._i18n.onLocaleChange) {
+        window._i18n.onLocaleChange(function () {
+          document.title = tr('status.title');
+          const desc = document.querySelector('meta[name="description"]');
+          if (desc) desc.setAttribute('content', tr('status.description'));
+          if (lastData) renderStatus(lastData);
+        });
+      }
+    }
+    // The words arrive over the network: the page paints when they are here.
+    // i18n.js is deferred, so it has run by the time the document is ready.
+    function whenWords(){
+      var w = window._i18n;
+      if(w && w.ready) return w.ready().then(start, start);
+      return start();
+    }
+    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', whenWords);
+    else whenWords();
+    setInterval(poll, 60000);  // refresh every 60s
+  </script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "servers": {
+    "doc_title": "Servidores — ConductLoop",
+    "title": "Servidores",
+    "intro": "Con qué puede hablar esta app y qué va a responder. El producto pide capacidades —chat, imagen, vídeo, voz, búsqueda— y nunca una empresa: sirve un servidor en este ordenador, un servicio en la nube o cualquier endpoint compatible con OpenAI.",
+    "nav_connect_ai": "Conectar IA",
+    "nav_media": "Multimedia",
+    "nav_setup": "Configuración",
+    "ask_servers": "Pregunta a los servidores",
+    "reload": "Recargar",
+    "answering": "responde",
+    "not_answering": "no responde",
+    "no_key": "sin clave",
+    "no_key_needed": "no hace falta clave",
+    "set_up": "configurado",
+    "cap_ready": "listo",
+    "cooling_down": "en enfriamiento",
+    "not_set_up": "sin configurar",
+    "on_this_computer": "en este ordenador",
+    "local": "local",
+    "key_tag": "clave: {key}",
+    "nothing_set_up": "Todavía no hay nada configurado para esto.",
+    "default_no_key": "El predeterminado no tiene clave: {name} respondería en su lugar.",
+    "others_can_serve": "Otros que pueden servirla",
+    "notes_with_vectors": "{n} de {m} notas tienen vectores.",
+    "could_not_load": "No se pudo cargar: {msg}",
+    "asking": "Preguntando…",
+    "asked_every": "Se preguntó a todos los servidores. Uno remoto no se prueba de verdad: solo se comprueba su clave, porque la única prueba honesta gastaría tu crédito."
+  }
+}

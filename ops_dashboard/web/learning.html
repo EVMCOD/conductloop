@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+<link rel="icon" href="data:," />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aprendizaje — ConductLoop</title>
+  <link rel="stylesheet" href="/learning.css" />
+  <link rel="stylesheet" href="/confirm.css" />
+  <script src="/confirm.js" defer></script>
+  <script src="/toast.js" defer></script>
+  <script src="/i18n.js" data-i18n-pages="learning" defer></script>
+  <script src="/locale-switch.js" defer></script>
+  <script src="/learning.js" defer></script>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<script src="/app-nav.js"></script>
+  <header class="top">
+    <div>
+      <h1 data-i18n="learning.title">Aprendizaje</h1>
+      <p class="sub" data-i18n="learning.subtitle">Lo que le has dicho a ConductLoop sobre sus respuestas. Todo se guarda solo en este ordenador.</p>
+    </div>
+    <nav class="nav">
+      <a href="/" data-i18n="learning.nav_home">Panel</a>
+      <a href="/brain" data-i18n="learning.nav_brain">Brain</a>
+      <a href="/ai" data-i18n="learning.nav_ai">Conectar IA</a>
+    </nav>
+  </header>
+  <div id="global-error" class="error" hidden></div>
+
+  <main class="grid">
+    <section class="col-side">
+      <div class="card" id="summary-card">
+        <h2 data-i18n="learning.summary">Resumen</h2>
+        <div class="stats">
+          <div class="stat"><span class="num" id="stat-up">0</span><span class="lbl">👍</span></div>
+          <div class="stat"><span class="num" id="stat-down">0</span><span class="lbl">👎</span></div>
+          <div class="stat"><span class="num" id="stat-fail">0</span><span class="lbl" data-i18n="learning.failures_short">fallos</span></div>
+        </div>
+        <ul id="reasons" class="list compact"></ul>
+      </div>
+
+      <div class="card" id="privacy-card">
+        <h2 data-i18n="learning.privacy">Privacidad</h2>
+        <p class="hint" data-i18n="learning.privacy_feedback">Las valoraciones 👍/👎 se guardan siempre en local cuando las pulsas. Nunca se envían a ningún sitio.</p>
+        <label class="check">
+          <input type="checkbox" id="failure-toggle" />
+          <span data-i18n="learning.failure_toggle">Registrar fallos en este ordenador</span>
+        </label>
+        <p class="hint" id="failure-hint" data-i18n="learning.failure_hint">Desactivado por defecto. Solo guarda códigos de error (proveedor, modelo, tipo), nunca preguntas, respuestas ni notas. Se borran a los 30 días; al desactivarlo se borra todo.</p>
+        <div class="row">
+          <button type="button" class="ghost small" id="export-btn" data-i18n="learning.export">Exportar a un fichero local</button>
+          <label class="check inline"><input type="checkbox" id="export-comments" /><span data-i18n="learning.export_comments">incluir comentarios</span></label>
+        </div>
+        <p class="hint mono" id="export-path" hidden></p>
+      </div>
+    </section>
+
+    <section class="col-main">
+      <nav class="tabs" role="tablist" id="tabs" aria-label="Aprendizaje">
+        <button type="button" role="tab" id="tab-lessons" data-tab="lessons" aria-controls="lessons-card" aria-selected="true" data-i18n="learning.tab_lessons">Lo que he aprendido</button>
+        <button type="button" role="tab" id="tab-skills" data-tab="skills" aria-controls="skills-card" aria-selected="false" data-i18n="learning.tab_skills">Skills</button>
+        <button type="button" role="tab" id="tab-feedback" data-tab="feedback" aria-controls="feedback-card" aria-selected="false" data-i18n="learning.tab_feedback">Valoraciones</button>
+        <button type="button" role="tab" id="tab-failures" data-tab="failures" aria-controls="failures-card" aria-selected="false" data-i18n="learning.tab_failures">Fallos</button>
+        <button type="button" role="tab" id="tab-evals" data-tab="evals" aria-controls="evals-card" aria-selected="false" data-i18n="learning.tab_evals">Evals</button>
+        <button type="button" role="tab" id="tab-metrics" data-tab="metrics" aria-controls="metrics-card" aria-selected="false" data-i18n="learning.tab_metrics">¿Aprendo bien?</button>
+      </nav>
+      <div class="card" id="lessons-card" role="tabpanel" data-panel="lessons">
+        <div class="row between">
+          <h2 data-i18n="learning.lessons">Lo que he aprendido</h2>
+          <span class="hint" id="lessons-counts"></span>
+        </div>
+        <p class="hint" data-i18n="learning.lessons_hint">Reglas que tú apruebas. Nada se activa solo: cada propuesta espera tu aprobación y solo se crean cuando pulsas un botón.</p>
+        <div class="row">
+          <label class="check inline"><input type="checkbox" id="lessons-enabled" /><span data-i18n="learning.lessons_enabled">Usar lecciones en las respuestas</span></label>
+          <span class="hint" id="lessons-caps"></span>
+        </div>
+        <label class="check inline"><input type="checkbox" id="lessons-mirror" /><span data-i18n="learning.lessons_mirror">Copia de solo lectura en el vault</span> <span class="mono" id="lessons-mirror-path"></span></label>
+        <div class="row">
+          <span class="hint" data-i18n="learning.budget">Presupuesto por propuesta con IA (EUR)</span>
+          <input type="number" id="lessons-budget" min="0.001" max="5" step="0.01" class="w-num" />
+          <button type="button" class="ghost small" id="lessons-budget-save" data-i18n="learning.save">Guardar</button>
+        </div>
+        <div class="row">
+          <input type="text" id="price-provider" class="w-num" data-i18n-ph="learning.price_provider" placeholder="proveedor" />
+          <input type="text" id="price-model" data-i18n-ph="learning.price_model" placeholder="modelo" />
+          <input type="number" id="price-in" class="w-num" min="0" step="0.01" data-i18n-ph="learning.price_in" placeholder="€ entrada / 1M" />
+          <input type="number" id="price-out" class="w-num" min="0" step="0.01" data-i18n-ph="learning.price_out" placeholder="€ salida / 1M" />
+          <button type="button" class="ghost small" id="price-save" data-i18n="learning.price_save">Guardar precio</button>
+        </div>
+        <p class="hint mono" id="prices"></p>
+        <div class="row">
+          <input type="text" id="lesson-new" class="grow" maxlength="600" data-i18n-ph="learning.lesson_new_ph" placeholder="Nueva lección…" />
+          <input type="text" id="lesson-new-scope" data-i18n-ph="learning.scope_ph" placeholder="global · project:clave · repo:/ruta" />
+          <button type="button" class="small" id="lesson-add" data-i18n="learning.lesson_add">Añadir</button>
+        </div>
+        <ul id="review-list" class="list compact"></ul>
+        <ul id="lessons-list" class="feed"></ul>
+        <p class="hint" id="lessons-empty" data-i18n="learning.no_lessons" hidden>Aún no hay lecciones.</p>
+      </div>
+
+      <div class="card" id="feedback-card" role="tabpanel" data-panel="feedback">
+        <div class="row between">
+          <h2 data-i18n="learning.feedback">Valoraciones</h2>
+          <div class="row">
+            <select id="rating-filter">
+              <option value="0" data-i18n="learning.all">Todas</option>
+              <option value="1">👍</option>
+              <option value="-1">👎</option>
+            </select>
+          </div>
+        </div>
+        <ul id="feedback-list" class="feed"></ul>
+        <p class="hint" id="feedback-empty" data-i18n="learning.no_feedback" hidden>Aún no hay valoraciones. Usa 👍/👎 bajo las respuestas del Brain.</p>
+      </div>
+
+      <div class="card" id="skills-card" role="tabpanel" data-panel="skills">
+        <div class="row between">
+          <h2 data-i18n="learning.skills">Skills</h2>
+          <button type="button" class="ghost small" id="skills-reindex" data-i18n="learning.reindex">Reindexar</button>
+        </div>
+        <p class="hint" data-i18n="learning.skills_hint">Skills en formato agentskills.io. Viven en tu vault (carpeta skills); nunca se descargan de Internet y sus scripts nunca se ejecutan.</p>
+        <p class="hint mono" id="skills-vault"></p>
+        <label class="check">
+          <input type="checkbox" id="skills-external" />
+          <span data-i18n="learning.skills_external">Leer también ~/.agents/skills y ~/.claude/skills (solo lectura)</span>
+        </label>
+        <div class="row">
+          <input type="text" id="skills-import-path" class="grow" data-i18n-ph="learning.import_skill_ph" placeholder="/ruta/a/la/carpeta-skill" />
+          <button type="button" class="small" id="skills-import" data-i18n="learning.import_skill">Importar desde una carpeta</button>
+        </div>
+        <p class="hint" data-i18n="learning.import_skill_hint">Carpeta local con SKILL.md (formato agentskills.io). Se valida y se copia a tu vault. Los scripts nunca se ejecutan.</p>
+        <div class="row">
+          <input type="text" id="skills-import-url" class="grow" data-i18n-ph="learning.import_url_ph" placeholder="dirección de GitHub o un .zip / .tar.gz" />
+          <button type="button" class="small" id="skills-import-url-btn" data-i18n="learning.import_url">Revisar desde una URL</button>
+        </div>
+        <p class="hint" data-i18n="learning.import_url_hint">Solo direcciones https públicas: una carpeta de GitHub (tree o blob) o un .zip / .tar.gz. Se descarga a un área temporal, se valida, y no entra en tu vault hasta que apruebas. Los scripts nunca se ejecutan.</p>
+        <div id="skills-url-review" hidden>
+          <h2 class="sub2" data-i18n="learning.url_review">Revisar esta skill</h2>
+          <p class="hint mono" id="skills-url-review-src"></p>
+          <p id="skills-url-review-name"></p>
+          <p class="hint" id="skills-url-review-desc"></p>
+          <pre class="skill" id="skills-url-review-body" hidden></pre>
+          <ul id="skills-url-review-files" class="list compact"></ul>
+          <p class="hint" id="skills-url-review-warn" hidden></p>
+          <div class="row">
+            <button type="button" class="small" id="skills-url-approve" data-i18n="learning.url_approve">Aprobar e importar</button>
+            <button type="button" class="ghost small" id="skills-url-discard" data-i18n="learning.url_discard">Descartar</button>
+          </div>
+        </div>
+        <ul id="skills-list" class="feed"></ul>
+        <p class="hint" id="skills-empty" data-i18n="learning.no_skills" hidden>No hay skills indexadas.</p>
+        <p class="hint mono" id="skills-msg" hidden></p>
+        <h2 class="sub2" data-i18n="learning.trusted_repos">Repos de confianza</h2>
+        <p class="hint" data-i18n="learning.trusted_hint">Marcar un repo como de confianza le da al agente que trabaja en él las skills de &lt;repo&gt;/.agents/skills y el acceso a tus apps conectadas (Gmail, GitHub, Slack…). Desactivado por defecto.</p>
+        <div class="row">
+          <input type="text" id="trust-path" class="grow" data-i18n-ph="learning.trust_ph" placeholder="/ruta/al/repo" />
+          <button type="button" class="small" id="trust-add" data-i18n="learning.trust_add">Confiar</button>
+        </div>
+        <ul id="trusted-list" class="list compact"></ul>
+      </div>
+
+      <div class="card" id="skill-proposals-card" role="tabpanel" data-panel="skills">
+        <div class="row between">
+          <h2 data-i18n="learning.sp_title">Skills propuestas</h2>
+          <div class="row">
+            <span class="hint" id="sp-counts"></span>
+            <button type="button" class="ghost small" id="sp-curator" data-i18n="learning.sp_curator">Buscar skills sin uso (60 días)</button>
+          </div>
+        </div>
+        <p class="hint" data-i18n="learning.sp_hint">El agente solo propone. Nada se escribe en tu vault hasta que apruebas, y solo se proponen skills cuando pulsas un botón. Las skills sin uso nunca se borran: como mucho se propone archivarlas.</p>
+        <div class="row">
+          <select id="sp-kind">
+            <option value="note" data-i18n="learning.sp_note">Nota del vault</option>
+            <option value="folder" data-i18n="learning.sp_folder">Carpeta local</option>
+          </select>
+          <input type="text" id="sp-ref" class="grow" data-i18n-ph="learning.sp_ref_ph" placeholder="nota del vault o carpeta local" />
+          <select id="sp-mode">
+            <option value="heuristic" data-i18n="learning.sp_mode_h">Borrador sin IA</option>
+            <option value="ollama" data-i18n="learning.sp_mode_o">Con Ollama</option>
+          </select>
+          <button type="button" class="small" id="sp-create" data-i18n="learning.sp_create">Crear skill desde…</button>
+        </div>
+        <ul id="sp-list" class="feed"></ul>
+        <p class="hint" id="sp-empty" data-i18n="learning.sp_none" hidden>No hay propuestas pendientes.</p>
+      </div>
+
+      <div class="card" id="failures-card" role="tabpanel" data-panel="failures">
+        <div class="row between">
+          <h2 data-i18n="learning.failures">Registro de fallos</h2>
+          <button type="button" class="danger small" id="clear-failures" data-i18n="learning.clear">Borrar todo</button>
+        </div>
+        <table class="tbl" id="failures-table">
+          <thead><tr>
+            <th data-i18n="learning.when">Cuándo</th><th data-i18n="learning.kind">Tipo</th><th data-i18n="learning.code">Código</th>
+            <th data-i18n="learning.provider">Proveedor</th><th data-i18n="learning.model">Modelo</th>
+          </tr></thead>
+          <tbody id="failures-body"></tbody>
+        </table>
+        <p class="hint" id="failures-empty" data-i18n="learning.no_failures" hidden>Sin fallos registrados.</p>
+      </div>
+      <div class="card" id="evals-card" role="tabpanel" data-panel="evals">
+        <div class="row between">
+          <h2 data-i18n="learning.evals">Evals</h2>
+          <span class="pill" data-i18n="learning.read_only">solo lectura</span>
+        </div>
+        <p class="hint" data-i18n="learning.evals_hint">Casos de evaluación offline (respuestas grabadas, sin red ni claves). Esta página solo los muestra: no ejecuta nada ni llama a ningún modelo.</p>
+        <p class="hint" id="evals-status"></p>
+        <p class="hint mono" id="evals-cmd" hidden></p>
+        <div class="stats" id="evals-overall" hidden>
+          <div class="stat"><span class="num" id="evals-score">0</span><span class="lbl" data-i18n="learning.evals_score">puntuación de referencia</span></div>
+          <div class="stat"><span class="num" id="evals-passed">0</span><span class="lbl" data-i18n="learning.evals_passed">casos que pasan</span></div>
+          <div class="stat"><span class="num" id="evals-suites-n">0</span><span class="lbl" data-i18n="learning.evals_suites">suites</span></div>
+        </div>
+        <p class="hint" id="evals-policy" hidden></p>
+        <ul id="evals-suites" class="feed"></ul>
+        <h2 class="sub2" data-i18n="learning.evals_runs">Ejecuciones locales</h2>
+        <ul id="evals-runs" class="list compact"></ul>
+      </div>
+      <div class="card" id="metrics-card" role="tabpanel" data-panel="metrics">
+        <div class="row between">
+          <h2 data-i18n="learning.m_title">¿Estoy aprendiendo bien?</h2>
+          <select id="m-days">
+            <option value="7" data-i18n="learning.m_7">7 días</option>
+            <option value="30" selected data-i18n="learning.m_30">30 días</option>
+            <option value="90" data-i18n="learning.m_90">90 días</option>
+          </select>
+        </div>
+        <p class="hint" data-i18n="learning.m_hint">Calculado solo con los datos de este ordenador. Con un único usuario son tendencias, no estadística: por debajo de 20 respuestas no se saca ninguna conclusión.</p>
+        <ul id="m-signals" class="list compact"></ul>
+        <div class="stats">
+          <div class="stat"><span class="num" id="m-down">—</span><span class="lbl" data-i18n="learning.m_down">👎 por 100 respuestas</span></div>
+          <div class="stat"><span class="num" id="m-with">—</span><span class="lbl" data-i18n="learning.m_with">con lecciones</span></div>
+          <div class="stat"><span class="num" id="m-without">—</span><span class="lbl" data-i18n="learning.m_without">sin lecciones</span></div>
+        </div>
+        <h2 class="sub2" data-i18n="learning.m_details">Detalle</h2>
+        <ul id="m-details" class="list compact"></ul>
+        <h2 class="sub2" data-i18n="learning.m_ranker">Reordenador de citas</h2>
+        <p class="hint" data-i18n="learning.m_ranker_hint">Aprende de qué cita abres después de cada respuesta y reordena las fuentes de la siguiente. Solo se activa si bate al buscador en una parte de los datos que no usó para entrenar.</p>
+        <div class="stats">
+          <div class="stat"><span class="num" id="rk-events">—</span><span class="lbl" data-i18n="learning.rk_events">clics en citas</span></div>
+          <div class="stat"><span class="num" id="rk-state">—</span><span class="lbl" data-i18n="learning.rk_state">estado</span></div>
+          <div class="stat"><span class="num" id="rk-auc">—</span><span class="lbl" data-i18n="learning.rk_auc">AUC</span></div>
+        </div>
+        <ul id="rk-details" class="list compact"></ul>
+        <div class="row">
+          <button type="button" class="ghost small" id="rk-train" data-i18n="learning.rk_train">Entrenar ahora</button>
+          <span class="hint" id="rk-msg"></span>
+        </div>
+        <h2 class="sub2" data-i18n="learning.m_settings">Ajustes</h2>
+        <div class="row">
+          <span class="hint" data-i18n="learning.m_ab">Prueba A/B local: % de respuestas sin lecciones (0 = apagada)</span>
+          <input type="number" id="m-ab" class="w-num" min="0" max="50" step="1" />
+          <button type="button" class="ghost small" id="m-ab-save" data-i18n="learning.save">Guardar</button>
+        </div>
+        <label class="check"><input type="checkbox" id="m-curator" /><span data-i18n="learning.m_curator">Curador diario: proponer archivar skills sin uso en 60 días (nunca borra)</span></label>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

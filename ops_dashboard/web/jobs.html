@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+<link rel="icon" href="data:," />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title data-i18n="jobs.doc_title">Jobs — ConductLoop</title>
+  <link rel="stylesheet" href="/theme.css" />
+  <link rel="stylesheet" href="/jobs.css" />
+  <script src="/toast.js" defer></script>
+  <script src="/csrf.js" defer></script>
+  <script src="/i18n.js" data-i18n-pages="jobs" defer></script>
+  <script src="/locale-switch.js" data-locale-switch="#controls" defer></script>
+  <script src="/jobs.js" defer></script>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<script src="/app-nav.js"></script>
+  <div class="wrap">
+    <h1><span data-i18n="jobs.title">Jobs</span></h1>
+    <p class="sub" data-i18n="jobs.sub">What the app does on its own, and how the last run went.</p>
+    <div id="controls"><a href="/" data-i18n="jobs.nav_dashboard">Dashboard</a><a href="/jobs" data-i18n="jobs.nav_jobs">Jobs</a></div>
+
+    <div class="counts">
+      <div class="count good"><div class="num" id="c-ok">—</div><div class="label" data-i18n="jobs.count_ok">working</div></div>
+      <div class="count bad"><div class="num" id="c-error">—</div><div class="label" data-i18n="jobs.count_error">failed</div></div>
+      <div class="count warn"><div class="num" id="c-overdue">—</div><div class="label" data-i18n="jobs.count_overdue">late</div></div>
+      <div class="count"><div class="num" id="c-never">—</div><div class="label" data-i18n="jobs.count_never">never ran</div></div>
+    </div>
+
+    <div class="card">
+      <strong class="section-title" data-i18n="jobs.the_jobs">The jobs</strong>
+      <div id="list"><span class="hint" data-i18n="jobs.loading">Loading…</span></div>
+      <div class="hint" data-i18n="jobs.hint">A job that is late has not run when it should have: the app was asleep, or the scheduler was not up.</div>
+    </div>
+  </div>
+</body>
+</html>

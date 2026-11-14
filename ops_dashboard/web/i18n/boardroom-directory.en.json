@@ -1,0 +1,22 @@
+{
+  "boardroom-directory": {
+    "title": "Agents Directory",
+    "subtitle": "All CEOs at a glance — click a row to open thread, ⚙ to configure autonomy.",
+    "filter_ph": "Filter by name, project, role…",
+    "count_suffix": " CEOs",
+    "col_ceo": "CEO",
+    "col_project": "Project",
+    "col_tier": "Tier",
+    "col_maturity": "Maturity",
+    "col_tools": "Tools",
+    "col_status": "Status",
+    "col_messages": "Messages",
+    "col_actions": "Actions",
+    "loading": "Loading…",
+    "could_not_load": "Could not load.",
+    "no_match": "No CEOs match.",
+    "tier_label": "Tier {n}",
+    "open_thread_title": "Open thread",
+    "configure_autonomy_title": "Configure autonomy"
+  }
+}

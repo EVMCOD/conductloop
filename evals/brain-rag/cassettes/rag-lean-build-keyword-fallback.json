@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "rag-lean-build-keyword-fallback",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "¿Qué decidimos sobre el precio del plan Pro?"
+      }
+    ]
+  },
+  "response": {
+    "text": "Decidisteis fijar el plan Pro en 29 € al mes y 290 € al año [1].",
+    "usage": {
+      "output_tokens": 22
+    }
+  }
+}

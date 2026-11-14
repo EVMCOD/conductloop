@@ -1,0 +1,22 @@
+{
+  "boardroom-directory": {
+    "title": "Directorio de agentes",
+    "subtitle": "Todos los CEOs de un vistazo — clic en una fila para abrir el hilo, ⚙ para configurar la autonomía.",
+    "filter_ph": "Filtrar por nombre, proyecto, rol…",
+    "count_suffix": " CEOs",
+    "col_ceo": "CEO",
+    "col_project": "Proyecto",
+    "col_tier": "Nivel",
+    "col_maturity": "Madurez",
+    "col_tools": "Herramientas",
+    "col_status": "Estado",
+    "col_messages": "Mensajes",
+    "col_actions": "Acciones",
+    "loading": "Cargando…",
+    "could_not_load": "No se pudo cargar.",
+    "no_match": "No hay CEOs que coincidan.",
+    "tier_label": "Nivel {n}",
+    "open_thread_title": "Abrir hilo",
+    "configure_autonomy_title": "Configurar autonomía"
+  }
+}

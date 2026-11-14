@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "skill-follows-playbook",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "¿Subimos el precio un 10% este trimestre?"
+      }
+    ]
+  },
+  "response": {
+    "text": "Antes de decidir el aumento hay que mirar el churn: si laRetention cae por debajo del 3% mensual, un 10% de subida la empeora. Pido el dato de churn de los últimos 90 días y con eso calculo el efecto sobre el margen y sobre el LTV.",
+    "usage": {
+      "output_tokens": 48
+    }
+  }
+}

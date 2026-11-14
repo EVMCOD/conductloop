@@ -1,0 +1,15 @@
+{
+  "name": "conductloop-desktop-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ConductLoop Demo — desktop wrapper that opens the demo dashboard (no personal data)",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:debug": "tauri build --debug"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

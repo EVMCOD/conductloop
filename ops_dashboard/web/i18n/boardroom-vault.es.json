@@ -1,0 +1,15 @@
+{
+  "boardroom-vault": {
+    "title": "Vault",
+    "subtitle": "Cada decisión del Chairman vive aquí. Haz clic en una fila para desplegarla.",
+    "kind_label": "Tipo",
+    "all": "Todos",
+    "kind_ceo_created": "CEO creado",
+    "kind_autonomy_changed": "Autonomía",
+    "kind_tier_advanced": "Nivel avanzado",
+    "kind_note": "Nota",
+    "loading": "Cargando…",
+    "could_not_load": "No se pudo cargar.",
+    "no_decisions": "Todavía no hay decisiones registradas."
+  }
+}

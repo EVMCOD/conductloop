@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script src="/csrf.js" defer></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chat — ConductLoop</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/theme.css" />
+  <link rel="stylesheet" href="/chat.css" />
+  <link rel="stylesheet" href="/agent-marks.css" />
+  <script src="/i18n.js" data-i18n-pages="chat" defer></script>
+  <script src="/locale-switch.js" data-locale-switch=".controls" defer></script>
+  <script src="/provider-errors.js" defer></script>
+  <script src="/chat.js" defer></script>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<script src="/app-nav.js"></script>
+  <div class="app">
+    <aside class="rail" id="rail">
+      <div class="rail-top">
+        <a class="back" href="/">← ConductLoop</a>
+        <button class="icon-btn" id="theme" type="button" title="Toggle theme" aria-label="Toggle theme" data-i18n-title="chat.toggle_theme" data-i18n-label="chat.toggle_theme">◐</button>
+      </div>
+      <button class="new-chat" id="new-chat" type="button"><span>＋</span> <span data-i18n="chat.new_chat">New chat</span></button>
+
+      <div class="rail-section">
+        <div class="rail-label" data-i18n="chat.agents">Agents</div>
+        <ul class="agent-list" id="agents-main"></ul>
+      </div>
+      <div class="rail-section" id="team-section" hidden>
+        <div class="rail-label"><span data-i18n="chat.team">Team</span> <span class="rail-hint" id="team-hint"></span></div>
+        <ul class="agent-list" id="agents-team"></ul>
+      </div>
+      <div class="rail-section grow">
+        <div class="rail-label" data-i18n="chat.recent">Recent</div>
+        <ul class="thread-list" id="threads"></ul>
+        <p class="rail-empty" id="threads-empty" hidden data-i18n="chat.no_conversations">No conversations yet.</p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn only-narrow" id="rail-toggle" type="button" aria-label="Agents" data-i18n-label="chat.agents">☰</button>
+        <div class="who" id="who"></div>
+        <div class="controls">
+          <label class="team-toggle" id="team-toggle-wrap" hidden>
+            <input type="checkbox" id="team-toggle" checked />
+            <span class="switch" aria-hidden="true"></span>
+            <span data-i18n="chat.team_mode">Team mode</span>
+          </label>
+          <select id="provider" aria-label="Model provider"></select>
+        </div>
+      </header>
+
+      <section class="scroll" id="scroll">
+        <div class="column" id="messages"></div>
+      </section>
+
+      <footer class="composer-wrap">
+        <form class="composer" id="composer">
+          <textarea id="input" rows="1" placeholder="Message…" aria-label="Message" data-i18n-ph="chat.message_placeholder" data-i18n-label="chat.message_placeholder"></textarea>
+          <button class="send" id="send" type="submit" aria-label="Send" data-i18n-label="chat.send">↑</button>
+        </form>
+        <p class="composer-hint" id="hint"></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

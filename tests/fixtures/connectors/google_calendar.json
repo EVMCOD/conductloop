@@ -1,0 +1,39 @@
+{
+  "_note": "Recorded shape of Calendar API v3 responses (calendarList.list, events.list), trimmed and anonymised. No real data.",
+  "calendarList": {
+    "kind": "calendar#calendarList",
+    "items": [
+      {"kind": "calendar#calendarListEntry", "id": "ana@example.com", "summary": "ana@example.com",
+       "timeZone": "Europe/Madrid", "accessRole": "owner", "primary": true, "selected": true},
+      {"kind": "calendar#calendarListEntry", "id": "es.spain#holiday@group.v.calendar.google.com",
+       "summary": "Festivos en España", "timeZone": "Europe/Madrid", "accessRole": "reader", "selected": true},
+      {"kind": "calendar#calendarListEntry", "id": "hidden@group.calendar.google.com", "summary": "Oculto",
+       "accessRole": "reader"}
+    ]
+  },
+  "events_primary_page1": {
+    "kind": "calendar#events", "summary": "ana@example.com", "nextPageToken": "p2",
+    "items": [
+      {"kind": "calendar#event", "id": "ev1", "status": "confirmed", "updated": "2026-10-20T08:00:00.000Z",
+       "summary": "Revisión trimestral", "description": "Agenda: métricas Q3 y roadmap.", "location": "Sala 2",
+       "start": {"dateTime": "2026-10-22T10:00:00+02:00"}, "end": {"dateTime": "2026-10-22T11:00:00+02:00"},
+       "attendees": [{"email": "luis@example.com"}, {"email": "ana@example.com", "self": true}]},
+      {"kind": "calendar#event", "id": "ev2", "status": "cancelled", "updated": "2026-10-20T09:00:00.000Z",
+       "summary": "Cancelada", "start": {"dateTime": "2026-10-23T10:00:00+02:00"}}
+    ]
+  },
+  "events_primary_page2": {
+    "kind": "calendar#events",
+    "items": [
+      {"kind": "calendar#event", "id": "ev3", "status": "confirmed", "updated": "2026-10-19T08:00:00.000Z",
+       "summary": "Dentista", "start": {"dateTime": "2026-10-24T17:30:00+02:00"}}
+    ]
+  },
+  "events_holidays": {
+    "kind": "calendar#events",
+    "items": [
+      {"kind": "calendar#event", "id": "h1", "status": "confirmed", "updated": "2026-01-01T00:00:00.000Z",
+       "summary": "Día de Todos los Santos", "start": {"date": "2026-11-01"}, "end": {"date": "2026-11-02"}}
+    ]
+  }
+}

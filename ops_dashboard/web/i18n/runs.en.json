@@ -1,0 +1,27 @@
+{
+  "runs": {
+    "doc_title": "Runs — ConductLoop",
+    "title": "Runs",
+    "intro": "The loop: trigger an agent → it executes on your provider with tools → the result lands back here and in your knowledge graph.",
+    "nav_connect_ai": "Connect AI",
+    "nav_agents": "Agents",
+    "nav_runs": "Runs",
+    "pending_approvals": "⏳ Pending approvals",
+    "approvals_hint": "Agents proposed these writes. Approve to let them land in your graph.",
+    "run_agent_now": "Run an agent now",
+    "loading": "Loading…",
+    "recent_activity": "Recent activity",
+    "refresh": "Refresh",
+    "run_now": "Run now",
+    "no_agents": "No agents yet.",
+    "create_one": "Create one →",
+    "could_not_load": "Could not load.",
+    "running": "Running…",
+    "run_failed": "Run failed: {msg}",
+    "agent": "agent {id}",
+    "no_runs": "No runs yet. Hit “Run now” above.",
+    "approve": "Approve",
+    "reject": "Reject",
+    "failed": "Failed: {msg}"
+  }
+}

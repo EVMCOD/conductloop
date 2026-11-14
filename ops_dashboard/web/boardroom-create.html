@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/toast.js"></script>
+  <script src="/csrf.js" defer></script>
+  <link rel="stylesheet" href="/theme.css">
+  <meta charset="utf-8" />
+<link rel="icon" href="data:," />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Create New CEO — ConductLoop</title>
+  <style>
+    /* Colours come from /theme.css. #fff stays for text on the accent fill: the system has no on-accent ink token. */
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--cl-bg);color:var(--cl-ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .wrap{max-width:760px;margin:0 auto;padding:24px 20px 80px}
+    h1{font-size:24px;margin:0 0 6px;font-weight:600}
+    .sub{color:var(--cl-ink-muted);font-size:13px;margin:0 0 22px}
+    .nav{display:flex;gap:8px;margin:14px 0 22px;font-size:13px;flex-wrap:wrap}
+    .nav a{color:var(--cl-ink-muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
+    .nav a:hover{color:var(--cl-ink);border-color:var(--cl-border)}
+    .steps{display:flex;justify-content:space-between;margin-bottom:18px;position:relative}
+    .step{flex:1;text-align:center;padding:10px;font-size:13px;color:var(--cl-ink-muted);border-bottom:2px solid var(--cl-border)}
+    .step.active{color:var(--cl-accent-ink);border-color:var(--cl-accent)}
+    .step.done{color:var(--cl-ink);border-color:var(--cl-ok)}
+    .card{background:var(--cl-bg-soft);border:1px solid var(--cl-border);border-radius:14px;padding:20px;margin-bottom:14px}
+    label{display:block;font-size:13px;color:var(--cl-ink-muted);margin:14px 0 4px;font-weight:500}
+    label .req{color:var(--cl-accent-ink);margin-left:4px}
+    input[type="text"], textarea, select{width:100%;background:var(--cl-bg);border:1px solid var(--cl-border);color:var(--cl-ink);border-radius:9px;padding:10px 12px;font-size:14px;font-family:inherit}
+    textarea{resize:vertical;min-height:64px}
+    .hint{color:var(--cl-ink-muted);font-size:12px;margin-top:4px}
+    .tools{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+    .tool{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--cl-bg);border:1px solid var(--cl-border);border-radius:8px;font-size:13px;cursor:pointer}
+    .tool.on{border-color:var(--cl-accent)}
+    .tool input{accent-color:var(--cl-accent)}
+    .tool .desc{color:var(--cl-ink-soft);font-size:11px;display:block;margin-top:2px}
+    .tool .cat{color:var(--cl-accent-ink);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+    .tier{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+    .tier-opt{flex:1;min-width:140px;background:var(--cl-bg);border:1px solid var(--cl-border);border-radius:9px;padding:10px;cursor:pointer;font-size:13px;text-align:center}
+    .tier-opt.active{border-color:var(--cl-accent);background:var(--cl-accent-soft)}
+    .tier-opt strong{display:block;color:var(--cl-ink);margin-bottom:2px}
+    .tier-opt .desc{color:var(--cl-ink-soft);font-size:11px}
+    .btn-row{display:flex;justify-content:space-between;margin-top:18px}
+    button{background:var(--cl-accent);color:#fff;border:0;border-radius:999px;padding:7px 18px;font-size:14px;font-weight:500;cursor:pointer}
+    button.ghost{background:transparent;color:var(--cl-ink);border:1px solid var(--cl-border)}
+    button:disabled{opacity:.5}
+    .success{background:var(--cl-bg-soft);border:1px solid var(--cl-ok);border-radius:12px;padding:16px;text-align:center;color:var(--cl-ok)}
+    .success h2{margin:0 0 6px}
+    .success p{color:var(--cl-ink-muted);margin:6px 0}
+  </style>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<script src="/app-nav.js"></script>
+  <div class="wrap">
+    <h1 data-i18n="boardroom-create.title">Create New CEO</h1>
+    <p class="sub"><span data-i18n="boardroom-create.subtitle">Spawn an AI CEO in ~30 seconds. Required fields marked </span><span class="req">*</span><span data-i18n="boardroom-create.subtitle_tail">. Smart defaults handle the rest.</span></p>
+
+    <div class="nav">
+      <a href="/boardroom"><span data-i18n="boardroom.nav_inbox">📥 Inbox</span></a>
+      <a href="/boardroom/directory"><span data-i18n="boardroom.nav_directory">👥 Directory</span></a>
+      <a href="/boardroom/vault"><span data-i18n="boardroom.nav_vault">📚 Vault</span></a>
+      <a href="/boardroom/portfolio"><span data-i18n="boardroom.nav_portfolio">🌐 Portfolio</span></a>
+      <a class="active"><span data-i18n="boardroom.nav_create_active">➕ Create</span></a>
+      <a href="/boardroom/recap"><span data-i18n="boardroom.nav_recap">📊 Daily Recap</span></a>
+    </div>
+
+    <div class="steps">
+      <div class="step active" data-step="1" data-i18n="boardroom-create.step_identity">1 · Identity</div>
+      <div class="step" data-step="2" data-i18n="boardroom-create.step_tools">2 · Tools</div>
+      <div class="step" data-step="3" data-i18n="boardroom-create.step_autonomy">3 · Autonomy</div>
+    </div>
+
+    <div id="step1" class="card">
+      <label><span data-i18n="boardroom-create.name_label">Name</span><span class="req">*</span></label>
+      <input id="name" type="text" placeholder="e.g. Example App CEO" autocomplete="off" data-i18n-ph="boardroom-create.name_ph" />
+      <div class="hint" data-i18n="boardroom-create.name_hint">What you'll see in the Inbox.</div>
+
+      <label><span data-i18n="boardroom-create.slug_label">Project slug</span><span class="req">*</span></label>
+      <input id="slug" type="text" placeholder="e.g. example-app" autocomplete="off" data-i18n-ph="boardroom-create.slug_ph" />
+      <div class="hint" data-i18n="boardroom-create.slug_hint">Used for IDs and to auto-suggest tools. Kebab-case (example-app, example-team).</div>
+
+      <label><span data-i18n="boardroom-create.persona_label">Persona summary</span><span class="req">*</span></label>
+      <textarea id="persona" placeholder="1-2 lines. Who is this CEO? What do they own?" data-i18n-ph="boardroom-create.persona_ph"></textarea>
+      <div class="hint" data-i18n="boardroom-create.persona_hint">"Experienced growth operator. Plain-spoken. Knows SQL and the analytics stack."</div>
+
+      <div class="btn-row">
+        <button class="ghost" onclick="window.location='/boardroom'" data-i18n="boardroom-create.cancel">Cancel</button>
+        <button id="next1" data-i18n="boardroom-create.next">Next →</button>
+      </div>
+    </div>
+
+    <div id="step2" class="card" style="display:none">
+      <label data-i18n="boardroom-create.tools_label">Tools (auto-suggested for this project)</label>
+      <div id="toolsList" class="tools"></div>
+      <div class="hint" data-i18n="boardroom-create.tools_hint">Base tools (file/vault/communication) are enabled by default. Click any tool to toggle.</div>
+      <div class="btn-row">
+        <button class="ghost" id="back2" data-i18n="boardroom-create.back">← Back</button>
+        <button id="next2" data-i18n="boardroom-create.next">Next →</button>
+      </div>
+    </div>
+
+    <div id="step3" class="card" style="display:none">
+      <label data-i18n="boardroom-create.tier_label">Default autonomy tier</label>
+      <div class="tier">
+        <div class="tier-opt" data-tier="1"><strong data-i18n="boardroom-create.tier_1">Tier 1 — Autonomous</strong><div class="desc" data-i18n="boardroom-create.tier_1_desc">CEO acts without notifying chairman.</div></div>
+        <div class="tier-opt active" data-tier="2"><strong data-i18n="boardroom-create.tier_2">Tier 2 — Notify</strong><div class="desc" data-i18n="boardroom-create.tier_2_desc">CEO acts, notifies after (default).</div></div>
+        <div class="tier-opt" data-tier="3"><strong data-i18n="boardroom-create.tier_3">Tier 3 — Approve</strong><div class="desc" data-i18n="boardroom-create.tier_3_desc">CEO waits for chairman yes/no.</div></div>
+        <div class="tier-opt" data-tier="4"><strong data-i18n="boardroom-create.tier_4">Tier 4 — Escalate</strong><div class="desc" data-i18n="boardroom-create.tier_4_desc">CEO flags for discussion only.</div></div>
+      </div>
+
+      <label style="margin-top:18px" data-i18n="boardroom-create.maturity_label">Maturity stage</label>
+      <div class="tier">
+        <div class="tier-opt" data-mat="chaotic"><strong data-i18n="boardroom-create.maturity_chaotic">Chaotic</strong><div class="desc" data-i18n="boardroom-create.maturity_chaotic_desc">Pre-PMF, lots of pivoting.</div></div>
+        <div class="tier-opt active" data-mat="traction"><strong data-i18n="boardroom-create.maturity_traction">Traction</strong><div class="desc" data-i18n="boardroom-create.maturity_traction_desc">Some users, finding PMF (default).</div></div>
+        <div class="tier-opt" data-mat="scale"><strong data-i18n="boardroom-create.maturity_scale">Scale</strong><div class="desc" data-i18n="boardroom-create.maturity_scale_desc">PMF hit, growing fast.</div></div>
+        <div class="tier-opt" data-mat="mature"><strong data-i18n="boardroom-create.maturity_mature">Mature</strong><div class="desc" data-i18n="boardroom-create.maturity_mature_desc">Steady revenue + ops cadence.</div></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="ghost" id="back3" data-i18n="boardroom-create.back">← Back</button>
+        <button id="create" data-i18n="boardroom-create.create">Create 🚀</button>
+      </div>
+    </div>
+
+    <div id="success" class="success" style="display:none">
+      <h2 data-i18n="boardroom-create.success_title">✅ CEO created</h2>
+      <p id="successDetail"></p>
+      <p><a href="/boardroom/ceo/" id="successLink" style="color:var(--cl-accent-ink);text-decoration:none" data-i18n="boardroom-create.open_thread">Open thread →</a> · <a href="/boardroom" style="color:var(--cl-ink-muted);text-decoration:none" data-i18n="boardroom-create.back_inbox">Back to inbox</a></p>
+    </div>
+  </div>
+
+  <script>
+    // The words of the app: the dictionary when it has arrived, the English
+    // text written here when it has not.
+    const t = (key, fallback, vars) => (window.BoardroomI18n ? window.BoardroomI18n.t(key, fallback, vars)
+      : String(fallback == null ? key : fallback).replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] !== undefined ? vars[k] : m)));
+    const $ = (id) => document.getElementById(id);
+    const state = { tier: 2, maturity: 'traction', tools: new Set(), toolsCatalog: [] };
+
+    document.querySelectorAll('[data-step]').forEach(el => {});
+    function gotoStep(n) {
+      ['1','2','3'].forEach(k => {
+        const s = document.querySelector(`[data-step="${k}"]`);
+        s.classList.remove('active','done');
+        if (parseInt(k) === n) s.classList.add('active');
+        if (parseInt(k) < n) s.classList.add('done');
+      });
+      $('step1').style.display = n === 1 ? '' : 'none';
+      $('step2').style.display = n === 2 ? '' : 'none';
+      $('step3').style.display = n === 3 ? '' : 'none';
+    }
+
+    $('next1').onclick = async () => {
+      const name = $('name').value.trim();
+      const slug = $('slug').value.trim();
+      const persona = $('persona').value.trim();
+      if (!name || !slug || !persona) {
+        notifyError(t('boardroom-create.required_error', 'All three fields are required.'));
+        return;
+      }
+      // Step 2 tools load (fetch suggest)
+      const sug = await (await fetch(`/api/boardroom/tools/suggest?slug=${encodeURIComponent(slug)}`, { credentials: 'include' })).json();
+      const cat = await (await fetch('/api/boardroom/tools', { credentials: 'include' })).json();
+      state.toolsCatalog = cat.tools || [];
+      // auto-check suggested
+      state.tools = new Set(sug.tools || []);
+      renderTools();
+      gotoStep(2);
+    };
+    $('back2').onclick = () => gotoStep(1);
+    $('next2').onclick = () => gotoStep(3);
+    $('back3').onclick = () => gotoStep(2);
+
+    function renderTools() {
+      const el = $('toolsList');
+      el.innerHTML = '';
+      // Group by category
+      const byCat = {};
+      state.toolsCatalog.forEach(t => { (byCat[t.category] ||= []).push(t); });
+      // ensure order
+      const cats = ['base','community','analytics','marketing','support','engineering','finance','holdco'];
+      const seen = new Set();
+      cats.forEach(c => {
+        const list = byCat[c]; if (!list || !list.length) return;
+        const wrap = document.createElement('div');
+        wrap.style.gridColumn = '1 / -1';
+        wrap.innerHTML = `<div style="color:var(--cl-accent-ink);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:8px 0 4px">${c}</div>`;
+        el.appendChild(wrap);
+        list.forEach(t => {
+          if (seen.has(t.name)) return; seen.add(t.name);
+          const div = document.createElement('label');
+          div.className = 'tool' + (state.tools.has(t.name) ? ' on' : '');
+          div.innerHTML = `<input type="checkbox" ${state.tools.has(t.name)?'checked':''}/>
+            <div><strong>${t.name}</strong><span class="desc">${t.description}</span></div>`;
+          div.querySelector('input').onchange = (e) => {
+            if (e.target.checked) state.tools.add(t.name); else state.tools.delete(t.name);
+            div.classList.toggle('on', e.target.checked);
+          };
+          el.appendChild(div);
+        });
+      });
+    }
+
+    document.querySelectorAll('[data-tier]').forEach(opt => {
+      opt.onclick = () => {
+        document.querySelectorAll('[data-tier]').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        state.tier = parseInt(opt.dataset.tier, 10);
+      };
+    });
+    document.querySelectorAll('[data-mat]').forEach(opt => {
+      opt.onclick = () => {
+        document.querySelectorAll('[data-mat]').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        state.maturity = opt.dataset.mat;
+      };
+    });
+
+    $('create').onclick = async () => {
+      $('create').disabled = true;
+      try {
+        const body = {
+          name: $('name').value.trim(),
+          project_slug: $('slug').value.trim(),
+          persona_summary: $('persona').value.trim(),
+          tier: state.tier,
+          maturity: state.maturity,
+          tools: Array.from(state.tools),
+        };
+        const r = await fetch('/api/boardroom/create', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'create failed');
+        $('success').style.display = '';
+        $('successDetail').textContent = t('boardroom-create.success_detail', 'CEO #{id} "{name}" is live.', {id: d.ceo.id, name: d.ceo.name});
+        $('successLink').href = `/boardroom/ceo/${d.ceo.id}`;
+        document.querySelectorAll('.card').forEach(c => c.style.display = 'none');
+        document.querySelector('.steps').style.display = 'none';
+      } catch (e) {
+        notifyError(t('boardroom-create.create_error', 'Could not create CEO: {msg}', {msg: e.message}));
+        $('create').disabled = false;
+      }
+    };
+  </script>
+
+  <script src="/boardroom-i18n.js" data-i18n-pages="boardroom boardroom-create" defer></script>
+</body>
+</html>

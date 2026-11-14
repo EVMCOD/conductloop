@@ -1,0 +1,25 @@
+{
+  "brain": {
+    "title": "Centro del cerebro",
+    "doc_title": "Centro del cerebro — ConductLoop",
+    "sub": "Captura, recupera y mira cómo va tu segundo cerebro.",
+    "setup": "Configurar →",
+    "analytics": "Analítica",
+    "loading": "cargando…",
+    "recall": "Recuperar memoria",
+    "recall_ph": "Pregunta a tu memoria… p. ej. qué base de datos usamos",
+    "recall_button": "Recuperar",
+    "inbox": "Bandeja de captura rápida",
+    "capture_ph": "Suelta una nota / url / idea / tarea…",
+    "capture_button": "Capturar",
+    "tile_llm_calls": "Llamadas al LLM",
+    "tile_tokens": "Tokens",
+    "tile_spend": "Gasto",
+    "tile_memories": "Memorias",
+    "tile_decisions": "Decisiones",
+    "tile_inbox_open": "Bandeja abierta",
+    "inbox_empty": "Bandeja vacía 🎉",
+    "done": "Hecho",
+    "no_memories": "Ninguna memoria coincide."
+  }
+}

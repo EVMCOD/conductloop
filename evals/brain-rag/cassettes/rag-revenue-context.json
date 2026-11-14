@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "rag-revenue-context",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "¿Cuánto he facturado?"
+      }
+    ]
+  },
+  "response": {
+    "text": "Llevas 58,00 € facturados en 2 cobros.",
+    "usage": {
+      "output_tokens": 12
+    }
+  }
+}

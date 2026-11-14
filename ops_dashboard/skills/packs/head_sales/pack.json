@@ -1,0 +1,15 @@
+{
+  "id": "head_sales",
+  "title": "Head of Sales — Outreach, Qualification, Pipeline",
+  "role": "head_sales",
+  "description": "Sales procedure with numbers attached: one segment per outreach sequence and a 1% reply-rate kill line, a 4-item qualification checklist, and a weekly pipeline review with dated stage exits.",
+  "skills": [
+    "outreach-sequence",
+    "lead-qualification",
+    "pipeline-hygiene"
+  ],
+  "duty": {
+    "cron": "15 9 * * 4",
+    "prompt": "Revisa el pipeline de ventas: qué contactos están sin seguir, cuáles de los leads abiertos no están cualificados y qué necesita la cadencia de contacto. Aplica lead-qualification y pipeline-hygiene. Devuelve los diez contactos con más probabilidad de cerrar y el siguiente paso de cada uno."
+  }
+}

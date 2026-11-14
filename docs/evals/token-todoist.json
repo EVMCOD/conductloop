@@ -1,0 +1,135 @@
+{
+  "skill_name": "conductloop-token-connectors",
+  "_status": "DRAFT — see docs/evals/README-token-connectors.md. Run today by tests/test_token_eval_drafts.py with tests/fixtures/token/todoist/recorded.json.",
+  "conductloop": {
+    "suite": "token-todoist",
+    "target": "connectors.token",
+    "embedder": "stub"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Importa mis tareas de Todoist",
+      "expected_output": "Lee las tareas activas (con paginación) y las guarda en el vault como no confiables, sin escribir en Todoist.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "todoist-sync-ingests-untrusted",
+        "required": true,
+        "params": {
+          "connector": "todoist",
+          "fixture": "todoist/recorded.json",
+          "connect": {
+            "token": "todoist-test-token-not-real"
+          },
+          "action": "sync"
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "\"inserted_or_updated\": 2"
+          },
+          {
+            "type": "must_contain",
+            "text": "todoist/task/6X7rfEVP8hvv25ZQ"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"untrusted\": true"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"upstream_writes\": 0"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "todoist-test-token-not-real"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Añade una tarea: probar Linear en el Mac",
+      "expected_output": "Crear una tarea queda pendiente de confirmación y no llega a Todoist.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "todoist-create-needs-confirmation",
+        "required": true,
+        "params": {
+          "connector": "todoist",
+          "fixture": "todoist/recorded.json",
+          "connect": {
+            "token": "todoist-test-token-not-real"
+          },
+          "permission": "write",
+          "action": "create_task",
+          "payload": {
+            "content": "Probar Linear en el Mac",
+            "due_string": "mañana"
+          }
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "confirmation_required"
+          },
+          {
+            "type": "must_contain",
+            "text": "crear tarea"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"upstream_writes\": 0"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "todoist-test-token-not-real"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Marca como hecha la revisión de la PR (solo lectura)",
+      "expected_output": "En solo lectura, completar una tarea se bloquea.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "todoist-close-blocked-read-only",
+        "required": true,
+        "params": {
+          "connector": "todoist",
+          "fixture": "todoist/recorded.json",
+          "connect": {
+            "token": "todoist-test-token-not-real"
+          },
+          "action": "close_task",
+          "payload": {
+            "task_id": "6X7rfFVPjhvv84XG"
+          }
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "write_not_permitted"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"upstream_writes\": 0"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    }
+  ]
+}

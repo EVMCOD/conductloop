@@ -1,0 +1,25 @@
+{
+  "brain": {
+    "title": "Brain Hub",
+    "doc_title": "Brain Hub — ConductLoop",
+    "sub": "Capture, recall, and see how your second brain is doing.",
+    "setup": "Setup →",
+    "analytics": "Analytics",
+    "loading": "loading…",
+    "recall": "Recall memory",
+    "recall_ph": "Ask your memory… e.g. what database do we use",
+    "recall_button": "Recall",
+    "inbox": "Quick-capture inbox",
+    "capture_ph": "Drop a note / url / idea / task…",
+    "capture_button": "Capture",
+    "tile_llm_calls": "LLM calls",
+    "tile_tokens": "Tokens",
+    "tile_spend": "Spend",
+    "tile_memories": "Memories",
+    "tile_decisions": "Decisions",
+    "tile_inbox_open": "Inbox open",
+    "inbox_empty": "Inbox empty 🎉",
+    "done": "Done",
+    "no_memories": "No matching memories."
+  }
+}

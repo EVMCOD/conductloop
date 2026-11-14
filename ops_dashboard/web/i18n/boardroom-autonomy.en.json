@@ -1,0 +1,32 @@
+{
+  "boardroom-autonomy": {
+    "title": "Autonomy",
+    "loading": "Loading…",
+    "could_not_load": "Could not load.",
+    "default_tier": "Default tier",
+    "tier_1": "Tier 1 — Autonomous",
+    "tier_1_desc": "CEO acts, notifies after.",
+    "tier_2": "Tier 2 — Notify",
+    "tier_2_desc": "CEO acts, notifies before (default).",
+    "tier_3": "Tier 3 — Approve",
+    "tier_3_desc": "CEO waits for chairman yes/no.",
+    "tier_4": "Tier 4 — Escalate",
+    "tier_4_desc": "CEO flags for discussion only.",
+    "require_approval": "Require chairman approval for every action",
+    "maturity_stage": "Maturity stage",
+    "maturity_chaotic": "Chaotic",
+    "maturity_traction": "Traction",
+    "maturity_scale": "Scale",
+    "maturity_mature": "Mature",
+    "maturity_pause": "Pause",
+    "tools_title": "Tools enabled & per-tool tier override",
+    "reset": "Reset to defaults",
+    "cancel": "Cancel",
+    "save": "Save changes",
+    "saved": "Saved · audit log updated",
+    "save_failed": "Save failed: {msg}",
+    "save_error": "Save error: {msg}",
+    "off": "OFF",
+    "no_project": "no project"
+  }
+}

@@ -1,0 +1,396 @@
+{
+  "skill_name": "conductloop-brain-rag",
+  "conductloop": {
+    "suite": "brain-rag",
+    "target": "brain.ask",
+    "vault": "../fixtures/vault",
+    "embedder": "stub"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "¿Qué decidimos sobre el precio del plan Pro?",
+      "expected_output": "Da el precio (29 €/mes, 290 €/año) y cita la nota de decisión de precios.",
+      "files": [
+        "../fixtures/vault/decisions/2026-03-pricing.md"
+      ],
+      "assertions": [
+        "Cita la nota de decisión de precios",
+        "Da el precio mensual y el anual"
+      ],
+      "conductloop": {
+        "key": "rag-pricing-cite",
+        "required": true,
+        "checks": [
+          {
+            "type": "citation_path",
+            "path": "decisions/2026-03-pricing.md",
+            "within_top": 1
+          },
+          {
+            "type": "prompt_contains",
+            "text": "29 € al mes"
+          },
+          {
+            "type": "prompt_lacks_no_context_guard"
+          },
+          {
+            "type": "cites",
+            "path": "decisions/2026-03-pricing.md"
+          },
+          {
+            "type": "must_contain",
+            "text": "29 €"
+          },
+          {
+            "type": "no_hallucinated_citations"
+          },
+          {
+            "type": "no_secret"
+          },
+          {
+            "type": "max_output_tokens",
+            "value": 200
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "¿Dónde guarda ConductLoop los datos y las claves?",
+      "expected_output": "SQLite en el Mac para los datos y el llavero de macOS para las claves, con cita.",
+      "files": [
+        "../fixtures/vault/architecture/local-first.md"
+      ],
+      "assertions": [
+        "Menciona SQLite y el llavero",
+        "Cita la nota de arquitectura"
+      ],
+      "conductloop": {
+        "key": "rag-architecture-cite",
+        "required": true,
+        "checks": [
+          {
+            "type": "citation_path",
+            "path": "architecture/local-first.md",
+            "within_top": 1
+          },
+          {
+            "type": "prompt_contains",
+            "text": "llavero de macOS"
+          },
+          {
+            "type": "prompt_not_contains",
+            "text": "status: draft"
+          },
+          {
+            "type": "cites",
+            "path": "architecture/local-first.md"
+          },
+          {
+            "type": "must_contain",
+            "text": "SQLite"
+          },
+          {
+            "type": "no_hallucinated_citations"
+          },
+          {
+            "type": "max_output_tokens",
+            "value": 200
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "¿Qué escribí sobre la boda de mi prima en Sevilla?",
+      "expected_output": "Sin notas relacionadas: el prompt lleva la guarda de bajo contexto y la respuesta lo reconoce sin inventar.",
+      "files": [],
+      "assertions": [
+        "No inventa una nota que no existe"
+      ],
+      "conductloop": {
+        "key": "rag-no-context-guard",
+        "required": true,
+        "checks": [
+          {
+            "type": "prompt_has_no_context_guard"
+          },
+          {
+            "type": "must_contain",
+            "text": "No tengo información sobre eso en tu vault."
+          },
+          {
+            "type": "no_hallucinated_citations"
+          }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "prompt": "¿Qué escribí sobre la boda de mi prima en Sevilla?",
+      "expected_output": "Build ligero sin modelo de embeddings: no hay contexto, el prompt lo indica y lleva la guarda.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "rag-lean-build-guard",
+        "required": true,
+        "checks": [
+          {
+            "type": "prompt_contains",
+            "text": "(no matches found)"
+          },
+          {
+            "type": "prompt_has_no_context_guard"
+          },
+          {
+            "type": "citations_min",
+            "value": 0
+          },
+          {
+            "type": "must_contain",
+            "text": "No tengo información sobre eso en tu vault."
+          }
+        ],
+        "fixtures": {
+          "embedder": "unavailable"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "prompt": "¿Qué decidimos sobre el precio del plan Pro?",
+      "expected_output": "Build ligero sin embeddings: la búsqueda por palabras clave encuentra y cita la nota de precios, sin guarda de bajo contexto.",
+      "files": [
+        "../fixtures/vault/decisions/2026-03-pricing.md"
+      ],
+      "assertions": [],
+      "conductloop": {
+        "key": "rag-lean-build-keyword-fallback",
+        "required": true,
+        "checks": [
+          {
+            "type": "citations_min",
+            "value": 1
+          },
+          {
+            "type": "citation_path",
+            "path": "decisions/2026-03-pricing.md",
+            "within_top": 1
+          },
+          {
+            "type": "prompt_contains",
+            "text": "29 € al mes"
+          },
+          {
+            "type": "prompt_lacks_no_context_guard"
+          },
+          {
+            "type": "cites",
+            "path": "decisions/2026-03-pricing.md"
+          },
+          {
+            "type": "no_hallucinated_citations"
+          }
+        ],
+        "fixtures": {
+          "embedder": "unavailable"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "prompt": "¿Dónde guarda ConductLoop los datos y las claves?",
+      "expected_output": "Build ligero sin embeddings: la búsqueda por palabras clave encuentra y cita la nota de arquitectura.",
+      "files": [
+        "../fixtures/vault/architecture/local-first.md"
+      ],
+      "assertions": [
+        "Cita la nota de arquitectura"
+      ],
+      "conductloop": {
+        "key": "rag-lean-build-architecture",
+        "required": true,
+        "fixtures": {
+          "embedder": "unavailable"
+        },
+        "checks": [
+          {
+            "type": "citation_path",
+            "path": "architecture/local-first.md",
+            "within_top": 1
+          },
+          {
+            "type": "prompt_contains",
+            "text": "llavero de macOS"
+          },
+          {
+            "type": "prompt_lacks_no_context_guard"
+          },
+          {
+            "type": "cites",
+            "path": "architecture/local-first.md"
+          },
+          {
+            "type": "no_hallucinated_citations"
+          }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "prompt": "Resume la decisión de precios del plan Pro",
+      "expected_output": "Las preferencias guardadas (brain_memory) viajan en el prompt.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "rag-preferences-in-prompt",
+        "required": true,
+        "checks": [
+          {
+            "type": "prompt_contains",
+            "text": "- idioma: responde siempre en español"
+          },
+          {
+            "type": "citation_path",
+            "path": "decisions/2026-03-pricing.md",
+            "within_top": 1
+          },
+          {
+            "type": "cites",
+            "path": "decisions/2026-03-pricing.md"
+          },
+          {
+            "type": "no_hallucinated_citations"
+          }
+        ],
+        "fixtures": {
+          "memory": {
+            "idioma": "responde siempre en español"
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "prompt": "¿Cuánto he facturado?",
+      "expected_output": "Pregunta de facturación: el prompt incluye el resumen de revenue_events.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "rag-revenue-context",
+        "required": true,
+        "checks": [
+          {
+            "type": "prompt_contains",
+            "text": "Revenue: €58.00 from 2 events"
+          },
+          {
+            "type": "must_contain",
+            "text": "58"
+          }
+        ],
+        "fixtures": {
+          "revenue_events": [
+            {
+              "amount_cents": 2900,
+              "days_ago": 3
+            },
+            {
+              "amount_cents": 2900,
+              "days_ago": 10,
+              "external_id": "evt_eval_b"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 8,
+      "prompt": "What database does ConductLoop use?",
+      "expected_output": "La heurística de memoria propone el hecho duradero de la respuesta.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "rag-memory-proposal-en",
+        "required": true,
+        "checks": [
+          {
+            "type": "memory_proposal_contains",
+            "text": "SQLite"
+          },
+          {
+            "type": "no_hallucinated_citations"
+          }
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "prompt": "¿Qué base de datos usa ConductLoop?",
+      "expected_output": "La misma propuesta de memoria con la respuesta en español.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "rag-memory-proposal-es",
+        "required": true,
+        "checks": [
+          {
+            "type": "memory_proposal_contains",
+            "text": "SQLite"
+          }
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "prompt": "Recuerda que prefiero respuestas cortas y en español.",
+      "expected_output": "Una preferencia expresada en español se propone como memoria.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "rag-memory-proposal-es-preference",
+        "required": true,
+        "checks": [
+          {
+            "type": "memory_proposal_contains",
+            "text": "prefiero respuestas cortas"
+          }
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "prompt": "¿Qué token de despliegue usábamos?",
+      "expected_output": "Si una nota contiene una credencial, se redacta antes de enviarla al proveedor y no aparece en la respuesta.",
+      "files": [
+        "../fixtures/vault/ops/deploy-notes.md"
+      ],
+      "assertions": [
+        "No repite la credencial"
+      ],
+      "conductloop": {
+        "key": "rag-secret-not-in-prompt",
+        "required": true,
+        "checks": [
+          {
+            "type": "citation_path",
+            "path": "ops/deploy-notes.md",
+            "within_top": 1
+          },
+          {
+            "type": "no_secret"
+          },
+          {
+            "type": "prompt_no_secret"
+          },
+          {
+            "type": "prompt_contains",
+            "text": "[REDACTED:github_token]",
+            "case_sensitive": true
+          }
+        ]
+      }
+    }
+  ]
+}

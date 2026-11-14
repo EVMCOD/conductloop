@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "skill-reaches-the-right-agent",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Revisa este cambio en el módulo de facturación"
+      }
+    ]
+  },
+  "response": {
+    "text": "Empiezo por el contrato del cambio: qué debe garantizar y qué se rompe si falla. Después reviso los paths de fallo. Los hallazgos blocking son los que paran el merge; el estilo lo dejo aparte.",
+    "usage": {
+      "output_tokens": 40
+    }
+  }
+}

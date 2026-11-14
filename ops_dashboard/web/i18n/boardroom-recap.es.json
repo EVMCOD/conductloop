@@ -1,0 +1,28 @@
+{
+  "boardroom-recap": {
+    "title": "Resumen diario",
+    "top_of_mind": "🚨 Lo primero · síntesis del Holding CEO",
+    "regenerate": "↻ Regenerar",
+    "regenerating": "⟳ Regenerando...",
+    "loading_synthesis": "Cargando la síntesis del Holding CEO…",
+    "ceo_rollup": "📈 Resumen del C-Suite",
+    "no_ceos": "Todavía no hay CEOs. Crea uno para empezar.",
+    "recent_threads": "🗨️ Hilos recientes con los CEOs (7 d)",
+    "no_messages": "No hay mensajes recientes.",
+    "recommendations": "🎯 Hoy · recomendaciones del Holding CEO",
+    "rec_1": "Revisa los CEOs 🟡 en espera — puede que estén parados por una decisión del Chairman.",
+    "rec_2": "Resuelve primero los CEOs 🔴 bloqueados — no pueden seguir sin datos.",
+    "rec_3": "Habla con el Holding CEO de los cambios a nivel de portfolio (puntual).",
+    "projects_section": "📚 Proyectos en marcha",
+    "no_projects": "No se han detectado proyectos.",
+    "generated": "Generado {ts}",
+    "no_synthesis": "(todavía no hay síntesis)",
+    "llm": "LLM · {provider}",
+    "llm_cached": "LLM · {provider} · en caché",
+    "static_badge": "ESTÁTICA (sin proveedor BYOK)",
+    "could_not_load": "No se pudo cargar el resumen.",
+    "no_messages_7d": "No hay mensajes del Chairman ⇄ CEO en los últimos 7 días.",
+    "refresh_failed": "La regeneración falló",
+    "refresh_error": "Error al regenerar: {msg}"
+  }
+}

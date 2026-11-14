@@ -1,0 +1,27 @@
+{
+  "runs": {
+    "doc_title": "Ejecuciones — ConductLoop",
+    "title": "Ejecuciones",
+    "intro": "El bucle: lanzas un agente → se ejecuta en tu proveedor con sus herramientas → el resultado vuelve aquí y a tu grafo de conocimiento.",
+    "nav_connect_ai": "Conectar IA",
+    "nav_agents": "Agentes",
+    "nav_runs": "Ejecuciones",
+    "pending_approvals": "⏳ Aprobaciones pendientes",
+    "approvals_hint": "Los agentes propusieron estas escrituras. Apruébalas para que lleguen a tu grafo.",
+    "run_agent_now": "Ejecuta un agente ahora",
+    "loading": "Cargando…",
+    "recent_activity": "Actividad reciente",
+    "refresh": "Actualizar",
+    "run_now": "Ejecutar ahora",
+    "no_agents": "Todavía no hay agentes.",
+    "create_one": "Crea uno →",
+    "could_not_load": "No se pudo cargar.",
+    "running": "Ejecutando…",
+    "run_failed": "La ejecución falló: {msg}",
+    "agent": "agente {id}",
+    "no_runs": "Todavía no hay ejecuciones. Pulsa «Ejecutar ahora» arriba.",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "failed": "Falló: {msg}"
+  }
+}

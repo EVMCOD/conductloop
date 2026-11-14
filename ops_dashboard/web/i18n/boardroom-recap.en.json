@@ -1,0 +1,28 @@
+{
+  "boardroom-recap": {
+    "title": "Daily Recap",
+    "top_of_mind": "🚨 Top of mind · Holding CEO synthesis",
+    "regenerate": "↻ Regenerate",
+    "regenerating": "⟳ Regenerating...",
+    "loading_synthesis": "Loading Holding CEO synthesis…",
+    "ceo_rollup": "📈 C-Suite rollup",
+    "no_ceos": "No CEOs yet. Create one to start.",
+    "recent_threads": "🗨️ Recent CEO threads (7d)",
+    "no_messages": "No recent messages.",
+    "recommendations": "🎯 Today · Holding CEO recommendations",
+    "rec_1": "Triage any 🟡 waiting CEOs — they may be paused on a chairman decision.",
+    "rec_2": "Resolve any 🔴 blocked CEOs first — they cannot proceed without input.",
+    "rec_3": "Talk to Holding CEO about portfolio-level changes (one-off).",
+    "projects_section": "📚 Projects on file",
+    "no_projects": "No projects discovered.",
+    "generated": "Generated {ts}",
+    "no_synthesis": "(no synthesis yet)",
+    "llm": "LLM · {provider}",
+    "llm_cached": "LLM · {provider} · cached",
+    "static_badge": "STATIC (no BYOK provider)",
+    "could_not_load": "Could not load recap.",
+    "no_messages_7d": "No chairman ⇄ CEO messages in the last 7 days.",
+    "refresh_failed": "Refresh failed",
+    "refresh_error": "Refresh error: {msg}"
+  }
+}

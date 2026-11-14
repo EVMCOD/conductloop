@@ -1,0 +1,80 @@
+name: Bug report
+description: Something in ConductLoop does not work as expected.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. ConductLoop is maintained by one person, so a clear report with steps to reproduce helps a lot.
+
+        **Security issues:** do not use this form. Follow [SECURITY.md](https://github.com/EVMCOD/conductloop/blob/main/SECURITY.md).
+
+        **Do not paste secrets or personal data.** Remove API keys, tokens, `.env` / `config.json` contents, real email addresses and private note content from anything you attach.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, and what went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See the error
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ConductLoop version
+      description: App version (ConductLoop > About) or the commit SHA if you run from source.
+      placeholder: e.g. 1.2.0 or 76b9374
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How do you run it?
+      options:
+        - macOS app (.dmg)
+        - From source (make serve)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and hardware
+      placeholder: e.g. macOS 14.5, Apple Silicon (M2)
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: The part of the app that is affected, if you know.
+      options:
+        - Indexing / search
+        - Brain / chat
+        - Agents / sessions
+        - Connectors / MCP
+        - Vault / notes
+        - Desktop app / updater
+        - Other / not sure
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Relevant log lines or screenshots, with secrets and personal data removed.
+      render: shell

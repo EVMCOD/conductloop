@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/confirm.js"></script>
+  <script src="/csrf.js" defer></script>
+  <script src="/i18n.js" data-i18n-pages="setup" defer></script>
+  <script src="/locale-switch.js" defer></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-i18n="setup.doc_title">Setup — ConductLoop</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/theme.css" />
+  <link rel="stylesheet" href="/confirm.css" />
+  <style>
+    /* Legacy tokens are aliases of the shared design system in /theme.css. */
+    :root{--bg: var(--cl-bg);--card: var(--cl-bg-soft);--border: var(--cl-border);--ink: var(--cl-ink);--muted: var(--cl-ink-muted);--green: var(--cl-ok);--red: var(--cl-danger);--blue: var(--cl-info)}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+    .wrap{max-width:760px;margin:0 auto;padding:32px 20px 80px}
+    h1{font-size:26px;margin:0 0 4px;font-weight:700;letter-spacing:-.5px}
+    .sub{color:var(--muted);margin:0 0 24px;font-size:14px}
+    .bar{height:10px;background:var(--card);border:1px solid var(--border);border-radius:999px;overflow:hidden;margin:12px 0 6px}
+    .bar > i{display:block;height:100%;background:var(--green);width:0;transition:width .4s}
+    .count{font-size:13px;color:var(--muted);margin-bottom:22px}
+    .step{display:flex;gap:14px;align-items:flex-start;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px}
+    .mark{flex:0 0 26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+    .ok .mark{background:rgba(34,197,94,.15);color:var(--green)}
+    .no .mark{background:rgba(239,68,68,.15);color:var(--red)}
+    .opt .mark{background:var(--border);color:var(--muted)}
+    .tag{font-size:11px;font-weight:500;color:var(--muted);border:1px solid var(--border);border-radius:9px;padding:0 7px;margin-left:8px}
+    .step .body{flex:1}
+    .step .label{font-weight:600;font-size:15px}
+    .step .detail{color:var(--muted);font-size:13px;margin-top:2px}
+    .num{color:var(--muted);font-size:12px;margin-right:6px}
+    .section{margin-top:34px}
+    .section h2{font-size:15px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 12px}
+    button{background:var(--blue);color:#fff;border:0;border-radius:999px;padding:6px 16px;font-size:14px;font-weight:500;cursor:pointer;margin-right:10px}
+    button.ghost{background:transparent;border:1px solid var(--border);color:var(--ink)}
+    button:disabled{opacity:.5;cursor:default}
+    .note{font-size:13px;color:var(--muted);margin-top:10px;min-height:18px}
+    .bk-list{margin-top:10px}
+    .bk-row{display:flex;align-items:center;gap:10px;font-size:13px;margin:6px 0}
+    .bk-row span{flex:1}
+    .lib-label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+    .pick{display:flex;align-items:baseline;gap:8px;padding:3px 0}
+    .pick__label{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);flex:1}
+    .pick__section{font-size:12px;max-width:220px}
+    .map-lines{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;margin:6px 0}
+    .lib-pick{display:flex;gap:8px;align-items:flex-start}
+    .lib-pick > input,.lib-pick > textarea{flex:1;min-width:0}
+    .lib-pick > button{flex:none;margin-right:0}
+    #lib-folders,#lib-workspace,#lib-writevault,#lib-mapfolder{width:100%;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
+    code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink)}
+    a{color:var(--blue)}
+  </style>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<script src="/app-nav.js"></script>
+  <div class="wrap">
+    <h1><span data-i18n="setup.title">Set up ConductLoop</span></h1>
+    <p class="sub" data-i18n="setup.intro">What a healthy local-first second brain needs, checked live against this install. The optional ones are extras.</p>
+
+    <div class="bar"><i id="bar"></i></div>
+    <div class="count" id="count" data-i18n="setup.checking">Checking…</div>
+
+    <div id="steps"></div>
+
+    <p class="sub">💬 <a href="/channels" data-i18n="setup.channels">Channels</a><span data-i18n="setup.channels_note"> — talk to your agents from Telegram and get the results of finished runs there. Off until you turn it on.</span></p>
+    <p class="sub" style="margin-top:16px">🔑 <a href="/credentials" data-i18n="setup.credentials">Credentials</a><span data-i18n="setup.credentials_note"> — every key this app holds, and where it keeps them. Paste a key there and it goes into the system keychain (or an encrypted file if there is none); the app never shows it again.</span></p>
+
+    <div class="section">
+      <h2 data-i18n="setup.library">📚 Library</h2>
+      <p class="sub" data-i18n="setup.library_intro">Folders ConductLoop reads and indexes every hour. It never writes to them: its own notes (daily briefing, agent notes, memory export) go to the folder below.</p>
+      <label class="lib-label" for="lib-writevault" data-i18n="setup.write_vault_label">Folder for ConductLoop's own notes</label>
+      <input id="lib-writevault" spellcheck="false" placeholder="~/Documents/vault" />
+      <div class="hint" id="lib-writevault-note"></div>
+      <label class="lib-label" for="lib-folders" data-i18n="setup.index_folders_label">Note folders to index (one per line), e.g. your Obsidian vault</label>
+      <textarea id="lib-folders" rows="3" spellcheck="false" placeholder="~/Documents/Obsidian/MyVault"></textarea>
+      <label class="lib-label" for="lib-workspace" data-i18n="setup.workspace_label">Memory folder (MEMORY.md, memory/*.md)</label>
+      <input id="lib-workspace" spellcheck="false" placeholder="~/agent-workspace" />
+      <label class="lib-label" for="lib-mapfolder" data-i18n="setup.map_folder_label">Map export folder (optional)</label>
+      <input id="lib-mapfolder" spellcheck="false" placeholder="~/Documents/Obsidian/MyVault/ConductLoop" />
+      <div class="hint" data-i18n="setup.map_folder_hint">Where the map is also written, so it travels with your notes: one file with everything, and one page per project with links your vault can follow. The agent's own workspace always gets it too.</div>
+      <div style="margin-top:12px">
+        <button id="lib-save" data-i18n="setup.save_folders">Save folders</button>
+        <button id="lib-index" class="ghost" data-i18n="setup.index_now">Index now</button>
+      </div>
+      <div class="note" id="lib-note"></div>
+      <div class="note" id="lib-status"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="setup.backups">💾 Backups</h2>
+      <p class="sub" data-i18n="setup.backups_intro">Copies of the app's database: your index, chats, agents, tasks and settings stored in the app. Taken once a day and before an update changes the database, and whenever you click below. Your notes folders are not in them: they stay where they are. The last 30 are kept.</p>
+      <div>
+        <button id="bk-now" data-i18n="setup.back_up_now">Back up now</button>
+      </div>
+      <div class="note" id="bk-note"></div>
+      <div class="hint" id="bk-dir"></div>
+      <div id="bk-list" class="bk-list"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="setup.obsidian">🧠 Obsidian memory sync</h2>
+      <p class="sub" data-i18n="setup.obsidian_intro">Transfer the Brain's memory to your Obsidian vault as markdown — it then travels with your notes (sync, backup, git). Export writes notes; Import reads edited notes back.</p>
+      <div>
+        <button id="btn-export" data-i18n="setup.export_memory">Export memory → vault</button>
+        <button id="btn-import" class="ghost" data-i18n="setup.import_vault">Import vault → memory</button>
+      </div>
+      <div class="note" id="obs-note"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="setup.map">🗺️ The map of your work</h2>
+      <p class="sub" data-i18n="setup.map_intro">Your notes, ordered: which project each one belongs to, which ideas belong to nobody yet, and the projects your notes know about but the registry does not. This is what survives when you change agents.</p>
+      <div>
+        <button id="btn-map" data-i18n="setup.draw_map">Draw the map</button>
+        <button id="btn-map-export" class="ghost" data-i18n="setup.write_map">Write it where the next agent looks</button>
+      </div>
+      <div id="map"></div>
+      <div class="note" id="map-note"></div>
+    </div>
+  </div>
+
+  <script>
+    const bar = document.getElementById('bar');
+    const count = document.getElementById('count');
+    const steps = document.getElementById('steps');
+
+    // The language is the person's choice: the words of this page live in
+    // its own dictionary and the page paints them when they arrive.
+    const tr = (key, vars) => (window._i18n && window._i18n.t ? window._i18n.t(key, vars) : key);
+
+    async function loadChecklist() {
+      try {
+        const r = await fetch('/api/setup/checklist');
+        const d = await r.json();
+        bar.style.width = (d.required_passed / d.required * 100) + '%';
+        count.textContent = d.ready
+          ? tr('setup.all_ready', {n: d.required})
+          : tr('setup.checks_ready', {n: d.required_passed, m: d.required});
+        // Built as text: the details carry folder names and error messages.
+        const el = (tag, cls, text) => {
+          const n = document.createElement(tag);
+          if (cls) n.className = cls;
+          if (text !== undefined) n.textContent = text;
+          return n;
+        };
+        steps.replaceChildren(...d.checks.map(c => {
+          const step = el('div', 'step ' + (c.ok ? 'ok' : c.optional ? 'opt' : 'no'));
+          step.appendChild(el('div', 'mark', c.ok ? '✓' : c.optional ? '–' : '✗'));
+          const body = el('div', 'body');
+          const label = el('div', 'label');
+          label.append(el('span', 'num', c.step + '.'), c.label);
+          if (c.optional) label.appendChild(el('span', 'tag', tr('setup.optional')));
+          body.append(label, el('div', 'detail', c.detail));
+          step.appendChild(body);
+          return step;
+        }));
+      } catch (e) {
+        count.textContent = tr('setup.could_not_load_checklist', {msg: e});
+      }
+    }
+
+    async function sync(dir) {
+      const note = document.getElementById('obs-note');
+      const btns = document.querySelectorAll('button');
+      btns.forEach(b => b.disabled = true);
+      note.textContent = dir === 'export' ? tr('setup.exporting') : tr('setup.importing');
+      try {
+        const r = await fetch('/api/obsidian/' + dir, {method: 'POST'});
+        const d = await r.json();
+        note.textContent = d.ok
+          ? (dir === 'export' ? tr('setup.exported', {n: d.written, dir: d.dir})
+                            : tr('setup.imported', {n: d.imported, dir: d.dir}))
+          : tr('setup.error', {msg: d.error || tr('setup.failed')});
+        loadChecklist();
+      } catch (e) {
+        note.textContent = tr('setup.error', {msg: e});
+      } finally {
+        btns.forEach(b => b.disabled = false);
+      }
+    }
+
+    function ago(ts) {
+      if (!ts) return tr('setup.never');
+      const m = Math.round((Date.now() / 1000 - ts) / 60);
+      return m < 1 ? tr('setup.just_now')
+        : m < 60 ? tr('setup.min_ago', {n: m})
+        : m < 1440 ? tr('setup.hours_ago', {n: Math.round(m / 60)})
+        : tr('setup.days_ago', {n: Math.round(m / 1440)});
+    }
+    async function loadLibrary() {
+      try {
+        const d = await (await fetch('/api/library')).json();
+        const wv = document.getElementById('lib-writevault');
+        wv.value = d.write_vault || '';
+        wv.dataset.loaded = wv.value;
+        wv.disabled = d.write_vault_source === 'env';
+        const pickWv = wv.parentNode.querySelector('button');  // the folder picker, in the app
+        if (pickWv) pickWv.disabled = wv.disabled;
+        document.getElementById('lib-writevault-note').textContent = wv.disabled
+          ? tr('setup.write_vault_env')
+          : (d.write_vault_exists ? '' : tr('setup.write_vault_missing'));
+        document.getElementById('lib-folders').value = (d.index_folders || []).join('\n');
+        document.getElementById('lib-workspace').value = d.memory_workspace || '';
+        document.getElementById('lib-mapfolder').value = d.map_export_folder || '';
+        const docs = d.documents || {}, last = d.last_indexed || {};
+        document.getElementById('lib-status').textContent =
+          (d.indexing ? tr('setup.indexing_status') + ' · ' : '') +
+          ['obsidian', 'memory', 'repo'].map(s => tr('setup.docs_indexed', {kind: s, n: docs[s] || 0, when: ago(last[s])})).join(' · ');
+        return d;
+      } catch (e) {
+        document.getElementById('lib-status').textContent = tr('setup.could_not_load_library', {msg: e});
+      }
+    }
+    document.getElementById('lib-save').onclick = async () => {
+      const note = document.getElementById('lib-note');
+      const body = {
+        index_folders: document.getElementById('lib-folders').value.split('\n').map(s => s.trim()).filter(Boolean),
+        memory_workspace: document.getElementById('lib-workspace').value.trim(),
+        map_export_folder: document.getElementById('lib-mapfolder').value.trim(),
+      };
+      const wv = document.getElementById('lib-writevault');
+      if (!wv.disabled && wv.value.trim() !== wv.dataset.loaded) body.write_vault = wv.value.trim();
+      try {
+        const r = await fetch('/api/library', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+        const d = await r.json();
+        note.textContent = r.ok ? tr('setup.saved_folders') : '✗ ' + (d.message || d.error);
+        loadLibrary();
+      } catch (e) { note.textContent = '✗ ' + e; }
+    };
+    document.getElementById('lib-index').onclick = async () => {
+      const note = document.getElementById('lib-note');
+      await fetch('/api/library/index', {method: 'POST'});
+      note.textContent = tr('setup.indexing');
+      const poll = setInterval(async () => {
+        const d = await loadLibrary();
+        if (d && !d.indexing) { clearInterval(poll); note.textContent = tr('setup.library_up_to_date'); }
+      }, 2000);
+    };
+    // ── native folder picker (desktop app only) ──────────────────────────
+    // As on the welcome page: "Choose…" next to each folder field and "Add
+    // folder…" for the folders to index (Tauri command pick_folder). It only
+    // fills the field; "Save folders" saves. In a browser there is no button.
+    (function () {
+      const ipc = window.__TAURI_INTERNALS__;
+      if (!ipc || typeof ipc.invoke !== 'function') return;
+      const set = (el, path) => { el.value = path; };
+      const add = (el, path) => {
+        const lines = el.value.split('\n').map(s => s.trim()).filter(Boolean);
+        if (!lines.includes(path)) lines.push(path);
+        el.value = lines.join('\n');
+      };
+      [['lib-writevault', tr('setup.choose'), set], ['lib-folders', tr('setup.add_folder'), add],
+       ['lib-workspace', tr('setup.choose'), set], ['lib-mapfolder', tr('setup.choose'), set]].forEach(([id, label, apply]) => {
+        const el = document.getElementById(id);
+        const row = document.createElement('div');
+        row.className = 'lib-pick';
+        el.parentNode.insertBefore(row, el);
+        row.appendChild(el);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ghost';
+        btn.textContent = label;
+        btn.addEventListener('click', () => {
+          if (el.disabled) return;  // set by an environment variable
+          btn.disabled = true;
+          ipc.invoke('pick_folder', {})
+            .then(path => { if (path) apply(el, path); },
+                  () => { document.getElementById('lib-note').textContent = tr('setup.picker_failed'); })
+            .then(() => { btn.disabled = false; });
+        });
+        row.appendChild(btn);
+      });
+    })();
+
+    // ── backups ──────────────────────────────────────────────────────────
+    // Built with the DOM, never with innerHTML: file names come from disk.
+    function showBackups(d) {
+      document.getElementById('bk-dir').textContent = d.dir ? tr('setup.folder_label', {dir: d.dir}) : '';
+      const list = document.getElementById('bk-list');
+      list.replaceChildren();
+      const rows = d.backups || [];
+      if (!rows.length) { list.textContent = tr('setup.no_backups'); return; }
+      rows.slice(0, 10).forEach(b => {
+        const row = document.createElement('div');
+        row.className = 'bk-row';
+        const label = document.createElement('span');
+        label.textContent = new Date(b.mtime * 1000).toLocaleString() + ' · ' + (b.reason || tr('setup.backup')) +
+          ' · ' + (b.size_kb >= 1024 ? (b.size_kb / 1024).toFixed(1) + ' MB' : b.size_kb + ' KB');
+        label.title = b.name;
+        const btn = document.createElement('button');
+        btn.className = 'ghost';
+        btn.textContent = tr('setup.restore');
+        btn.onclick = () => restoreBackup(b);
+        row.append(label, btn);
+        list.append(row);
+      });
+      if (rows.length > 10) {
+        const more = document.createElement('div');
+        more.className = 'hint';
+        more.textContent = tr('setup.older_backups', {n: rows.length - 10});
+        list.append(more);
+      }
+    }
+    async function loadBackups() {
+      try {
+        showBackups(await (await fetch('/api/backups')).json());
+      } catch (e) {
+        document.getElementById('bk-list').textContent = tr('setup.could_not_load_backups', {msg: e});
+      }
+    }
+    async function restoreBackup(b) {
+      const when = new Date(b.mtime * 1000).toLocaleString();
+      if (!await confirmAction(tr('setup.restore_confirm', {when: when}))) return;
+      const note = document.getElementById('bk-note');
+      note.textContent = tr('setup.restoring');
+      try {
+        const r = await fetch('/api/backups/restore', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: b.name})});
+        const d = await r.json();
+        if (!r.ok) { note.textContent = '✗ ' + (d.message || d.error); return; }
+        note.textContent = tr('setup.restored');
+        showBackups(d);
+        loadChecklist();
+      } catch (e) { note.textContent = '✗ ' + e; }
+    }
+    document.getElementById('bk-now').onclick = async () => {
+      const note = document.getElementById('bk-note');
+      const btn = document.getElementById('bk-now');
+      btn.disabled = true;
+      note.textContent = tr('setup.backing_up');
+      try {
+        const r = await fetch('/api/backups', {method: 'POST'});
+        const d = await r.json();
+        note.textContent = r.ok ? tr('setup.backup_saved') : '✗ ' + (d.message || d.error);
+        if (r.ok) showBackups(d);
+      } catch (e) { note.textContent = '✗ ' + e; }
+      finally { btn.disabled = false; }
+    };
+    // ── the map ──────────────────────────────────────────────────────────
+    // Built with the DOM, never with innerHTML: the titles come from the
+    // user's own files, and a file is not text to trust.
+    function el(tag, cls, text) {
+      const node = document.createElement(tag);
+      if (cls) node.className = cls;
+      if (text !== undefined && text !== null) node.textContent = String(text);
+      return node;
+    }
+    function mapGroup(title, count) {
+      const box = el('div', 'step ok');
+      box.appendChild(el('div', 'mark', '·'));
+      const body = el('div', 'body');
+      body.appendChild(el('div', 'label', title + (count !== undefined ? ' (' + count + ')' : '')));
+      box.appendChild(body);
+      document.getElementById('map').appendChild(box);
+      return body;
+    }
+    async function loadMap() {
+      const box = document.getElementById('map');
+      box.textContent = '';
+      try {
+        const d = await (await fetch('/api/library/structure')).json();
+        if (!d.ok) throw new Error(d.message || 'failed');
+        const totals = d.totals || {};
+        box.appendChild(el('p', 'hint', tr('setup.map_totals', {
+          notes: totals.documents, projects: totals.attributed, loose: totals.loose })));
+
+        const withNotes = (d.projects || []).filter(p => p.notes);
+        if (withNotes.length) {
+          const body = mapGroup(tr('setup.map_projects'));
+          withNotes.forEach(p => {
+            const row = el('div', 'detail');
+            row.textContent = p.name + ' — ' + (p.notes === 1
+              ? tr('setup.note_count_one', {n: p.notes}) : tr('setup.note_count_many', {n: p.notes})) +
+              (p.known ? '' : tr('setup.from_your_notes'));
+            body.appendChild(row);
+          });
+        }
+
+        const ideas = d.ideas || [];
+        if (ideas.length) {
+          const body = mapGroup(tr('setup.map_ideas'), ideas.length);
+          ideas.forEach(group => {
+            const row = el('div', 'detail');
+            row.textContent = group.area + ' — ' + (group.count === 1
+              ? tr('setup.note_count_one', {n: group.count}) : tr('setup.note_count_many', {n: group.count}));
+            body.appendChild(row);
+          });
+        }
+
+        const suggestions = d.suggestions || [];
+        if (suggestions.length) {
+          const body = mapGroup(tr('setup.map_possible'), suggestions.length);
+          suggestions.forEach(s => {
+            const row = el('div', 'detail');
+            row.textContent = s.name + ' — ' + s.why;
+            body.appendChild(row);
+          });
+        }
+
+        const drift = d.drift || {};
+        const missing = drift.missing_from_index || [];
+        const broken = drift.links_to_nothing || [];
+        if (missing.length || broken.length) {
+          const body = mapGroup(tr('setup.map_drift'));
+          if (missing.length) {
+            const row = el('div', 'detail');
+            row.textContent = tr('setup.drift_missing', {n: missing.length,
+              names: missing.slice(0, 12).join(', ') + (missing.length > 12 ? '…' : '')});
+            body.appendChild(row);
+          }
+          if (broken.length) {
+            const row = el('div', 'detail');
+            row.textContent = tr('setup.drift_broken', {n: broken.length,
+              names: broken.slice(0, 8).join(', ')});
+            body.appendChild(row);
+          }
+          const repeats = (d.drift && d.drift.repeats_itself) || [];
+          if (repeats.length) {
+            const row = el('div', 'detail');
+            row.textContent = tr('setup.drift_repeats', {n: repeats.length,
+              names: repeats.slice(0, 8).map(r => r.stem).join(', ') + (repeats.length > 8 ? '…' : '')});
+            body.appendChild(row);
+          }
+          const wanted = ((d.drift && d.drift.wanted_notes) || [])
+            .filter(w => /^[a-z0-9]+([-_][a-z0-9]+)+$/.test(w.stem));
+          if (wanted.length) {
+            const row = el('div', 'detail');
+            row.textContent = tr('setup.drift_wanted', {n: wanted.length,
+              names: wanted.slice(0, 10).map(w => w.stem).join(', ') + (wanted.length > 10 ? '…' : '')});
+            body.appendChild(row);
+          }
+        }
+
+        const unlinked = d.unlinked || [];
+        if (unlinked.length) {
+          const body = mapGroup(tr('setup.map_unlinked'));
+          unlinked.forEach(u => {
+            const row = el('div', 'detail');
+            row.textContent = tr('setup.unlinked_detail', {title: u.title, n: u.count,
+              names: u.orphans.slice(0, 6).join(', ')});
+            body.appendChild(row);
+          });
+        }
+
+        // The lines that would put the missing projects back in the index.
+        loadProposal();
+
+        const topics = d.topics || [];
+        if (topics.length) {
+          const body = mapGroup(tr('setup.map_topics'), topics.length);
+          topics.forEach(topic => {
+            const row = el('div', 'detail');
+            row.textContent = topic.name + ' — ' + topic.why;
+            body.appendChild(row);
+          });
+        }
+        if (!withNotes.length && !ideas.length && !suggestions.length && !topics.length) {
+          box.appendChild(el('p', 'hint', tr('setup.map_empty')));
+        }
+        return d;
+      } catch (e) {
+        box.appendChild(el('p', 'hint', tr('setup.could_not_draw_map', {msg: e.message})));
+      }
+    }
+    async function loadProposal() {
+      const note = document.getElementById('map-note');
+      let d;
+      try {
+        d = await (await fetch('/api/library/proposal')).json();
+      } catch (e) { return; }
+      if (!d.ok) return;
+
+      // The ideas that keep coming back: themes with notes in them. They come
+      // from the proposal (title + notes), not from the map (area + count).
+      const themes = d.ideas || [];
+      if (themes.length) {
+        const tbody = mapGroup(tr('setup.ideas_returning', {n: themes.length}));
+        themes.slice(0, 10).forEach(function (idea) {
+          const row = el('div', 'detail');
+          row.textContent = idea.title + ' — ' + tr('setup.idea_notes', {n: idea.notes});
+          tbody.appendChild(row);
+        });
+        if (themes.length > 10) {
+          const row = el('div', 'detail');
+          row.textContent = tr('setup.and_more', {n: themes.length - 10});
+          tbody.appendChild(row);
+        }
+        const where = el('p', 'hint');
+        where.textContent = tr('setup.proposal_where');
+        tbody.appendChild(where);
+      }
+      if (!d.count) return;
+      const body = mapGroup(tr('setup.lines_missing', {n: d.count}));
+
+      // One checkbox per line: which ones go in is the user's call.
+      const picks = [];
+      d.proposals.forEach(function (pr) {
+        const row = el('div', 'pick');
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = true;
+        box.dataset.stem = pr.stem;
+        const label = el('label', 'pick__label');
+        label.textContent = pr.line;
+        row.appendChild(box);
+        row.appendChild(label);
+        // The section is the user's call: the product knows the status for
+        // sure, and a tag can mislead (an iOS app listed under the trading
+        // bots pulls every other iOS note with it).
+        const sel = document.createElement('select');
+        sel.className = 'pick__section';
+        sel.dataset.stem = pr.stem;
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = pr.status_section
+          ? '§ ' + pr.status_section + '…' : tr('setup.choose_section');
+        sel.appendChild(none);
+        let lastGroup = null;
+        (d.sections || []).forEach(function (sec) {
+          if (sec.group !== lastGroup) {
+            const og = document.createElement('optgroup');
+            og.label = sec.group || sec.title;
+            sel.appendChild(og);
+            lastGroup = sec.group;
+          }
+          const o = document.createElement('option');
+          o.value = sec.title;
+          o.textContent = sec.title;
+          sel.appendChild(o);
+        });
+        if (pr.default_section) sel.value = pr.default_section;
+        else if (pr.section) sel.value = pr.section;
+        row.appendChild(sel);
+        body.appendChild(row);
+        picks.push(box);
+      });
+
+      const pre = el('pre', 'map-lines');
+      const text = d.blocks.map(b =>
+        '### ' + b.status + ' (' + b.count + ')\n' + b.markdown).join('\n\n');
+      pre.textContent = text;
+      body.appendChild(pre);
+
+      // The ones that fit nowhere: the index has no section for their
+      // status, and inventing one is a decision about the index.
+      const unplaced = d.unplaced || [];
+      if (unplaced.length) {
+        const box = el('div', 'pick');
+        const label = el('label', 'pick__label');
+        label.textContent = tr('setup.unplaced', {n: unplaced.length,
+          names: unplaced.map(function (u) { return u.stem; }).join(', ')});
+        box.appendChild(label);
+        const newSection = document.createElement('input');
+        newSection.type = 'text';
+        newSection.className = 'pick__section';
+        newSection.value = d.unplaced_section || '';
+        newSection.title = tr('setup.new_section_title');
+        box.appendChild(newSection);
+        body.appendChild(box);
+        const mk = document.createElement('button');
+        mk.type = 'button';
+        mk.className = 'cl-btn cl-btn--ghost small';
+        mk.textContent = tr('setup.create_section');
+        mk.onclick = async () => {
+          const title = newSection.value.trim();
+          if (!title) return;
+          const stems2 = unplaced.map(function (u) { return {stem: u.stem, section: title}; });
+          await applyToIndex(stems2, mk);
+        };
+        body.appendChild(mk);
+      }
+
+      // The notes of a project that its own page does not link.
+      (d.orphans || []).forEach(function (o) {
+        const row = el('div', 'pick');
+        const label = el('label', 'pick__label');
+        label.textContent = tr('setup.orphans_detail', {title: o.title, n: o.count,
+          names: o.orphans.join(', ')});
+        row.appendChild(label);
+        const link = document.createElement('button');
+        link.type = 'button';
+        link.className = 'cl-btn cl-btn--ghost small';
+        link.textContent = tr('setup.link_them');
+        link.onclick = async () => {
+          link.disabled = true;
+          try {
+            const r = await fetch('/api/library/link-orphans', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({project: o.project, stems: o.orphans, dry_run: true})
+            });
+            const preview = await r.json();
+            if (!preview.ok) throw new Error(preview.message || 'failed');
+            const shown = await confirmAction(tr('setup.link_confirm', {
+              n: preview.added.length, path: preview.path, names: preview.added.join('\n') }));
+            if (!shown) { link.disabled = false; return; }
+            const r2 = await fetch('/api/library/link-orphans', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({project: o.project, stems: o.orphans, dry_run: false})
+            });
+            const done = await r2.json();
+            if (!done.ok) throw new Error(done.message || 'failed');
+            note.textContent = tr('setup.links_added', {n: done.added.length, path: done.path});
+            loadMap();
+          } catch (e) { note.textContent = '✗ ' + e.message; }
+          finally { link.disabled = false; }
+        };
+        row.appendChild(link);
+        body.appendChild(row);
+      });
+
+      const actions = el('div', 'row row--tight');
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'cl-btn cl-btn--ghost small';
+      copy.textContent = tr('setup.copy_lines');
+      copy.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          copy.textContent = tr('setup.copied');
+        } catch (e) { copy.textContent = '✗ ' + e.message; }
+      };
+      actions.appendChild(copy);
+
+      const apply = document.createElement('button');
+      apply.type = 'button';
+      apply.className = 'cl-btn small';
+      apply.textContent = tr('setup.put_in_index');
+      apply.onclick = async () => {
+        const stems = picks.filter(b => b.checked).map(function (b) {
+          const sel = body.querySelector('select[data-stem="' + b.dataset.stem + '"]');
+          return {stem: b.dataset.stem, section: sel ? sel.value : ''};
+        });
+        if (!stems.length) { note.textContent = tr('setup.tick_first'); return; }
+        await applyToIndex(stems, apply);
+      };
+      actions.appendChild(apply);
+      body.appendChild(actions);
+    }
+    async function applyToIndex(stems, button) {
+      const note = document.getElementById('map-note');
+      if (button) { button.disabled = true; }
+      try {
+        const r = await fetch('/api/library/apply', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({stems: stems, dry_run: true})
+        });
+        const preview = await r.json();
+        if (!preview.ok) throw new Error(preview.message || 'failed');
+        const shown = await confirmAction(tr('setup.apply_confirm', {
+          n: preview.added.length, path: preview.path, names: preview.added.join('\n') }));
+        if (!shown) return;
+        const r2 = await fetch('/api/library/apply', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({stems: stems, dry_run: false})
+        });
+        const done = await r2.json();
+        if (!done.ok) throw new Error(done.message || 'failed');
+        note.textContent = tr('setup.lines_added', {n: done.added.length, path: done.path}) +
+          (done.backup ? tr('setup.copy_before', {path: done.backup}) : '');
+        loadMap();
+      } catch (e) { note.textContent = '✗ ' + e.message; }
+      finally { if (button) button.disabled = false; }
+    }
+    document.getElementById('btn-map').onclick = () => loadMap();
+    document.getElementById('btn-map-export').onclick = async () => {
+      const note = document.getElementById('map-note');
+      note.textContent = tr('setup.writing_map');
+      try {
+        const r = await fetch('/api/library/export', {method: 'POST'});
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.message || d.error || 'failed');
+        const copies = (d.copies || []).map(p => ' · ' + p).join('');
+        const pages = d.pages ? tr('setup.map_pages', {n: d.pages.pages, written: d.pages.written,
+          folders: (d.pages.folders || []).map(f => f.path).join(', ') }) : '';
+        note.textContent = (d.changed ? tr('setup.map_written', {path: d.path})
+          : tr('setup.map_unchanged', {path: d.path})) + copies + pages;
+      } catch (e) { note.textContent = '✗ ' + e.message; }
+    };
+
+    document.getElementById('btn-export').onclick = () => sync('export');
+    document.getElementById('btn-import').onclick = () => sync('import');
+
+    // The words arrive over the network: the page paints when they are here,
+    // and paints again when the person changes the language.
+    function start() {
+      loadChecklist();
+      loadLibrary();
+      loadBackups();
+      if (window._i18n && window._i18n.onLocaleChange) {
+        window._i18n.onLocaleChange(function () {
+          loadChecklist();
+          loadLibrary();
+          loadBackups();
+        });
+      }
+    }
+    // The words arrive over the network: the page paints when they are here.
+    // i18n.js is deferred, so it has run by the time the document is ready.
+    function whenWords(){
+      var w = window._i18n;
+      if(w && w.ready) return w.ready().then(start, start);
+      return start();
+    }
+    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', whenWords);
+    else whenWords();
+  </script>
+</body>
+</html>

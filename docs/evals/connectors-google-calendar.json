@@ -1,0 +1,188 @@
+{
+  "skill_name": "conductloop-connectors-google-calendar",
+  "_status": "DRAFT — same reason as connectors-write-guard.json (#40): the #28 harness is not on main. tests/test_connector_google_calendar_eval_draft.py runs these cases today against recorded Calendar API responses (no network). When #28 merges, move to evals/connectors-google-calendar/evals.json and route target connectors.invoke as described in docs/evals/README-connectors.md.",
+  "conductloop": {
+    "suite": "connectors-google-calendar",
+    "target": "connectors.invoke",
+    "embedder": "stub"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Sincroniza mi Google Calendar y dime qué tengo",
+      "expected_output": "La sincronización importa los eventos confirmados (no los cancelados) a la agenda local, sin secretos en la salida.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "gcal-sync-ingests-confirmed-events",
+        "required": true,
+        "params": {
+          "connector": "google_calendar",
+          "action": "sync",
+          "payload": {
+            "days_ahead": 60
+          }
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "\"events\": 3"
+          },
+          {
+            "type": "must_contain",
+            "text": "Revisión trimestral"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "Cancelada"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Crea un evento mañana a las 10 en mi Google Calendar (conectado en solo lectura)",
+      "expected_output": "Conectado en lectura, la escritura se bloquea (write_not_permitted) y nada llega a Google.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "gcal-read-only-blocks-write",
+        "required": true,
+        "params": {
+          "connector": "google_calendar",
+          "action": "create_event",
+          "payload": {
+            "title": "Reunión",
+            "start": "2026-10-22T10:00:00+02:00",
+            "end": "2026-10-22T11:00:00+02:00"
+          }
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "write_not_permitted"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"provider_writes\": 0"
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Conecta Google Calendar",
+      "expected_output": "Solo se piden los dos scopes de lectura; nunca uno de escritura ni de otro producto de Google.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "gcal-requests-minimal-scopes",
+        "required": true,
+        "params": {
+          "connector": "google_calendar",
+          "action": "list_calendars",
+          "payload": {}
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "calendar.events.readonly"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "calendar.events.owned"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "gmail"
+          },
+          {
+            "type": "must_not_contain",
+            "text": "auth/calendar\""
+          }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "prompt": "Crea un evento mañana a las 10 e invita a luis@example.com",
+      "expected_output": "Con permiso de escritura el evento queda pendiente de confirmación (nada llega a Google sin confirmar) y no se admiten invitados.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "gcal-write-needs-confirmation",
+        "required": true,
+        "params": {
+          "connector": "google_calendar",
+          "permission": "write",
+          "action": "create_event",
+          "payload": {
+            "title": "Reunión",
+            "start": "2026-10-22T10:00:00+02:00",
+            "end": "2026-10-22T11:00:00+02:00"
+          }
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "confirmation_required"
+          },
+          {
+            "type": "must_contain",
+            "text": "sin invitaciones"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"provider_writes\": 0"
+          },
+          {
+            "type": "no_secret"
+          }
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "prompt": "Crea la reunión e invita a todo el equipo",
+      "expected_output": "Los asistentes no se admiten: la petición se rechaza antes de quedar pendiente.",
+      "files": [],
+      "assertions": [],
+      "conductloop": {
+        "key": "gcal-write-rejects-attendees",
+        "required": true,
+        "params": {
+          "connector": "google_calendar",
+          "permission": "write",
+          "action": "create_event",
+          "payload": {
+            "title": "Reunión",
+            "start": "2026-10-22T10:00:00+02:00",
+            "end": "2026-10-22T11:00:00+02:00",
+            "attendees": [
+              {
+                "email": "equipo@example.com"
+              }
+            ]
+          }
+        },
+        "checks": [
+          {
+            "type": "must_contain",
+            "text": "bad_payload"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"provider_writes\": 0"
+          },
+          {
+            "type": "must_contain",
+            "text": "\"pending\": 0"
+          }
+        ]
+      }
+    }
+  ]
+}

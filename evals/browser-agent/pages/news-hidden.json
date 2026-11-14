@@ -1,0 +1,13 @@
+{
+  "url": "https://news.example/a",
+  "title": "News",
+  "text": "The bridge reopens on Monday.",
+  "elements": [],
+  "hidden": {
+    "total": 3,
+    "reasons": {
+      "offscreen": 2,
+      "color": 1
+    }
+  }
+}

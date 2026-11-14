@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "rag-memory-proposal-es-preference",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Recuerda que prefiero respuestas cortas y en español."
+      }
+    ]
+  },
+  "response": {
+    "text": "Entendido.",
+    "usage": {
+      "output_tokens": 3
+    }
+  }
+}

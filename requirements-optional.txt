@@ -1,0 +1,25 @@
+# Optional, feature-gated dependencies. Install only if you use the feature.
+# All are imported lazily inside their indexer/feature, so the app runs without
+# them (the feature is simply unavailable).
+
+# Local semantic search embeddings without torch (the desktop app uses this
+# one): the same MiniLM model, ONNX instead of PyTorch.
+fastembed>=0.9.1
+onnxruntime>=1.31.1
+
+# Voice notes transcription (Whisper).
+faster-whisper>=1.2.1
+
+# Google Analytics 4 polling.
+google-analytics-data>=0.23.3
+google-analytics-admin>=0.30.2
+google-auth>=2.62.0,<2.63  # 2.55 Regional Access Boundary lookups break GA auth (401) on this setup
+
+# Apple App Store JWT verification (revenue indexer).
+PyJWT>=2.15.1
+
+# Error self-reporting (set SENTRY_DSN to enable). See logging_setup.py.
+sentry-sdk>=2.73.0
+
+# MCP server (`ops mcp`) — expose the brain to AI agents.
+mcp>=2.3.0,<3

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/csrf.js" defer></script>
+  <script src="/i18n.js" data-i18n-pages="brain" defer></script>
+  <script src="/locale-switch.js" defer></script>
+  <meta charset="UTF-8" />
+<link rel="icon" href="data:," />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-i18n="brain.doc_title">Brain Hub — ConductLoop</title>
+  <link rel="stylesheet" href="/theme.css" />
+  <style>
+    /* Legacy tokens are aliases of the shared design system in /theme.css. */
+    :root{--bg: var(--cl-bg);--card: var(--cl-bg-soft);--border: var(--cl-border);--ink: var(--cl-ink);--muted: var(--cl-ink-muted);--green: var(--cl-ok);--blue: var(--cl-info)}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+    .wrap{max-width:820px;margin:0 auto;padding:32px 20px 80px}
+    h1{font-size:26px;margin:0 0 4px;font-weight:700;letter-spacing:-.5px}
+    .sub{color:var(--muted);margin:0 0 26px;font-size:14px}
+    h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:30px 0 12px}
+    .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+    .tile{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px}
+    .tile .n{font-size:24px;font-weight:700}
+    .tile .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+    .row{display:flex;gap:8px;margin-bottom:12px}
+    input,button{font-size:14px;border-radius:8px;border:1px solid var(--border)}
+    input{flex:1;background:var(--card);color:var(--ink);padding:9px 12px}
+    button{background:var(--blue);color:#fff;border:0;padding:9px 16px;font-weight:600;cursor:pointer}
+    .item{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+    .item .k{font-size:12px;color:var(--muted)}
+    .item button{background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;font-size:12px}
+    .muted{color:var(--muted);font-size:13px}
+    .score{color:var(--green);font-size:12px}
+  </style>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<script src="/app-nav.js"></script>
+  <div class="wrap">
+    <h1><span data-i18n="brain.title">Brain Hub</span></h1>
+    <p class="sub"><span data-i18n="brain.sub">Capture, recall, and see how your second brain is doing.</span> <a href="/setup" style="color:var(--blue)" data-i18n="brain.setup">Setup →</a> · <a href="/learning" style="color:var(--blue)">🎓 Aprendizaje / Learning →</a></p>
+
+    <h2>📊 <span data-i18n="brain.analytics">Analytics</span></h2>
+    <div class="tiles" id="tiles"><div class="muted" data-i18n="brain.loading">loading…</div></div>
+
+    <h2>🔎 <span data-i18n="brain.recall">Recall memory</span></h2>
+    <div class="row">
+      <input id="q" placeholder="Ask your memory… e.g. what database do we use" data-i18n-ph="brain.recall_ph" />
+      <button id="recall" data-i18n="brain.recall_button">Recall</button>
+    </div>
+    <div id="recall-out"></div>
+
+    <h2>📥 <span data-i18n="brain.inbox">Quick-capture inbox</span></h2>
+    <div class="row">
+      <input id="cap" placeholder="Drop a note / url / idea / task…" data-i18n-ph="brain.capture_ph" />
+      <button id="add" data-i18n="brain.capture_button">Capture</button>
+    </div>
+    <div id="inbox"></div>
+  </div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    // The language is the person's choice: every word the page writes comes
+    // from the dictionary, and the page repaints itself when it changes.
+    // A function declaration, not a const: i18n.js declares a global t() as
+    // well, and two function declarations may share a name (a const t here
+    // would be a SyntaxError). Whichever is there last does the work.
+    function t(key, vars) {
+      if (window._i18n && window._i18n.t) return window._i18n.t(key, vars);
+      return key;
+    }
+    // The words arrive over the network: wait for them, or the page would
+    // paint keys instead of sentences. i18n.js is deferred, so it runs right
+    // before DOMContentLoaded — that is when the dictionary can be asked for.
+    function whenWords(fn){
+      const go = () => {
+        if (window._i18n && window._i18n.ready) window._i18n.ready().then(fn, fn);
+        else fn();
+      };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go);
+      else go();
+    }
+    let analytics = null;
+    let captures = null;
+    function renderAnalytics(d){
+      $('#tiles').innerHTML = [
+        [t('brain.tile_llm_calls'), d.llm.calls],
+        [t('brain.tile_tokens'), d.llm.total_tokens],
+        [t('brain.tile_spend'), '€' + (d.spend.total_cents/100).toFixed(2)],
+        [t('brain.tile_memories'), d.memory_entries],
+        [t('brain.tile_decisions'), d.decisions],
+        [t('brain.tile_inbox_open'), d.inbox.open ?? 0],
+      ].map(([l,n]) => `<div class="tile"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+    }
+    function renderInbox(d){
+      $('#inbox').innerHTML = d.captures.length ? d.captures.map(c => `
+        <div class="item">
+          <div><div>${c.content}</div><div class="k">${c.kind}${c.source ? ' · '+c.source : ''}</div></div>
+          <button onclick="processCap(${c.id})">${t('brain.done')}</button>
+        </div>`).join('') : '<div class="muted">'+t('brain.inbox_empty')+'</div>';
+    }
+
+    async function loadAnalytics() {
+      const d = await (await fetch('/api/brain/analytics')).json();
+      analytics = d;
+      renderAnalytics(d);
+    }
+
+    async function loadInbox() {
+      const d = await (await fetch('/api/capture')).json();
+      captures = d;
+      renderInbox(d);
+    }
+
+    window.processCap = async (id) => {
+      await fetch(`/api/capture/${id}/process`, {method:'POST'});
+      loadInbox(); loadAnalytics();
+    };
+
+    $('#add').onclick = async () => {
+      const v = $('#cap').value.trim(); if (!v) return;
+      await fetch('/api/capture', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({content:v})});
+      $('#cap').value=''; loadInbox(); loadAnalytics();
+    };
+
+    $('#recall').onclick = async () => {
+      const q = $('#q').value.trim(); if (!q) return;
+      const d = await (await fetch('/api/memory/recall?q=' + encodeURIComponent(q))).json();
+      $('#recall-out').innerHTML = d.results.length ? d.results.map(r => `
+        <div class="item"><div><div>${r.value}</div><div class="k">${r.key}</div></div>
+        <div class="score">${(r.score*100|0)}% ${r.method}</div></div>`).join('')
+        : '<div class="muted">'+t('brain.no_memories')+'</div>';
+    };
+    $('#q').addEventListener('keydown', e => { if (e.key === 'Enter') $('#recall').click(); });
+    $('#cap').addEventListener('keydown', e => { if (e.key === 'Enter') $('#add').click(); });
+
+    whenWords(() => {
+      // When the person switches the language, the words around the page
+      // change too.
+      if (window._i18n && window._i18n.onLocaleChange) window._i18n.onLocaleChange(() => {
+        if (analytics) renderAnalytics(analytics);
+        if (captures) renderInbox(captures);
+      });
+      loadAnalytics(); loadInbox();
+    });
+  </script>
+</body>
+</html>

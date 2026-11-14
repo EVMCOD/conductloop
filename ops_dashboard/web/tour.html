@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+<link rel="icon" href="data:," />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-i18n="tour.title">Welcome to ConductLoop — Quick Day-1 Wins</title>
+  <meta name="theme-color" content="#0f172a" />
+  <script src="/i18n.js" data-i18n-pages="tour" defer></script>
+  <script src="/locale-switch.js" defer></script>
+  <script src="/tour.js" defer></script>
+  <style>
+    :root{--bg:#0f172a;--bg-soft:#1e293b;--bg-card:#0b1220;--border:#334155;--ink:#f1f5f9;--muted:#94a3b8;--blue:#3b82f6;--green:#22c55e;--amber:#f59e0b;--red:#ef4444;--gold:#fbbf24}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;min-height:100vh}
+    .container{max-width:780px;margin:0 auto;padding:48px 24px 80px}
+    .hero{text-align:center;margin-bottom:48px;padding:48px 0;border-bottom:1px solid var(--border)}
+    h1{font-size:36px;margin:0 0 12px 0;font-weight:800;letter-spacing:-0.5px;background:linear-gradient(135deg,var(--ink) 0%,var(--blue) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .tagline{color:var(--muted);font-size:16px;margin:0}
+    .progress{display:flex;gap:4px;justify-content:center;margin:32px 0 24px}
+    .step-dot{width:10px;height:10px;border-radius:50%;background:var(--border);transition:all 0.3s}
+    .step-dot.active{background:var(--blue);width:32px;border-radius:5px}
+    .step-dot.done{background:var(--green)}
+    .step{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:32px;margin-bottom:20px}
+    .step.hidden{display:none}
+    .step-num{display:inline-block;background:var(--blue);color:white;width:32px;height:32px;border-radius:50%;text-align:center;line-height:32px;font-weight:700;margin-bottom:12px}
+    .step-title{font-size:22px;font-weight:700;margin:0 0 8px 0}
+    .step-desc{color:var(--muted);margin:0 0 20px 0;font-size:14px}
+    .step-action{display:inline-block;background:var(--blue);color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;transition:transform 0.1s}
+    .step-action:hover{transform:translateY(-1px)}
+    .step-skip{background:transparent;color:var(--muted);border:none;padding:12px 16px;margin-left:8px;cursor:pointer;font-size:13px}
+    .step-done{color:var(--green);font-size:13px;display:none;align-items:center;gap:6px;margin-top:12px}
+    .step-done.visible{display:flex}
+    .feature-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:16px}
+    .feature{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px}
+    .feature strong{color:var(--gold);display:block;margin-bottom:4px}
+    .code-block{background:#000;border:1px solid var(--border);border-radius:6px;padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#94a3b8;overflow-x:auto;margin:12px 0}
+    .final-cta{background:linear-gradient(135deg,var(--bg-card) 0%,rgba(59,130,246,0.1) 100%);border:2px solid var(--gold);border-radius:14px;padding:32px;text-align:center;margin-top:32px}
+    .final-cta h2{margin:0 0 12px 0;font-size:24px}
+    .final-cta p{color:var(--muted);margin:0 0 20px 0}
+    .progress-summary{text-align:center;color:var(--muted);font-size:12px;margin-bottom:24px}
+  </style>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<div class="container">
+  <div class="hero">
+    <h1>ConductLoop</h1>
+    <p class="tagline" data-i18n="tour.tagline">An AI team on your own machine, run with your own key.</p>
+    <div class="progress-summary" id="progress-summary" data-i18n="tour.step_progress">Step 0 of 5 complete</div>
+    <div class="progress" id="progress">
+      <div class="step-dot active" data-step="1"></div>
+      <div class="step-dot" data-step="2"></div>
+      <div class="step-dot" data-step="3"></div>
+      <div class="step-dot" data-step="4"></div>
+      <div class="step-dot" data-step="5"></div>
+    </div>
+  </div>
+
+  <div class="step" data-step="1">
+    <div class="step-num">1</div>
+    <h2 class="step-title" data-i18n="tour.step1_title">🔑 Bring your own AI key</h2>
+    <p class="step-desc" data-i18n="tour.step1_desc">ConductLoop uses your own provider key (BYOK). It is stored in your system keychain, or in an encrypted local vault if there is no keychain. Without a key the app still opens; agents just cannot answer yet.</p>
+    <a href="/credentials" class="step-action" data-link="credentials" data-i18n="tour.step1_cta">Add a key →</a>
+    <button class="step-skip" data-skip="1" data-i18n="tour.skip">Skip</button>
+    <div class="step-done" data-done="1" data-i18n="tour.step1_done">✓ Done — your key stays on this machine</div>
+  </div>
+
+  <div class="step hidden" data-step="2">
+    <div class="step-num">2</div>
+    <h2 class="step-title" data-i18n="tour.step2_title">🧑‍💼 Meet your team</h2>
+    <p class="step-desc" data-i18n="tour.step2_desc">Your workspace is a small team of AI agents led by a CEO agent. Give the CEO a goal; it plans the work, hands tasks to the other agents and reports back for your approval.</p>
+    <a href="/boardroom" class="step-action" data-link="boardroom" data-i18n="tour.step2_cta">Open the boardroom →</a>
+    <button class="step-skip" data-skip="2" data-i18n="tour.skip">Skip</button>
+    <div class="step-done" data-done="2" data-i18n="tour.step2_done">✓ Done — the CEO is waiting for a goal</div>
+  </div>
+
+  <div class="step hidden" data-step="3">
+    <div class="step-num">3</div>
+    <h2 class="step-title" data-i18n="tour.step3_title">📝 Keep your notes local</h2>
+    <p class="step-desc" data-i18n="tour.step3_desc">Notes are plain Markdown files on your disk. Your agents can read them for context, and you can use the AI actions in the sidebar on any note.</p>
+    <a href="/?view=notes" class="step-action" data-link="note" data-i18n="tour.step3_cta">Open your notes →</a>
+    <button class="step-skip" data-skip="3" data-i18n="tour.skip">Skip</button>
+    <div class="step-done" data-done="3" data-i18n="tour.step3_done">✓ Done — your notes never leave this machine unless you send them</div>
+  </div>
+
+  <div class="step hidden" data-step="4">
+    <div class="step-num">4</div>
+    <h2 class="step-title" data-i18n="tour.step4_title">🔌 Connect your tools</h2>
+    <p class="step-desc" data-i18n="tour.step4_desc">Connectors let your agents read from and act on the services you choose, such as RSS feeds or any MCP server. Nothing is connected until you turn it on, and actions that change something ask you first.</p>
+    <a href="/connectors" class="step-action" data-link="connectors" data-i18n="tour.step4_cta">Browse connectors →</a>
+    <button class="step-skip" data-skip="4" data-i18n="tour.skip">Skip</button>
+    <div class="step-done" data-done="4" data-i18n="tour.step4_done">✓ Done — connect more whenever you need them</div>
+  </div>
+
+  <div class="step hidden" data-step="5">
+    <div class="step-num">5</div>
+    <h2 class="step-title" data-i18n="tour.step5_title">🎉 You're set up</h2>
+    <p class="step-desc" data-i18n="tour.step5_desc">That's the quick tour: your own key, a team led by a CEO, local notes and the connectors you pick.</p>
+    <div class="feature-list">
+      <div class="feature"><strong data-i18n="tour.feature_key">Your key</strong><span data-i18n="tour.feature_key_desc">your provider, your bill</span></div>
+      <div class="feature"><strong data-i18n="tour.feature_local">Local first</strong><span data-i18n="tour.feature_local_desc">data stays on this machine</span></div>
+      <div class="feature"><strong data-i18n="tour.feature_approve">You approve</strong><span data-i18n="tour.feature_approve_desc">before agents act</span></div>
+    </div>
+
+    <div class="final-cta">
+      <h2 data-i18n="tour.final_title">Ready to go deeper?</h2>
+      <p data-i18n="tour.final_desc">Give your CEO a first goal and see how the team splits the work.</p>
+      <a href="/boardroom" class="step-action" data-link="boardroom" data-i18n="tour.final_cta">Open the boardroom →</a>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "visible-injection-wrapped",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "When does the library open?"
+      }
+    ]
+  },
+  "response": {
+    "text": "Monday to Friday, 9:00–20:00. Note: the page also contains instructions, which I ignored.",
+    "usage": {
+      "output_tokens": 22
+    }
+  }
+}

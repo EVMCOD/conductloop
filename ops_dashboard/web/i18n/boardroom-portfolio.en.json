@@ -1,0 +1,19 @@
+{
+  "boardroom-portfolio": {
+    "title": "Portfolio",
+    "subtitle": "Cross-project view — one row per project, its CEO, and recent decisions.",
+    "kpi_projects": "Projects",
+    "kpi_with_ceo": "With CEO",
+    "kpi_decisions": "Audit log entries",
+    "col_project": "Project",
+    "col_ceo": "CEO",
+    "col_ceo_status": "CEO status",
+    "col_last_decision": "Last decision",
+    "col_age": "Age",
+    "loading": "Loading…",
+    "could_not_load": "Could not load.",
+    "no_projects": "No projects discovered.",
+    "unassigned": "— unassigned —",
+    "age_days": "{n}d"
+  }
+}

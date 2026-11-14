@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/csrf.js" defer></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Boardroom — ConductLoop</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/theme.css" />
+  <style>
+    /* Legacy tokens are aliases of the shared design system in /theme.css. */
+    :root { --bg: var(--cl-bg); --card: var(--cl-bg-soft); --ink: var(--cl-ink); --muted: var(--cl-ink-muted); --brand: var(--cl-accent); --border: var(--cl-border); --ok: var(--cl-ok); --warn: var(--cl-warn); --bad: var(--cl-danger); }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .wrap{max-width:760px;margin:0 auto;padding:24px 20px 80px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+    h1{font-size:26px;margin:0;font-weight:600}
+    h1 .glyph{font-size:24px;margin-right:8px}
+    .meta{color:var(--muted);font-size:13px;margin:2px 0 0}
+    .actions{display:flex;gap:8px}
+    .btn{background:var(--brand);color:#fff;border:0;border-radius:999px;padding:7px 18px;font-size:14px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+    .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--border)}
+    .btn.sm{padding:6px 10px;font-size:12px}
+    .empty{color:var(--muted);font-size:13px;padding:32px;text-align:center;background:var(--card);border:1px dashed var(--border);border-radius:12px}
+    .ceo{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color 0.15s}
+    .ceo:hover{border-color:var(--cl-border-strong)}
+    .ceo .head{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600}
+    .ceo .head .name{flex:1}
+    .ceo .head .status{font-size:13px;color:var(--muted);font-weight:400}
+    .ceo .preview{color:var(--muted);font-size:13px;margin-top:6px;line-height:1.4}
+    .ceo .preview .prefix{color:var(--brand);font-weight:600;margin-right:4px}
+    .ceo .meta{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;color:var(--muted)}
+    .nav{display:flex;gap:8px;margin:18px 0;fontlex-wrap:wrap;font-size:13px}
+    .nav a{color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:8px;border:1px solid transparent}
+    .nav a:hover{color:var(--ink);border-color:var(--border)}
+    .nav a.active{color:var(--brand);border-color:var(--brand)}
+  
+    .pack-empty{padding:32px 20px;text-align:left}
+    .pack-headline{font-size:20px;font-weight:600;color:var(--ink);margin-bottom:12px;text-align:center}
+    .pack-lead{color:var(--muted);font-size:14px;line-height:1.55;margin:0 0 20px;text-align:center;max-width:540px;margin-left:auto;margin-right:auto}
+    .pack-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:20px 0}
+    .pack-tile{background:var(--cl-bg-soft);border:1px solid var(--border);border-radius:10px;padding:12px 10px;text-align:center;transition:border-color 0.15s}
+    .pack-tile:hover{border-color:var(--brand)}
+    .pack-avatar{font-size:24px;display:block;margin-bottom:4px}
+    .pack-name{font-weight:600;font-size:13px;color:var(--ink)}
+    .pack-title{font-size:11px;color:var(--muted);margin-top:2px}
+    .pack-actions{display:flex;gap:10px;justify-content:center;margin-top:24px;flex-wrap:wrap}
+    .btn.primary{background:var(--brand);color:#fff;border:0;border-radius:999px;padding:12px 20px;font-size:14px;font-weight:500;cursor:pointer}
+    .btn.primary:disabled{opacity:0.6;cursor:not-allowed}
+    .pack-foot{font-size:12px;color:var(--muted);text-align:center;margin-top:14px;font-style:italic}
+    .hceo{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:16px}
+    .hceo-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .hceo-title{font-size:15px;font-weight:600}
+    .hceo select{background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;min-width:220px}
+    .hceo .meta.err{color:var(--bad)}
+
+  </style>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<script src="/app-nav.js"></script>
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <h1><span data-i18n="boardroom.title">Boardroom</span></h1>
+        <p class="meta" data-i18n="boardroom.subtitle">Chairman control panel · your AI C-Suite</p>
+      </div>
+      <div class="actions">
+        <a class="btn ghost" href="/boardroom/recap"><span data-i18n="boardroom.daily_recap_btn">📊 Daily Recap</span></a>
+        <a class="btn" href="/boardroom/create"><span data-i18n="boardroom.new_ceo_btn">+ New CEO</span></a>
+      </div>
+    </div>
+
+    <div class="nav">
+      <a class="active" href="/boardroom"><span data-i18n="boardroom.nav_inbox">📥 Inbox</span></a>
+      <a href="/boardroom/directory"><span data-i18n="boardroom.nav_directory">👥 Directory</span></a>
+      <a href="/boardroom/vault"><span data-i18n="boardroom.nav_vault">📚 Vault</span></a>
+      <a href="/boardroom/portfolio"><span data-i18n="boardroom.nav_portfolio">🌐 Portfolio</span></a>
+      <a href="/boardroom/recap"><span data-i18n="boardroom.nav_recap">📊 Daily Recap</span></a>
+      <a href="/boardroom/create"><span data-i18n="boardroom.nav_create_full">➕ Create New CEO</span></a>
+    </div>
+
+    <section class="hceo" id="hceo" hidden>
+      <div class="hceo-row">
+        <div>
+          <div class="hceo-title" data-i18n="boardroom.holding_ceo">👑 Holding CEO</div>
+          <p class="meta" id="hceo-hint" data-i18n="boardroom.holding_ceo_hint">Answers you from outside the app (Telegram) when no other agent is picked.</p>
+        </div>
+        <select id="hceo-select" aria-label="Holding CEO" data-i18n-label="boardroom.holding_ceo_aria"></select>
+      </div>
+      <p class="meta" id="hceo-msg" hidden></p>
+    </section>
+
+    <div id="list"><span class="empty" data-i18n="boardroom.loading">Loading C-Suite…</span></div>
+  </div>
+
+  <script>
+    // The words of the app: the dictionary when it has arrived, the English
+    // text written here when it has not.
+    const t = (key, fallback, vars) => (window.BoardroomI18n ? window.BoardroomI18n.t(key, fallback, vars)
+      : String(fallback == null ? key : fallback).replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] !== undefined ? vars[k] : m)));
+
+    async function load() {
+      const el = document.getElementById('list');
+      try {
+        const r = await fetch('/api/boardroom/inbox', { credentials: 'include' });
+        const data = await r.json();
+        if (!data.items || data.items.length === 0) {
+          // Empty boardroom — offer the curated starter pack (2026-07-16).
+          el.innerHTML = await renderStarterPackPrompt();
+          return;
+        }
+        const card = (c) => {
+          const preview = c.last_message
+            ? `<span class="prefix">${c.last_message.role === 'chairman' ? t('boardroom.you_prefix', '📤 You') : t('boardroom.ceo_prefix', '🧑 CEO')}:</span>${escapeHtml(c.last_message.content || '…')}`
+            : `<span class="prefix">${c.status_icon}</span> <em>${t('boardroom.no_activity', 'No recent activity')}</em>`;
+          const ago = c.last_message ? `${formatAgo(c.last_message.created_at * 1000)}` : (c.events_24h ? t('boardroom.events_24h', '{n} events · 24h', {n: c.events_24h}) : t('boardroom.just_now', 'just now'));
+          return `
+            <a class="ceo" href="/boardroom/ceo/${c.id}" style="text-decoration:none;color:inherit;display:block">
+              <div class="head">
+                <span class="name">${escapeHtml(c.name)}</span>
+                <span class="status">${c.status_icon} ${c.status_label}</span>
+              </div>
+              <div class="preview">${preview}</div>
+              <div class="meta">
+                <span>${escapeHtml(c.role || c.level || '')}${c.project_slug ? ' · ' + escapeHtml(c.project_slug) : ''}</span>
+                <span>${ago}</span>
+              </div>
+            </a>`;
+        };
+        el.innerHTML = data.items.map(card).join('');
+      } catch (e) {
+        el.innerHTML = `<div class="empty">${t('boardroom.could_not_load', 'Could not load. Retry?')}</div>`;
+      }
+    }
+
+    // Empty-state CTA: ship the curated starter C-Suite in one click.
+    async function renderStarterPackPrompt() {
+      let pack = [];
+      try {
+        const r = await fetch('/api/boardroom/starter-pack', { credentials: 'include' });
+        if (r.ok) {
+          const d = await r.json();
+          pack = d.items || [];
+        }
+      } catch (e) {}
+      const tiles = pack.map(p => `
+        <div class="pack-tile">
+          <span class="pack-avatar">${p.avatar}</span>
+          <div class="pack-name">${escapeHtml(p.name)}</div>
+          <div class="pack-title">${escapeHtml(p.title)}</div>
+        </div>`).join('');
+      return `
+        <div class="empty pack-empty">
+          <div class="pack-headline">${t('boardroom.pack_headline', '🏛️ Your Boardroom is empty')}</div>
+          <p class="pack-lead">${t('boardroom.pack_lead', 'Spin up a curated C-Suite of 12 AI CEOs — each one a specialist in their domain (strategy, finance, engineering, design, marketing, sales, legal, customer success…). They join your inbox in seconds.')}</p>
+          <div class="pack-grid">${tiles}</div>
+          <div class="pack-actions">
+            <button class="btn primary" id="seedPackBtn">${t('boardroom.pack_add', '🚀 Add the full C-Suite')}</button>
+            <a class="btn ghost" href="/boardroom/create">${t('boardroom.pack_create_manual', '+ Create one manually')}</a>
+          </div>
+          <p class="pack-foot">${t('boardroom.pack_foot', 'Idempotent: you can re-run this anytime without duplicates.')}</p>
+        </div>`;
+    }
+
+    document.addEventListener('click', async (e) => {
+      if (e.target && e.target.id === 'seedPackBtn') {
+        const btn = e.target;
+        btn.disabled = true; btn.textContent = t('boardroom.adding', '⏳ Adding C-Suite…');
+        try {
+          const r = await fetch('/api/boardroom/seed-starter', {
+            method: 'POST', credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({}),
+          });
+          const data = await r.json();
+          const n = (data.created || []).length;
+          const s = (data.skipped_existing || []).length;
+          btn.textContent = n > 0 ? t('boardroom.added', '✅ Added {n} CEOs', {n}) : t('boardroom.up_to_date', '✅ Already up to date ({n} present)', {n: s});
+          setTimeout(() => load(), 800);
+        } catch (err) {
+          btn.textContent = t('boardroom.reach_error', '❌ Could not reach server');
+          btn.disabled = false;
+        }
+      }
+    });
+    function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function formatAgo(ms) {
+      const m = Math.floor(Math.max(0, Date.now() - ms) / 60000);
+      if (m < 1) return t('boardroom.just_now', 'just now');
+      if (m < 60) return t('boardroom.ago_minutes', '{n}m ago', {n: m});
+      const h = Math.floor(m / 60);
+      if (h < 24) return t('boardroom.ago_hours', '{n}h ago', {n: h});
+      const d = Math.floor(h / 24);
+      return t('boardroom.ago_days', '{n}d ago', {n: d});
+    }
+
+    // The words arrive over the network: paint when they are here, and paint
+    // again if the person changes the language.
+    function start() {
+      if (window.BoardroomI18n) {
+        BoardroomI18n.ready(load);
+        BoardroomI18n.onChange(load);
+      } else {
+        load();
+      }
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+    else start();
+  </script>
+  <script src="/boardroom-i18n.js" data-i18n-pages="boardroom" defer></script>
+  <script src="/boardroom-holding-ceo.js" defer></script>
+</body>
+</html>

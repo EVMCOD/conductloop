@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/toast.js"></script>
+  <script src="/csrf.js" defer></script>
+  <script src="/i18n.js" data-i18n-pages="runs" defer></script>
+  <script src="/locale-switch.js" data-locale-switch="#controls" defer></script>
+  <link rel="stylesheet" href="/theme.css">
+  <meta charset="utf-8" />
+<link rel="icon" href="data:," />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title data-i18n="runs.doc_title">Runs — ConductLoop</title>
+  <style>
+    /* Colours come from /theme.css. #fff stays for text on the accent fill: the system has no on-accent ink token. */
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--cl-bg);color:var(--cl-ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .wrap{max-width:640px;margin:0 auto;padding:32px 20px 64px}
+    h1{font-size:22px;margin:0 0 4px}
+    p.sub{color:var(--cl-ink-muted);margin:0 0 20px;font-size:14px}
+    .nav{display:flex;gap:14px;margin-bottom:18px;font-size:13px}
+    .nav a{color:var(--cl-accent-ink);text-decoration:none}
+    .card{background:var(--cl-bg-soft);border:1px solid var(--cl-border);border-radius:14px;padding:16px;margin-bottom:14px}
+    .agent{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--cl-border)}
+    .agent:last-child{border-bottom:0}
+    button{background:var(--cl-accent);color:#fff;border:0;border-radius:999px;padding:7px 13px;font-size:13px;font-weight:500;cursor:pointer}
+    button:disabled{opacity:.5}
+    .pill{font-size:11px;color:var(--cl-ink-soft);background:var(--cl-bg-3);border:1px solid var(--cl-border);border-radius:999px;padding:2px 8px}
+    .run{padding:10px 0;border-bottom:1px solid var(--cl-border)}
+    .run:last-child{border-bottom:0}
+    .run .meta{font-size:11px;color:var(--cl-ink-muted);display:flex;gap:8px;align-items:center}
+    .run .body{font-size:13px;margin-top:4px;white-space:pre-wrap;color:var(--cl-ink)}
+    .act{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:999px}
+    .a-wake{background:var(--cl-accent-soft);color:var(--cl-accent-ink)}
+    .a-run_complete{background:var(--cl-ok-soft);color:var(--cl-ok)}
+    .a-error{background:var(--cl-danger-soft);color:var(--cl-danger)}
+    .hint{font-size:12px;color:var(--cl-ink-muted)}
+  </style>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<script src="/app-nav.js"></script>
+  <div class="wrap">
+    <h1><span data-i18n="runs.title">Runs</span></h1>
+    <p class="sub" data-i18n="runs.intro">The loop: trigger an agent → it executes on your provider with tools → the result lands back here and in your knowledge graph.</p>
+    <div class="nav" id="controls"><a href="/ai" data-i18n="runs.nav_connect_ai">Connect AI</a><a href="/agents" data-i18n="runs.nav_agents">Agents</a><a href="/runs" data-i18n="runs.nav_runs">Runs</a></div>
+
+    <div class="card" id="approvals-card" style="display:none">
+      <strong style="font-size:14px" data-i18n="runs.pending_approvals">⏳ Pending approvals</strong>
+      <p class="hint" style="margin:4px 0 8px" data-i18n="runs.approvals_hint">Agents proposed these writes. Approve to let them land in your graph.</p>
+      <div id="approvals"></div>
+    </div>
+
+    <div class="card">
+      <strong style="font-size:14px" data-i18n="runs.run_agent_now">Run an agent now</strong>
+      <div id="agents" style="margin-top:10px"><span class="hint" data-i18n="runs.loading">Loading…</span></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong style="font-size:14px" data-i18n="runs.recent_activity">Recent activity</strong>
+        <button onclick="loadFeed()" style="background:transparent;border:1px solid var(--cl-border);color:var(--cl-ink)" data-i18n="runs.refresh">Refresh</button>
+      </div>
+      <div id="feed" style="margin-top:8px"><span class="hint" data-i18n="runs.loading">Loading…</span></div>
+    </div>
+  </div>
+
+  <script src="/provider-errors.js"></script>
+  <script>
+    // The language is the person's choice: the words of this page live in
+    // its own dictionary and the page paints them when they arrive.
+    const tr = (key, vars) => (window._i18n && window._i18n.t ? window._i18n.t(key, vars) : key);
+
+    const fmt = ts => ts ? new Date(ts*1000).toLocaleString() : '';
+    const esc = s => (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+    async function loadAgents(){
+      const el=document.getElementById('agents');
+      try{
+        const members=await (await fetch('/api/members')).json();
+        const agents=members.filter(m=>m.type==='ai_agent');
+        el.innerHTML = agents.length ? agents.map(a=>
+          '<div class="agent"><div><strong>'+esc(a.name)+'</strong> <span class="pill">'+esc(a.model||'—')+'</span></div>'+
+          '<button data-run="'+a.id+'">'+tr('runs.run_now')+'</button></div>').join('')
+          : '<span class="hint">'+tr('runs.no_agents')+' <a href="/agents">'+tr('runs.create_one')+'</a></span>';
+        el.querySelectorAll('[data-run]').forEach(b=>b.onclick=()=>run(b.dataset.run,b));
+      }catch(e){ el.innerHTML='<span class="hint">'+tr('runs.could_not_load')+'</span>'; }
+    }
+
+    async function run(id,btn){
+      btn.disabled=true; const label=btn.textContent; btn.textContent=tr('runs.running');
+      try{
+        const r=await fetch('/api/agents/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:Number(id)})});
+        const d=await r.json();
+        if(ProviderErrors.providerOf(d)){ notifyError(ProviderErrors.friendly(d)); await loadFeed(); return; }
+        if(!d.ok) throw new Error(d.error||'failed');
+        await loadFeed();
+      }catch(e){ notifyError(tr('runs.run_failed', {msg: e.message})); }
+      finally{ btn.disabled=false; btn.textContent=label; }
+    }
+
+    async function loadFeed(){
+      const el=document.getElementById('feed');
+      try{
+        const d=await (await fetch('/api/agents/activity?hours=168')).json();
+        const rows=d.rows||[];
+        el.innerHTML = rows.length ? rows.map(r=>{
+          const act=esc(r.action||'');
+          const who=esc(r.agent_name||r.name||tr('runs.agent', {id: r.agent_id||''}));
+          const body=esc(ProviderErrors.friendly(r.content||r.response||r.error||(ProviderErrors.providerOf(r.summary)?r.summary:'')).slice(0,400));
+          const dur=r.duration_ms?(' · '+r.duration_ms+'ms'):'';
+          return '<div class="run"><div class="meta"><span class="act a-'+act+'">'+act+'</span>'+
+                 '<span>'+who+'</span><span>'+fmt(r.created_at)+dur+'</span></div>'+
+                 (body?'<div class="body">'+body+'</div>':'')+'</div>';
+        }).join('') : '<span class="hint">'+tr('runs.no_runs')+'</span>';
+      }catch(e){ el.innerHTML='<span class="hint">'+tr('runs.could_not_load')+'</span>'; }
+    }
+
+    async function loadApprovals(){
+      const card=document.getElementById('approvals-card'), el=document.getElementById('approvals');
+      try{
+        const d=await (await fetch('/api/approvals')).json();
+        const rows=Array.isArray(d)?d:(d.rows||[]);
+        if(!rows.length){ card.style.display='none'; return; }
+        card.style.display='block';
+        el.innerHTML=rows.map(r=>{
+          const who=esc(r.agent_name||tr('runs.agent', {id: r.agent_id||''}));
+          const act=esc(r.approval_action||(r.details&&r.details.approval_action)||'write');
+          const pay=r.approval_payload||(r.details&&r.details.approval_payload)||{};
+          const title=esc((pay.title||pay.path||r.summary||'').toString().slice(0,80));
+          return '<div class="run"><div class="meta"><span class="act a-wake">'+act+'</span><span>'+who+'</span><span>'+fmt(r.created_at)+'</span></div>'+
+            (title?'<div class="body">'+title+'</div>':'')+
+            '<div style="margin-top:6px;display:flex;gap:8px">'+
+            '<button data-ok="'+r.id+'">'+tr('runs.approve')+'</button>'+
+            '<button data-no="'+r.id+'" style="background:transparent;border:1px solid var(--cl-border);color:var(--cl-ink)">'+tr('runs.reject')+'</button></div></div>';
+        }).join('');
+        el.querySelectorAll('[data-ok]').forEach(b=>b.onclick=()=>decide(b.dataset.ok,'approve',b));
+        el.querySelectorAll('[data-no]').forEach(b=>b.onclick=()=>decide(b.dataset.no,'reject',b));
+      }catch(e){ card.style.display='none'; }
+    }
+    async function decide(id,action,btn){
+      btn.disabled=true;
+      try{
+        const r=await fetch('/api/approvals/'+Number(id)+'/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        await loadApprovals(); await loadFeed();
+      }catch(e){ notifyError(tr('runs.failed', {msg: e.message})); btn.disabled=false; }
+    }
+
+    // The words arrive over the network: the page paints when they are here,
+    // and paints again when the person changes the language.
+    function start(){
+      loadAgents(); loadFeed(); loadApprovals();
+      if(window._i18n && window._i18n.onLocaleChange){
+        window._i18n.onLocaleChange(function(){ loadAgents(); loadFeed(); loadApprovals(); });
+      }
+    }
+    // The words arrive over the network: the page paints when they are here.
+    // i18n.js is deferred, so it has run by the time the document is ready.
+    function whenWords(){
+      var w = window._i18n;
+      if(w && w.ready) return w.ready().then(start, start);
+      return start();
+    }
+    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', whenWords);
+    else whenWords();
+  </script>
+</body>
+</html>

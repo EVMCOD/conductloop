@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "folder-picker",
+  "description": "The native folder picker for the folder fields of the ConductLoop UI (webview `main`, served by the local server at http://localhost:7777). Remote-only (local: false). Only the app's own pick_folder command; the dialog plugin's commands are granted to nobody.",
+  "webviews": [
+    "main"
+  ],
+  "local": false,
+  "remote": {
+    "urls": [
+      "http://localhost:7777/*"
+    ]
+  },
+  "permissions": [
+    "allow-pick-folder"
+  ]
+}

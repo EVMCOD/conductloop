@@ -1,0 +1,82 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ConductLoop",
+  "version": "1.2.23",
+  "identifier": "com.conductloop.desktop",
+  "build": {
+    "frontendDist": "loading"
+  },
+  "app": {
+    "security": {
+      "csp": {
+        "default-src": "'none'",
+        "script-src": "'self'",
+        "style-src": "'self'",
+        "img-src": "'self' data:",
+        "font-src": "'self'",
+        "connect-src": "ipc: http://ipc.localhost",
+        "frame-src": "'none'",
+        "object-src": "'none'",
+        "base-uri": "'none'",
+        "form-action": "'none'",
+        "frame-ancestors": "'none'"
+      }
+    },
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "title": "ConductLoop",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "url": "index.html",
+        "visible": true,
+        "decorations": true,
+        "titleBarStyle": "Visible",
+        "acceptFirstMouse": true,
+        "dragDropEnabled": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app"],
+    "externalBin": ["binaries/conductloop-server"],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Local-first second-brain for macOS",
+    "longDescription": "ConductLoop — index, search, and connect everything across your Obsidian vault, code repos, memory files, and live URLs. Local-first, no cloud, no telemetry.",
+    "macOS": {
+      "dmg": {
+        "background": "dmg/background.png",
+        "windowSize": { "width": 600, "height": 400 },
+        "appPosition": { "x": 175, "y": 190 },
+        "applicationFolderPosition": { "x": 425, "y": 190 }
+      },
+      "entitlements": "entitlements.plist",
+      "minimumSystemVersion": "13.0"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/EVMCOD/conductloop-releases/releases/latest/download/update-macos-aarch64.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc3MEVBNEMyOTJEQzZCRDIKUldUU2E5eVN3cVFPZDdBMkdoQzFxNStVVmJIdkFES2xiQTcwMkFNTmk0MWZ0a2E1R2FEeGk5NVEK",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

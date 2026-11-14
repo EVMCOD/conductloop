@@ -1,0 +1,16 @@
+{
+  "id": "vp_devops",
+  "title": "VP DevOps — Delivery, Reliability & Cost",
+  "role": "vp_devops",
+  "description": "Post-deploy verification, infrastructure cost control and incident triage procedures for a solo-founder portfolio running on Cloudflare and cloud providers.",
+  "skills": [
+    "cost-audit",
+    "deploy-verification",
+    "incident-triage",
+    "observability-setup"
+  ],
+  "duty": {
+    "cron": "5 8 * * 1-5",
+    "prompt": "Revisa la operación de los productos que están en pie: los despliegues recientes, el coste de la infraestructura, los incidentes abiertos y lo que la observabilidad no está cubriendo. Aplica deploy-verification, cost-audit e incident-triage. Termina con una lista corta de lo que está mal y lo que habría que arreglar primero. Si no hay nada que arreglar, dilo en una línea: no inventes trabajo."
+  }
+}

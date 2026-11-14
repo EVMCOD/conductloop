@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/confirm.js"></script>
+  <script src="/toast.js"></script>
+  <script src="/csrf.js" defer></script>
+  <script src="/i18n.js" data-i18n-pages="pair" defer></script>
+  <script src="/locale-switch.js" defer></script>
+  <link rel="stylesheet" href="/theme.css">
+  <link rel="stylesheet" href="/confirm.css" />
+  <meta charset="utf-8" />
+<link rel="icon" href="data:," />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title data-i18n="pair.doc_title">Pair a phone — ConductLoop</title>
+  <style>
+    /* Colours come from /theme.css. #fff stays for text on the accent fill: the system has no on-accent ink token. */
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--cl-bg); color:var(--cl-ink); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }
+    .wrap { max-width:520px; margin:0 auto; padding:32px 20px 64px; }
+    h1 { font-size:22px; margin:0 0 4px; }
+    p.sub { color:var(--cl-ink-muted); margin:0 0 24px; font-size:14px; }
+    .card { background:var(--cl-bg-soft); border:1px solid var(--cl-border); border-radius:14px; padding:20px; margin-bottom:18px; }
+    button { background:var(--cl-accent); color:#fff; border:0; border-radius:999px; padding:7px 18px; font-size:14px; font-weight:500; cursor:pointer; }
+    button.ghost { background:transparent; border:1px solid var(--cl-border); color:var(--cl-ink); padding:6px 12px; font-size:12px; }
+    button:disabled { opacity:.5; cursor:default; }
+    .qr { background:#fff; /* #fff stays: the QR code must scan on a white box */ border-radius:12px; padding:14px; display:inline-block; }
+    .qr img { display:block; width:220px; height:220px; }
+    label { display:block; font-size:12px; color:var(--cl-ink-muted); margin:14px 0 4px; }
+    code { background:var(--cl-bg-2); border:1px solid var(--cl-border); border-radius:6px; padding:2px 6px; font-size:12px; word-break:break-all; }
+    .hosts { font-size:13px; }
+    .hosts div { padding:2px 0; }
+    .warn { color:var(--cl-warn); font-size:12px; margin-top:10px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th,td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--cl-border); }
+    th { color:var(--cl-ink-muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+    .muted { color:var(--cl-ink-muted); }
+    .net-row { justify-content:space-between; align-items:flex-start; gap:16px; }
+    .net-title { font-size:14px; }
+    .net-status { font-size:13px; margin-top:4px; }
+    .net-toggle { white-space:nowrap; flex-shrink:0; }
+    .net-note { font-size:12px; margin:10px 0 0; }
+    .row { display:flex; gap:10px; align-items:center; }
+  </style>
+</head>
+<body>
+<script src="/appearance.js"></script>
+  <div class="wrap">
+    <h1><span data-i18n="pair.title">Pair a phone</span></h1>
+    <p class="sub" data-i18n="pair.intro">Generate a one-time code, scan it from the ConductLoop iOS app. The phone then connects to this machine over your network. Your data never leaves this device.</p>
+
+    <div class="card" id="net-card">
+      <div class="row net-row">
+        <div>
+          <strong class="net-title" data-i18n="pair.net_title">Network access</strong>
+          <div class="muted net-status" id="net-status"></div>
+        </div>
+        <button class="ghost net-toggle" id="net-toggle" hidden></button>
+      </div>
+      <p class="muted net-note" data-i18n="pair.net_note">Off unless you turn it on. When on, ConductLoop also answers on your local network (port 7777) so a paired phone can reach it; every request still needs that phone's token. It takes effect when ConductLoop restarts.</p>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <label style="margin:0" data-i18n="pair.device_name">Device name</label>
+          <input id="dev-name" placeholder="iPhone" style="background:var(--cl-bg);border:1px solid var(--cl-border);color:var(--cl-ink);border-radius:8px;padding:8px 10px;font-size:14px;margin-top:4px" />
+        </div>
+        <button id="gen" style="align-self:flex-end" data-i18n="pair.generate_qr">Generate QR</button>
+      </div>
+      <div id="result" style="display:none;margin-top:18px">
+        <div class="qr"><img id="qr-img" alt="pairing QR" /></div>
+        <label data-i18n="pair.connect_urls">Connect URLs (same Wi-Fi)</label>
+        <div class="hosts" id="hosts"></div>
+        <label data-i18n="pair.token_label">Token (shown once)</label>
+        <div><code id="tok"></code></div>
+        <p class="warn" id="net-warn" hidden data-i18n="pair.net_warn">⚠ The phone can't reach this computer while network access is off. Turn it on above and restart ConductLoop.</p>
+        <p class="warn" style="color:var(--cl-ok)"><span data-i18n="pair.remote_warn_a">🌐 Remote access (outside your Wi-Fi): install</span> <a href="https://tailscale.com" style="color:var(--cl-ok)">Tailscale</a> <span data-i18n="pair.remote_warn_b">on this computer and your phone (same account). The QR already includes your Tailscale address, so the app connects from anywhere — no ports, no cloud.</span></p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <strong style="font-size:14px" data-i18n="pair.paired_devices">Paired devices</strong>
+        <button class="ghost" id="refresh" data-i18n="pair.refresh">Refresh</button>
+      </div>
+      <table>
+        <thead><tr><th data-i18n="pair.col_name">Name</th><th data-i18n="pair.col_paired">Paired</th><th data-i18n="pair.col_last_seen">Last seen</th><th></th></tr></thead>
+        <tbody id="devices"><tr><td colspan="4" class="muted" data-i18n="pair.loading">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    // The language is the person's choice: the words of this page live in
+    // its own dictionary and the page paints them when they arrive.
+    const tr = (key, vars) => (window._i18n && window._i18n.t ? window._i18n.t(key, vars) : key);
+
+    const fmt = (ts) => ts ? new Date(ts*1000).toLocaleString() : '—';
+
+    async function generate() {
+      const btn = document.getElementById('gen');
+      btn.disabled = true; btn.textContent = tr('pair.generating');
+      try {
+        const name = document.getElementById('dev-name').value || 'device';
+        const r = await fetch('/api/pair/start', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ name })
+        });
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'failed');
+        document.getElementById('qr-img').src = '/api/pair/qr.svg?data=' + encodeURIComponent(d.qr_payload);
+        document.getElementById('qr-img').alt = tr('pair.qr_alt');
+        document.getElementById('tok').textContent = d.token;
+        const hosts = document.getElementById('hosts');
+        hosts.innerHTML = (d.hosts && d.hosts.length)
+          ? d.hosts.map(h => '<div>'+h+'</div>').join('')
+          : '<div class="muted">'+tr('pair.no_lan')+'</div>';
+        document.getElementById('result').style.display = 'block';
+        loadDevices();
+      } catch (e) {
+        notifyError(tr('pair.could_not_generate', {msg: e.message}));
+      } finally {
+        btn.disabled = false; btn.textContent = tr('pair.generate_qr');
+      }
+    }
+
+    async function loadDevices() {
+      const tb = document.getElementById('devices');
+      try {
+        const r = await fetch('/api/pair/devices');
+        const list = await r.json();
+        if (!Array.isArray(list) || !list.length) {
+          tb.innerHTML = '<tr><td colspan="4" class="muted">'+tr('pair.no_devices')+'</td></tr>';
+          return;
+        }
+        tb.innerHTML = list.map(d => {
+          const status = d.revoked ? '<span class="muted">'+tr('pair.revoked')+'</span>'
+            : '<button class="ghost" data-revoke="'+d.id+'">'+tr('pair.revoke')+'</button>';
+          return '<tr><td>'+(d.name||'device')+'</td><td>'+fmt(d.created_at)+'</td><td>'+fmt(d.last_seen_at)+'</td><td>'+status+'</td></tr>';
+        }).join('');
+        tb.querySelectorAll('[data-revoke]').forEach(b => b.onclick = () => revoke(b.dataset.revoke));
+      } catch (e) {
+        tb.innerHTML = '<tr><td colspan="4" class="muted">'+tr('pair.could_not_load')+'</td></tr>';
+      }
+    }
+
+    async function revoke(id) {
+      if (!await confirmAction(tr('pair.revoke_confirm'))) return;
+      await fetch('/api/pair/revoke', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ id: Number(id) })
+      });
+      loadDevices();
+    }
+
+    document.getElementById('gen').onclick = generate;
+    document.getElementById('refresh').onclick = loadDevices;
+
+    // Network access: whether a phone can reach this computer (see
+    // ops_dashboard/network_access.py). The socket is bound once, so a change
+    // applies from the next start; the page says which state is live.
+    let net = null;
+    function paintNet() {
+      const st = document.getElementById('net-status');
+      const btn = document.getElementById('net-toggle');
+      if (!net) { st.textContent = tr('pair.net_unknown'); btn.hidden = true; return; }
+      let text = net.lan_now ? tr('pair.net_on') : tr('pair.net_off');
+      if (net.lan_next !== net.lan_now) text += ' ' + (net.lan_next ? tr('pair.net_restart_on') : tr('pair.net_restart_off'));
+      if (net.managed_by_env) text += ' ' + tr('pair.net_env');
+      st.textContent = text;
+      btn.hidden = !!net.managed_by_env;
+      btn.textContent = net.lan_next ? tr('pair.net_turn_off') : tr('pair.net_turn_on');
+      document.getElementById('net-warn').hidden = !!net.lan_now;
+    }
+    async function loadNet() {
+      try {
+        const r = await fetch('/api/pair/network');
+        net = r.ok ? await r.json() : null;
+      } catch (e) { net = null; }
+      paintNet();
+    }
+    document.getElementById('net-toggle').onclick = async () => {
+      if (!net) return;
+      const btn = document.getElementById('net-toggle');
+      btn.disabled = true;
+      try {
+        const r = await fetch('/api/pair/network', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({lan: !net.lan_next}),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        net = await r.json();
+      } catch (e) {
+        notifyError(tr('pair.net_could_not_save', {msg: e.message}));
+      } finally {
+        btn.disabled = false; paintNet();
+      }
+    };
+
+
+    // The words arrive over the network: the page paints when they are here,
+    // and paints again when the person changes the language.
+    function start(){
+      document.getElementById('qr-img').alt = tr('pair.qr_alt');
+      loadDevices();
+      loadNet();
+      if(window._i18n && window._i18n.onLocaleChange){
+        window._i18n.onLocaleChange(function(){ loadDevices(); paintNet(); });
+      }
+    }
+    // The words arrive over the network: the page paints when they are here.
+    // i18n.js is deferred, so it has run by the time the document is ready.
+    function whenWords(){
+      var w = window._i18n;
+      if(w && w.ready) return w.ready().then(start, start);
+      return start();
+    }
+    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', whenWords);
+    else whenWords();
+  </script>
+</body>
+</html>

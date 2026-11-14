@@ -1,0 +1,21 @@
+{
+  "cassette_version": 1,
+  "case_id": "rag-pricing-cite",
+  "origin": "synthetic",
+  "provider": "synthetic",
+  "model": "synthetic",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "¿Qué decidimos sobre el precio del plan Pro?"
+      }
+    ]
+  },
+  "response": {
+    "text": "Decidisteis fijar el plan Pro en 29 € al mes, con un plan anual de 290 € [1].",
+    "usage": {
+      "output_tokens": 26
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "status": {
+    "title": "Estado del sistema — ConductLoop",
+    "description": "Estado en vivo de todos los servicios públicos.",
+    "overall_ok": "Todos los sistemas operativos",
+    "subtitle": "Estado en tiempo real de los servicios públicos de ConductLoop",
+    "loading": "Cargando…",
+    "operational": "operativo",
+    "degraded": "degradado",
+    "down": "caído",
+    "services": "Servicios",
+    "footer": "El estado se actualiza cada 5 minutos vía ops-dashboard.",
+    "dashboard": "Panel",
+    "never": "nunca",
+    "checked_at": "comprobado {time}",
+    "no_services": "Todavía no hay servicios configurados.",
+    "service_down_one": "{n} servicio caído",
+    "services_down": "{n} servicios caídos",
+    "service_degraded_one": "{n} servicio degradado",
+    "services_degraded": "{n} servicios degradados",
+    "last_updated": "Última actualización: {time}",
+    "latest_poll": "Datos del estado de la última comprobación",
+    "could_not_load": "No se pudo cargar el estado."
+  }
+}

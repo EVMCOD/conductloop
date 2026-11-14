@@ -1,0 +1,11 @@
+{
+  "id": "vp_design",
+  "title": "VP Design — Product Design & Design Systems",
+  "role": "vp_design",
+  "description": "Design review, design-system consistency and WCAG 2.2 AA accessibility procedures for a portfolio of small products.",
+  "skills": ["design-review", "accessibility-check", "design-system-consistency"],
+  "duty": {
+    "cron": "57 13 * * 5",
+    "prompt": "Revisa el diseño: la consistencia del sistema de componentes, la accesibilidad y lo que se ha salido de la guía. Aplica design-system-consistency, design-review y accessibility-check. Termina con los cinco problemas que vería alguien que usa el producto a diario."
+  }
+}

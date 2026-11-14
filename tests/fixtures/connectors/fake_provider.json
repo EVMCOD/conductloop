@@ -1,0 +1,28 @@
+{
+  "_comment": "Recorded-style responses for the fake OAuth provider used by tests/test_connectors_*.py. All values are synthetic (no real service, no real token).",
+  "token_read": {
+    "access_token": "fake-access-READ-0001",
+    "refresh_token": "fake-refresh-0001",
+    "token_type": "Bearer",
+    "expires_in": 3600,
+    "scope": "fake.read",
+    "account": "ana@example.test"
+  },
+  "token_write": {
+    "access_token": "fake-access-WRITE-0002",
+    "refresh_token": "fake-refresh-0002",
+    "token_type": "Bearer",
+    "expires_in": 3600,
+    "scope": "fake.read fake.write",
+    "account": "ana@example.test"
+  },
+  "token_refreshed": {
+    "access_token": "fake-access-REFRESHED-0003",
+    "token_type": "Bearer",
+    "expires_in": 3600,
+    "scope": "fake.read"
+  },
+  "me": {"id": "u_1", "name": "Ana (fake)"},
+  "message_posted": {"ok": true, "id": "m_42"},
+  "error_invalid_grant": {"error": "invalid_grant", "error_description": "PKCE verification failed"}
+}

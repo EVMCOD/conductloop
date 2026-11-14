@@ -1,0 +1,30 @@
+{
+  "servers": {
+    "doc_title": "Servers — ConductLoop",
+    "title": "Servers",
+    "intro": "What this app can talk to, and what is going to answer. The product asks for capabilities — chat, image, video, speech, search — never for a company: a server on this computer, a service in the cloud or any OpenAI-compatible endpoint will do.",
+    "nav_connect_ai": "Connect AI",
+    "nav_media": "Media",
+    "nav_setup": "Setup",
+    "ask_servers": "Ask the servers",
+    "reload": "Reload",
+    "answering": "answering",
+    "not_answering": "not answering",
+    "no_key": "no key",
+    "no_key_needed": "no key needed",
+    "set_up": "set up",
+    "cap_ready": "ready",
+    "cooling_down": "cooling down",
+    "not_set_up": "not set up",
+    "on_this_computer": "on this computer",
+    "local": "local",
+    "key_tag": "key: {key}",
+    "nothing_set_up": "Nothing is set up for this yet.",
+    "default_no_key": "The default has no key: {name} would answer instead.",
+    "others_can_serve": "Others that can serve it",
+    "notes_with_vectors": "{n} of {m} notes have vectors.",
+    "could_not_load": "Could not load: {msg}",
+    "asking": "Asking…",
+    "asked_every": "Asked every server. A remote one is not really tested: only its key is checked, because the only honest test would spend your credit."
+  }
+}

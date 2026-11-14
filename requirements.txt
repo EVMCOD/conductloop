@@ -1,0 +1,26 @@
+# Full app runtime. `pip install -r requirements.txt` gives a working install:
+# core server + BYOK cloud providers + local semantic-search embeddings.
+#
+# NOTE: sentence-transformers pulls torch (~2GB). For a lean server-only install
+# (no semantic search), use requirements-core.txt instead. Voice/GA/JWT features
+# live in requirements-optional.txt.
+-r requirements-core.txt
+
+# BYOK cloud LLM providers (imported lazily; Ollama needs no package).
+anthropic>=0.111.0
+openai>=2.43.0
+# Security floor for a dependency of anthropic that ships inside the app
+# (GHSA-mf5v-w3w3-f6cg, fixed in 1.45.2).
+opentelemetry-api>=1.45.2
+
+# Local semantic search embeddings.
+# The full runtime uses sentence-transformers (torch); the lean runtime and
+# the desktop app use the ONNX engine instead (fastembed + onnxruntime):
+# the same model, a fraction of the size, and no torch in the bundle.
+sentence-transformers>=5.6.0
+fastembed>=0.9.1
+onnxruntime>=1.31.1
+# Security floor for fastembed's image dependency, frozen into the app:
+# Pillow 12.x has 62 known advisories (several critical), fixed in 13.0.0.
+# fastembed accepts Pillow 13 from 0.9.1 on.
+pillow>=13.0.0

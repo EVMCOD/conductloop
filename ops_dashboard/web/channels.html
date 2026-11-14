@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+<link rel="icon" href="data:," />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title data-i18n="channels.doc_title">Channels — ConductLoop</title>
+  <link rel="stylesheet" href="/channels.css" />
+  <script src="/csrf.js" defer></script>
+  <script src="/i18n.js" data-i18n-pages="channels" defer></script>
+  <script src="/locale-switch.js" data-locale-switch="#controls" defer></script>
+  <script src="/channels.js" defer></script>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<script src="/app-nav.js"></script>
+  <div class="wrap">
+    <header class="top">
+      <div>
+        <h1><span data-i18n="channels.title">Channels</span></h1>
+        <p class="sub" data-i18n="channels.sub">Talk to your agents from Telegram or Discord. Each channel is off until you turn it on; only chats you pair here are answered.</p>
+      </div>
+      <nav class="nav" id="controls"><a href="/" data-i18n="channels.home">Home</a><a href="/credentials" data-i18n="channels.credentials">Credentials</a></nav>
+    </header>
+    <p class="error" id="error" hidden></p>
+
+    <section class="card" id="telegram-card">
+      <div class="row between">
+        <div>
+          <h2>Telegram</h2>
+          <p class="hint" id="telegram-state"><span data-i18n="channels.loading">Loading…</span></p>
+        </div>
+        <button id="telegram-toggle" type="button" disabled><span data-i18n="channels.turn_on">Turn on</span></button>
+      </div>
+      <p class="hint" id="telegram-token-hint" hidden><span data-i18n="channels.token_hint_before">No bot token yet. Create a bot with @BotFather and paste its token in</span> <a href="/credentials" data-i18n="channels.credentials_channels">Credentials → Channels</a><span data-i18n="channels.token_hint_after">.</span></p>
+      <p class="hint warn" id="telegram-last-error" hidden></p>
+
+      <h3 data-i18n="channels.who_answers">Who answers</h3>
+      <p class="hint"><span data-i18n="channels.pick_other_before">A chat can still pick someone else with</span> <span class="mono">/use &lt;id&gt;</span><span data-i18n="channels.pick_other_after">.</span></p>
+      <div class="row">
+        <select id="telegram-default-agent" disabled></select>
+      </div>
+
+      <h3 data-i18n="channels.pair_chat">Pair a chat</h3>
+      <p class="hint" data-i18n="channels.pair_hint">Create a code, then send it to your bot from a private chat or a group. It works once and only for 10 minutes. In a group the bot answers only commands and messages that mention it, and only from the people on that group's list (whoever sends the code is put on it).</p>
+      <div class="row">
+        <button id="telegram-pair" type="button" disabled data-i18n="channels.create_pairing_code">Create a pairing code</button>
+      </div>
+      <p class="code mono" id="telegram-code" hidden></p>
+      <p class="hint" id="telegram-code-hint" hidden></p>
+
+      <h3 data-i18n="channels.paired_chats">Paired chats</h3>
+      <p class="hint" data-i18n="channels.paired_hint">Results of finished runs go to each private chat, and privately (DM) to each person on a group's list. A member the bot cannot message is marked unreachable — ask them to send /start to the bot.</p>
+      <ul class="list" id="telegram-peers"></ul>
+      <p class="hint" id="telegram-no-peers" data-i18n="channels.no_peers">No paired chats yet.</p>
+    </section>
+
+    <section class="card" id="discord-card">
+      <div class="row between">
+        <div>
+          <h2>Discord</h2>
+          <p class="hint" id="discord-state"><span data-i18n="channels.loading">Loading…</span></p>
+        </div>
+        <button id="discord-toggle" type="button" disabled><span data-i18n="channels.turn_on">Turn on</span></button>
+      </div>
+      <p class="hint" id="discord-token-hint" hidden><span data-i18n="channels.discord_token_hint_before">No bot token yet. Create a bot in the Discord Developer Portal, enable the Message Content Intent, and paste the token in</span> <a href="/credentials" data-i18n="channels.credentials_channels">Credentials → Channels</a><span data-i18n="channels.token_hint_after">.</span></p>
+      <p class="hint warn" id="discord-last-error" hidden></p>
+
+      <h3 data-i18n="channels.who_answers">Who answers</h3>
+      <p class="hint"><span data-i18n="channels.pick_other_before">A chat can still pick someone else with</span> <span class="mono">/use &lt;id&gt;</span><span data-i18n="channels.pick_other_after">.</span> <span data-i18n="channels.discord_webhook_note">The Boardroom Discord webhook (if you use one) is separate and unchanged.</span></p>
+      <div class="row">
+        <select id="discord-default-agent" disabled></select>
+      </div>
+
+      <h3 data-i18n="channels.pair_chat">Pair a chat</h3>
+      <p class="hint" data-i18n="channels.discord_pair_hint">Create a code, then send it to your bot from a DM or a server text channel. It works once and only for 10 minutes. In a server channel the bot answers only commands and messages that mention it, and only from the people on that channel's list (whoever sends the code is put on it).</p>
+      <div class="row">
+        <button id="discord-pair" type="button" disabled data-i18n="channels.create_pairing_code">Create a pairing code</button>
+      </div>
+      <p class="code mono" id="discord-code" hidden></p>
+      <p class="hint" id="discord-code-hint" hidden></p>
+
+      <h3 data-i18n="channels.paired_chats">Paired chats</h3>
+      <p class="hint" data-i18n="channels.discord_paired_hint">Results of finished runs go to each paired DM, and privately to each person on a server channel's list. A member the bot cannot message is marked unreachable — ask them to open a DM with the bot.</p>
+      <ul class="list" id="discord-peers"></ul>
+      <p class="hint" id="discord-no-peers" data-i18n="channels.no_peers">No paired chats yet.</p>
+    </section>
+  </div>
+</body>
+</html>

@@ -1,0 +1,730 @@
+// "Conectores" page (connectors framework). Talks only to /api/connectors/*.
+//
+// Security rules (enforced by tests/test_connectors_ui_static.py):
+//   * Server data (connector names, scopes, payloads, audit details) is
+//     untrusted: only written with textContent / createTextNode. No innerHTML,
+//     outerHTML, insertAdjacentHTML, document.write, eval or string handlers.
+//   * The only external link is the provider consent URL, and only if https.
+// Language: the app's language — the one the person chose, which the app
+// keeps in its configuration. The browser's language is only the fallback
+// (same rule as provider-errors.js / the BYOK banner).
+(function () {
+  'use strict';
+
+  var ES = false;
+  var L = {
+    es: {
+      title: 'Conectores',
+      subtitle: 'Conecta tus servicios. Los tokens se guardan solo en el llavero del sistema de este ordenador.',
+      nav_home: 'Panel',
+      keychain_off: 'No hay llavero del sistema disponible: no se puede conectar nada (los tokens nunca se guardan en un fichero).',
+      privacy: 'Privacidad y permisos',
+      p_keychain: 'Tokens solo en el llavero del sistema; nunca en la base de datos ni en ficheros.',
+      p_scopes: 'Se piden los permisos mínimos: solo lectura salvo que actives la escritura.',
+      p_confirm: 'Cualquier escritura (enviar un correo, publicar un mensaje…) espera a que la confirmes aquí.',
+      p_telemetry: 'Sin telemetría: el registro de auditoría se queda en este ordenador.',
+      legacy: 'Tienes {0} conexión(es) con token en la vista «Conexiones».',
+      pending: 'Pendiente de confirmar', no_pending: 'No hay escrituras pendientes.',
+      connectors: 'Conectores',
+      catalog_title: 'Tus apps',
+      catalog_search: 'Buscar apps…',
+      catalog_connect: 'Conectar',
+      catalog_connected: 'Conectado',
+      catalog_settings: 'Ajustes de conexión',
+      catalog_no_results: 'Ninguna app coincide con la búsqueda.',
+      catalog_section_productivity: 'Productividad',
+      catalog_section_work: 'Trabajo',
+      catalog_section_reading: 'Lectura',
+      catalog_section_other: 'Otras',
+      no_connectors: 'Aún no hay conectores instalados. El marco está listo; los conectores (Google, Microsoft, Slack, Notion…) llegarán en próximas versiones.',
+      audit: 'Registro de auditoría (local)', refresh: 'Actualizar',
+      when: 'Cuándo', connector: 'Conector', event: 'Evento', detail: 'Detalle',
+      s_connected: 'conectado', s_disconnected: 'desconectado', s_error: 'error',
+      perm_read: 'solo lectura', perm_write: 'lectura y escritura',
+      read_scopes: 'Permisos de lectura', write_scopes: 'Permisos de escritura',
+      client_id: 'Client ID de tu app OAuth (BYOK)', client_secret: 'Client secret (este proveedor lo exige)',
+      save: 'Guardar', clear: 'Quitar',
+      connect_read: 'Conectar (solo lectura)', connect_write: 'Conectar con escritura',
+      token_connect: 'Usar un token personal',
+      token_label: 'Token personal',
+      token_hint: 'Con un token personal conectas una vez y no hay que reconectar: el token no caduca según el proveedor.',
+      token_advantage: 'No caduca por el proveedor: conectas una vez.',
+      token_saved: 'Conectado con token personal.',
+      cred_expires_in: 'La credencial se renueva si la usas: te quedaría sin conexión en {0} días sin actividad.',
+      cred_expires_soon: 'Te quedaría sin conexión en {0} días si no la usas: úsala o conéctala de nuevo.',
+      cred_no_expiry: 'La credencial no caduca: sigue hasta que la revoques.',
+      cred_token_no_expiry: 'Token personal: no caduca, sigue hasta que lo revoques.',
+      disconnect: 'Desconectar', make_read: 'Pasar a solo lectura',
+      open_consent: 'Abrir la página de autorización', waiting: 'Esperando la autorización en el navegador…',
+      connected_ok: 'Conectado.', flow_failed: 'No se pudo conectar: {0}',
+      confirm: 'Confirmar y ejecutar', reject: 'Rechazar', expires: 'caduca {0}',
+      confirm_disconnect: '¿Desconectar {0}? Se borrará el token del llavero.',
+      dlg_confirm: 'Confirmar', dlg_cancel: 'Cancelar', dlg_ok: 'Aceptar',
+      account: 'Cuenta: {0}', error: 'Error: {0}', byok_needed: 'Necesitas tu propio client ID para conectar.',
+      mcp_title: 'Servidores MCP',
+      mcp_hint: 'Las herramientas son de solo lectura por defecto. Las que escriben o tienen efectos esperan tu confirmación. Lo que devuelven se trata como contenido no confiable.',
+      mcp_add: 'Añadir o editar un servidor', mcp_name: 'Nombre', mcp_transport: 'Transporte',
+      mcp_command: 'Comando (programa y argumentos, sin shell)', mcp_url: 'URL (https)',
+      mcp_env: 'Variables no secretas (CLAVE=valor, una por línea)',
+      mcp_secret_name: 'Variable secreta (al llavero)', mcp_secret_value: 'Valor', mcp_token: 'Token Bearer (al llavero)',
+      mcp_none: 'No hay servidores MCP.', mcp_refresh: 'Probar conexión', mcp_remove: 'Eliminar',
+      mcp_confirm_remove: '¿Eliminar el servidor MCP {0}? Se borrarán sus secretos del llavero.',
+      mcp_allow_write: 'Permitir escrituras (con confirmación)', mcp_read_only: 'Volver a solo lectura',
+      mcp_tools: 'Herramientas', mcp_changed: 'cambió: revísala', mcp_legacy: 'Variables guardadas por la vista antigua: vuelve a introducirlas aquí para moverlas al llavero.',
+      mcp_secret_set: 'en el llavero', mcp_secret_missing: 'falta', mcp_token_set: 'token en el llavero',
+      k_read: 'lectura', k_write: 'escritura', m_auto: 'automático', m_read: 'lectura', m_write: 'escritura', m_disabled: 'desactivada'
+    },
+    en: {
+      title: 'Connectors',
+      subtitle: 'Connect your services. Tokens are stored only in the system keychain of this computer.',
+      nav_home: 'Dashboard',
+      keychain_off: 'No system keychain available: nothing can be connected (tokens are never stored in a file).',
+      privacy: 'Privacy & permissions',
+      p_keychain: 'Tokens only in the system keychain; never in the database or in files.',
+      p_scopes: 'Minimal permissions: read-only unless you enable write.',
+      p_confirm: 'Every write (sending an email, posting a message…) waits for your confirmation here.',
+      p_telemetry: 'No telemetry: the audit log stays on this computer.',
+      legacy: 'You have {0} token connection(s) in the \u201cConnections\u201d view.',
+      pending: 'Waiting for confirmation', no_pending: 'No pending writes.',
+      connectors: 'Connectors',
+      catalog_title: 'Your apps',
+      catalog_search: 'Search apps…',
+      catalog_connect: 'Connect',
+      catalog_connected: 'Connected',
+      catalog_settings: 'Connection settings',
+      catalog_no_results: 'No app matches the search.',
+      catalog_section_productivity: 'Productivity',
+      catalog_section_work: 'Work',
+      catalog_section_reading: 'Reading',
+      catalog_section_other: 'Other',
+      no_connectors: 'No connectors installed yet. The framework is ready; connectors (Google, Microsoft, Slack, Notion…) ship in upcoming releases.',
+      audit: 'Audit log (local)', refresh: 'Refresh',
+      when: 'When', connector: 'Connector', event: 'Event', detail: 'Detail',
+      s_connected: 'connected', s_disconnected: 'disconnected', s_error: 'error',
+      perm_read: 'read-only', perm_write: 'read & write',
+      read_scopes: 'Read permissions', write_scopes: 'Write permissions',
+      client_id: 'Client ID of your OAuth app (BYOK)', client_secret: 'Client secret (required by this provider)',
+      save: 'Save', clear: 'Remove',
+      connect_read: 'Connect (read-only)', connect_write: 'Connect with write',
+      token_connect: 'Use a personal token',
+      token_label: 'Personal token',
+      token_hint: 'With a personal token you connect once and do not reconnect: the token does not expire on the provider\u2019s schedule.',
+      token_advantage: 'It does not expire on the provider\u2019s schedule: connect once.',
+      token_saved: 'Connected with a personal token.',
+      cred_expires_in: 'The credential renews while you use it: you would lose the connection after {0} days of inactivity.',
+      cred_expires_soon: 'You would lose the connection after {0} days of inactivity: use it or reconnect.',
+      cred_no_expiry: 'The credential does not expire: it lasts until you revoke it.',
+      cred_token_no_expiry: 'Personal token: it does not expire, it lasts until you revoke it.',
+      disconnect: 'Disconnect', make_read: 'Make read-only',
+      open_consent: 'Open the authorization page', waiting: 'Waiting for authorization in the browser…',
+      connected_ok: 'Connected.', flow_failed: 'Could not connect: {0}',
+      confirm: 'Confirm and run', reject: 'Reject', expires: 'expires {0}',
+      confirm_disconnect: 'Disconnect {0}? The token will be removed from the keychain.',
+      dlg_confirm: 'Confirm', dlg_cancel: 'Cancel', dlg_ok: 'Accept',
+      account: 'Account: {0}', error: 'Error: {0}', byok_needed: 'You need your own client ID to connect.',
+      mcp_title: 'MCP servers',
+      mcp_hint: 'Tools are read-only by default. Tools that write or have side effects wait for your confirmation. What they return is treated as untrusted content.',
+      mcp_add: 'Add or edit a server', mcp_name: 'Name', mcp_transport: 'Transport',
+      mcp_command: 'Command (program and arguments, no shell)', mcp_url: 'URL (https)',
+      mcp_env: 'Non-secret variables (KEY=value, one per line)',
+      mcp_secret_name: 'Secret variable (to the keychain)', mcp_secret_value: 'Value', mcp_token: 'Bearer token (to the keychain)',
+      mcp_none: 'No MCP servers.', mcp_refresh: 'Test connection', mcp_remove: 'Remove',
+      mcp_confirm_remove: 'Remove MCP server {0}? Its secrets will be deleted from the keychain.',
+      mcp_allow_write: 'Allow writes (with confirmation)', mcp_read_only: 'Back to read-only',
+      mcp_tools: 'Tools', mcp_changed: 'changed: review it', mcp_legacy: 'Variables saved by the old view: re-enter them here to move them to the keychain.',
+      mcp_secret_set: 'in keychain', mcp_secret_missing: 'missing', mcp_token_set: 'token in keychain',
+      k_read: 'read', k_write: 'write', m_auto: 'automatic', m_read: 'read', m_write: 'write', m_disabled: 'disabled'
+    }
+  };
+  var T = L.en;
+
+  // The app's language wins over the browser's: the person picked it, and the
+  // app keeps it in its configuration. The browser's language is only the
+  // fallback for a page that has no i18n loaded.
+  function locale() {
+    var i18n = window._i18n;
+    if (i18n && typeof i18n.getLocale === 'function') {
+      var chosen = i18n.getLocale();
+      if (chosen) return chosen;
+    }
+    return (navigator && navigator.language) || '';
+  }
+
+  // The dictionary is chosen when the page paints, not when the file loads:
+  // the app's language arrives from the server over the network.
+  function pickLocale() {
+    ES = /^es\b/i.test(locale());
+    T = ES ? L.es : L.en;
+  }
+  // The words of the page: its dictionary (i18n/connectors.*.json) when it has
+  // arrived, the copy written in this file when it has not.
+  function t(key) {
+    var full = key.indexOf('.') >= 0 ? key : 'connectors.' + key;
+    var s = null;
+    var i18n = window._i18n;
+    if (i18n && typeof i18n.t === 'function') {
+      var v = i18n.t(full);
+      if (v && v !== full) s = v;
+    }
+    if (s === null) {
+      var k = full.slice('connectors.'.length);
+      s = Object.prototype.hasOwnProperty.call(T, k) ? T[k] : key;
+    }
+    for (var i = 1; i < arguments.length; i++) s = s.replace('{' + (i - 1) + '}', String(arguments[i]));
+    return s;
+  }
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = String(text);
+    return n;
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  function fmtTime(ts) { try { return new Date(ts * 1000).toLocaleString(ES ? 'es' : 'en'); } catch (e) { return String(ts); } }
+
+  function showError(msg) { var g = $('global-error'); g.textContent = msg ? t('error', msg) : ''; g.hidden = !msg; }
+
+  function api(path, body) {
+    var opts = { credentials: 'same-origin', headers: { 'Accept': 'application/json' } };
+
+    if (body !== undefined) {
+      opts.method = 'POST';
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    return fetch(path, opts).then(function (r) {
+      if (r.status === 403) {
+        // The session token in the cookie no longer matches. Reloading does
+        // not help — the page needs a token too, and handing one out to any
+        // browser that asks for it would give the session away. The way out
+        // is to reopen the app.
+        throw new Error(
+          'Your session expired. Quit and reopen ConductLoop to continue.');
+      }
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok || j.ok === false) throw new Error((j && (j.message || j.error)) || ('HTTP ' + r.status));
+        return j;
+      });
+    });
+  }
+
+  function applyStatic() {
+    document.documentElement.lang = ES ? 'es' : 'en';
+    document.title = t('title') + ' — ConductLoop';
+    var nodes = document.querySelectorAll('[data-i18n]');
+    for (var i = 0; i < nodes.length; i++) nodes[i].textContent = t(nodes[i].getAttribute('data-i18n'));
+    var phs = document.querySelectorAll('[data-i18n-ph]');
+    for (var j = 0; j < phs.length; j++) phs[j].setAttribute('placeholder', t(phs[j].getAttribute('data-i18n-ph')));
+  }
+
+  function scopeList(label, scopes) {
+    var wrap = el('div');
+    wrap.appendChild(el('div', 'hint', label));
+    var box = el('div', 'scopes');
+    (scopes || []).forEach(function (s) { box.appendChild(el('span', 'badge mono', s)); });
+    wrap.appendChild(box);
+    return wrap;
+  }
+
+  function button(label, cls, onClick) {
+    var b = el('button', cls, label);
+    b.type = 'button';
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function pollFlow(state, statusNode, done) {
+    var tries = 0;
+    function tick() {
+      api('/api/connectors/flows/' + encodeURIComponent(state)).then(function (f) {
+        if (f.status === 'connected') { statusNode.textContent = t('connected_ok'); done(); return; }
+        if (f.status === 'error' || f.status === 'expired') { statusNode.textContent = t('flow_failed', f.error || f.status); done(); return; }
+        if (++tries < 300) setTimeout(tick, 1500);
+      }).catch(function (e) { statusNode.textContent = t('flow_failed', e.message); });
+    }
+    tick();
+  }
+
+  function startConnect(c, permission, statusNode) {
+    showError('');
+    api('/api/connectors/' + encodeURIComponent(c.id) + '/connect', { permission: permission }).then(function (r) {
+      clear(statusNode);
+      var url = String(r.authorize_url || '');
+      if (!/^https:\/\//i.test(url)) { showError('bad authorize_url'); return; }
+      var a = el('a', 'link', t('open_consent'));
+      a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.setAttribute('data-testid', 'consent-link');
+      statusNode.appendChild(a);
+      var w = el('div', 'hint', t('waiting'));
+      statusNode.appendChild(w);
+      pollFlow(r.state, w, load);
+    }).catch(function (e) { showError(e.message); });
+  }
+
+  function startTokenConnect(c, statusNode) {
+    // The user pastes a personal token. It is verified with the provider
+    // before it is stored, and it goes to the keychain — never to the page
+    // and never to the database.
+    showError('');
+    var box = el('div', 'row');
+    var lab = el('label', 'hint', t('token_label'));
+    var inp = el('input');
+    inp.type = 'password';
+    inp.autocomplete = 'off';
+    inp.setAttribute('aria-label', t('token_label'));
+    inp.setAttribute('data-testid', 'token-input');
+    lab.appendChild(document.createElement('br'));
+    lab.appendChild(inp);
+    box.appendChild(lab);
+    var adv = el('div', 'hint', t('token_advantage'));
+    adv.setAttribute('data-testid', 'token-hint');
+    box.appendChild(adv);
+    box.appendChild(button(t('token_connect'), 'ghost small', function () {
+      var token = inp.value.trim();
+      if (!token) { showError(t('token_label')); return; }
+      api('/api/connectors/' + encodeURIComponent(c.id) + '/connect-token', { token: token })
+        .then(function () {
+          // The value is dropped as soon as it is sent.
+          inp.value = '';
+          clear(statusNode);
+          statusNode.textContent = t('token_saved');
+          load();
+        })
+        .catch(function (e) { inp.value = ''; showError(e.message); });
+    }));
+    return box;
+  }
+
+  function credentialLine(c) {
+    // What the credential will do, in words. The server sends the number;
+    // the page only formats it, and it never pastes a raw timestamp.
+    var cred = c.credential;
+    if (!cred || !cred.connected) return null;
+    if (cred.days_left === null || cred.days_left === undefined) {
+      var noExp = cred.auth_method === 'token' ? t('cred_token_no_expiry') : t('cred_no_expiry');
+      return el('div', 'hint', noExp);
+    }
+    var days = Math.max(0, Math.floor(Number(cred.days_left) || 0));
+    var text = cred.expiring_soon ? t('cred_expires_soon', String(days)) : t('cred_expires_in', String(days));
+    var node = el('div', 'hint' + (cred.expiring_soon ? ' warn' : ''), text);
+    node.setAttribute('data-testid', 'credential-expiry');
+    return node;
+  }
+
+  var catalogItems = [];
+
+  function rememberSettings(det) {
+    // The catalogue is what the page opens with, so the settings start
+    // folded. But a reload — a sync finishing, a write confirmed — must not
+    // fold them again under the user's hands. Whatever was open stays open.
+    var key = 'cl-settings-open';
+    var wasOpen = false;
+    try { wasOpen = sessionStorage.getItem(key) === '1'; } catch (e) { wasOpen = false; }
+    if (wasOpen) det.open = true;
+    det.addEventListener('toggle', function () {
+      try { sessionStorage.setItem(key, det.open ? '1' : '0'); } catch (e) { /* private mode */ }
+    });
+  }
+
+  function openSettings(connectorId) {
+    // The settings live below the catalogue, collapsed. Opening one from a
+    // tile means opening the disclosure too, or the scroll goes nowhere.
+    var det = $('settings-details');
+    if (det) det.open = true;
+    if (!/^[a-z0-9_-]+$/i.test(String(connectorId))) return;
+    var card = document.querySelector('[data-connector="' + connectorId + '"]');
+    if (card && card.scrollIntoView) card.scrollIntoView({ block: 'center' });
+  }
+
+  function renderCatalog(list) {
+    // The catalogue answers "what does this app do", which the settings
+    // never did. Every tile carries the app's own line, its mark and the
+    // way in.
+    var box = $('catalog-list');
+    if (!box) return;
+    clear(box);
+    catalogItems = list || [];
+    var query = String(($('catalog-search') && $('catalog-search').value) || '').trim().toLowerCase();
+    var items = catalogItems.filter(function (c) {
+      if (!query) return true;
+      var desc = ES ? (c.description_es || c.description) : (c.description || c.description_es);
+      return ((c.name || '') + ' ' + (desc || '')).toLowerCase().indexOf(query) >= 0;
+    });
+    if (!items.length) {
+      box.appendChild(el('p', 'hint', t('catalog_no_results')));
+      return;
+    }
+
+    var order = ['productivity', 'work', 'reading', 'other'];
+    var groups = {};
+    items.forEach(function (c) {
+      var key = c.category || 'other';
+      if (order.indexOf(key) < 0) key = 'other';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(c);
+    });
+
+    order.forEach(function (key) {
+      var group = groups[key];
+      if (!group || !group.length) return;
+      var section = el('section', 'catalog-group');
+      section.appendChild(el('h3', 'catalog-group-title', t('catalog_section_' + key)));
+      var grid = el('div', 'catalog-grid');
+      group.forEach(function (c) {
+        var tile = el('div', 'app-card');
+        // "data-app" and not "data-connector": the settings card below uses
+        // data-connector, and one id with two meanings makes every selector
+        // on this page ambiguous.
+        tile.setAttribute('data-app', c.id);
+
+        var mark = el('div', 'app-mark', (String(c.name || '?').charAt(0)).toUpperCase());
+        if (c.brand) mark.style.setProperty('--brand', c.brand);
+        tile.appendChild(mark);
+
+        var info = el('div', 'app-info');
+        var name = el('div', 'app-name');
+        name.appendChild(el('span', null, c.name));
+        if (c.status === 'connected') {
+          var badge = el('span', 'badge connected', t('catalog_connected'));
+          badge.setAttribute('data-testid', 'catalog-status');
+          name.appendChild(badge);
+        }
+        info.appendChild(name);
+        info.appendChild(el('div', 'app-desc',
+          ES ? (c.description_es || c.description) : (c.description || c.description_es)));
+        tile.appendChild(info);
+
+        var action = el('div', 'app-action');
+        if (c.status === 'connected') {
+          action.appendChild(button(t('catalog_settings'), 'ghost small', function () {
+            openSettings(c.id);
+          }));
+        } else {
+          var plus = button('+', 'app-add', function () {
+            var status = el('div', 'app-status');
+            tile.appendChild(status);
+            if (c.auth === 'token') {
+              // A token connector has its own flow (its own endpoint, its own
+              // details). Reuse it: a form that posts to the wrong route
+              // looks like it works and does not.
+              if (!window.CLToken || !window.CLToken.connectForm) {
+                status.textContent = t('flow_failed', c.id);
+                return;
+              }
+              var H = { el: el, button: button, api: api, t: t, load: load,
+                        showError: showError, clear: clear, scopeList: scopeList, ES: ES };
+              window.CLToken.connectForm(c, H).then(function (form) {
+                status.appendChild(form);
+              }).catch(function (e) {
+                status.textContent = (e && e.message) ? e.message : String(e);
+              });
+              return;
+            }
+            if (!c.client_id_set) {
+              openSettings(c.id);
+              status.textContent = t('byok_needed');
+              return;
+            }
+            startConnect(c, 'read', status);
+          });
+          plus.setAttribute('data-testid', 'catalog-connect');
+          plus.setAttribute('aria-label', t('catalog_connect') + ': ' + c.name);
+          action.appendChild(plus);
+        }
+        tile.appendChild(action);
+        grid.appendChild(tile);
+      });
+      section.appendChild(grid);
+      box.appendChild(section);
+    });
+  }
+
+  function renderConnector(c) {
+    if (c.auth === 'token' && window.CLToken) return window.CLToken.render(c, { el: el, button: button, api: api, t: t, load: load, showError: showError, clear: clear, scopeList: scopeList, ES: ES });
+    var card = el('div', 'conn');
+    card.setAttribute('data-connector', c.id);
+    var head = el('div', 'row between');
+    var title = el('div', 'row');
+    title.appendChild(el('h3', null, c.name));
+    var st = el('span', 'badge ' + (c.status === 'connected' ? 'connected' : (c.status === 'error' ? 'error' : '')), t('s_' + c.status));
+    st.setAttribute('data-testid', 'status');
+    title.appendChild(st);
+    if (c.status === 'connected') {
+      var p = el('span', 'badge' + (c.permission === 'write' ? ' write' : ''), t('perm_' + c.permission));
+      p.setAttribute('data-testid', 'permission');
+      title.appendChild(p);
+    }
+    head.appendChild(title);
+    card.appendChild(head);
+    if (c.account_label) card.appendChild(el('div', 'hint', t('account', c.account_label)));
+    if (c.last_error) card.appendChild(el('div', 'hint', t('error', c.last_error)));
+    var credLine = credentialLine(c);
+    if (credLine) card.appendChild(credLine);
+    card.appendChild(scopeList(t('read_scopes'), c.read_scopes));
+    if (c.write_scopes && c.write_scopes.length) card.appendChild(scopeList(t('write_scopes'), c.write_scopes));
+
+    if (c.auth === 'oauth_pkce') {
+      var form = el('div', 'row');
+      var lab = el('label', 'hint', t('client_id'));
+      var inp = el('input'); inp.type = 'text'; inp.value = c.client_id || ''; inp.autocomplete = 'off';
+      inp.setAttribute('aria-label', t('client_id'));
+      lab.appendChild(document.createElement('br')); lab.appendChild(inp);
+      form.appendChild(lab);
+      var sec = null;
+      if (c.client_secret_required) {
+        var lab2 = el('label', 'hint', t('client_secret'));
+        sec = el('input'); sec.type = 'password'; sec.autocomplete = 'off';
+        sec.setAttribute('aria-label', t('client_secret'));
+        lab2.appendChild(document.createElement('br')); lab2.appendChild(sec);
+        form.appendChild(lab2);
+      }
+      form.appendChild(button(t('save'), 'ghost small', function () {
+        var body = { client_id: inp.value.trim() };
+        if (sec && sec.value) body.client_secret = sec.value;
+        api('/api/connectors/' + encodeURIComponent(c.id) + '/client', body).then(load).catch(function (e) { showError(e.message); });
+      }));
+      card.appendChild(form);
+      if (!c.client_id_set) card.appendChild(el('div', 'hint', t('byok_needed')));
+    }
+
+    var actions = el('div', 'row');
+    var statusNode = el('div', 'hint');
+    statusNode.setAttribute('data-testid', 'flow');
+    if (c.status !== 'connected') {
+      var b1 = button(t('connect_read'), 'small', function () { startConnect(c, 'read', statusNode); });
+      b1.disabled = !c.client_id_set;
+      actions.appendChild(b1);
+      if (c.write_scopes && c.write_scopes.length) {
+        var b2 = button(t('connect_write'), 'ghost small', function () { startConnect(c, 'write', statusNode); });
+        b2.disabled = !c.client_id_set;
+        actions.appendChild(b2);
+      }
+      if (c.token_auth) {
+        // The personal token is offered next to the OAuth flow. It is NOT
+        // disabled by the missing client ID: a personal token needs no OAuth
+        // app, and requiring one would defeat the point.
+        var bt = button(t('token_connect'), 'ghost small', function () {
+          var tokenBox = startTokenConnect(c, statusNode);
+          clear(statusNode);
+          statusNode.appendChild(tokenBox);
+        });
+        bt.setAttribute('data-testid', 'token-connect');
+        actions.appendChild(bt);
+      }
+    } else {
+      if (c.permission === 'write') {
+        actions.appendChild(button(t('make_read'), 'ghost small', function () {
+          api('/api/connectors/' + encodeURIComponent(c.id) + '/permission', { permission: 'read' }).then(load).catch(function (e) { showError(e.message); });
+        }));
+      } else if (c.write_scopes && c.write_scopes.length) {
+        actions.appendChild(button(t('connect_write'), 'ghost small', function () { startConnect(c, 'write', statusNode); }));
+      }
+      actions.appendChild(button(t('disconnect'), 'danger small', async function () {
+        if (!await confirmAction(t('confirm_disconnect', c.name), { confirm: t('dlg_confirm'), cancel: t('dlg_cancel') })) return;
+        api('/api/connectors/' + encodeURIComponent(c.id) + '/disconnect', {}).then(load).catch(function (e) { showError(e.message); });
+      }));
+    }
+    card.appendChild(actions);
+    card.appendChild(statusNode);
+    return card;
+  }
+
+  function renderPending(list) {
+    var ul = $('pending-list'); clear(ul);
+    $('pending-count').textContent = String(list.length);
+    $('pending-empty').hidden = list.length > 0;
+    list.forEach(function (a) {
+      var li = el('li');
+      li.setAttribute('data-action-id', String(a.id));
+      li.appendChild(el('div', null, a.summary));
+      li.appendChild(el('div', 'hint mono', a.connector_id + ' · ' + a.action + ' · ' + t('expires', fmtTime(a.expires_at))));
+      li.appendChild(el('pre', 'payload mono', JSON.stringify(a.payload, null, 2)));
+      li.appendChild(el('div', 'hint mono', 'sha256 ' + String(a.payload_hash).slice(0, 16) + '…'));
+      var row = el('div', 'row');
+      row.appendChild(button(t('confirm'), 'ok small', function () {
+        api('/api/connectors/actions/' + a.id + '/confirm', { payload_hash: a.payload_hash }).then(load).catch(function (e) { showError(e.message); load(); });
+      }));
+      row.appendChild(button(t('reject'), 'ghost small', function () {
+        api('/api/connectors/actions/' + a.id + '/reject', {}).then(load).catch(function (e) { showError(e.message); });
+      }));
+      li.appendChild(row);
+      ul.appendChild(li);
+    });
+  }
+
+  function renderAudit(events) {
+    var tb = $('audit-body'); clear(tb);
+    events.forEach(function (ev) {
+      var tr = el('tr');
+      tr.appendChild(el('td', null, fmtTime(ev.ts)));
+      tr.appendChild(el('td', 'mono', ev.connector_id));
+      tr.appendChild(el('td', 'mono', ev.event));
+      tr.appendChild(el('td', 'mono', JSON.stringify(ev.detail)));
+      tb.appendChild(tr);
+    });
+  }
+
+
+  // ── MCP servers ────────────────────────────────────────────────────────
+  function mcpUrl(name, tail) { return '/api/connectors/mcp/servers/' + encodeURIComponent(name) + (tail || ''); }
+
+  function renderMcpServer(sv) {
+    var card = el('div', 'conn');
+    card.setAttribute('data-mcp', sv.name);
+    var head = el('div', 'row');
+    head.appendChild(el('h3', null, sv.name));
+    var st = el('span', 'badge ' + (sv.status === 'connected' ? 'connected' : (sv.status === 'error' ? 'error' : '')), t('s_' + (sv.status || 'error')));
+    st.setAttribute('data-testid', 'mcp-status');
+    head.appendChild(st);
+    var perm = el('span', 'badge' + (sv.permission === 'write' ? ' write' : ''), t('perm_' + (sv.permission || 'read')));
+    perm.setAttribute('data-testid', 'mcp-permission');
+    head.appendChild(perm);
+    card.appendChild(head);
+    card.appendChild(el('div', 'hint mono', sv.transport === 'http' ? sv.url : (sv.command || []).join(' ')));
+    if (sv.server_label) card.appendChild(el('div', 'hint', sv.server_label));
+    if (sv.last_error) card.appendChild(el('div', 'hint', t('error', sv.last_error)));
+    if (sv.legacy_env) card.appendChild(el('div', 'hint', t('mcp_legacy')));
+    var secrets = el('div', 'scopes');
+    (sv.secret_vars || []).forEach(function (v) {
+      secrets.appendChild(el('span', 'badge mono' + (v.set ? '' : ' error'), v.name + ' · ' + t(v.set ? 'mcp_secret_set' : 'mcp_secret_missing')));
+    });
+    if (sv.token_set) secrets.appendChild(el('span', 'badge mono', t('mcp_token_set')));
+    card.appendChild(secrets);
+
+    if (sv.tools && sv.tools.length) {
+      var tbl = el('table', 'table');
+      var tb = el('tbody');
+      sv.tools.forEach(function (tool) {
+        var tr = el('tr');
+        tr.setAttribute('data-tool', tool.name);
+        var c1 = el('td', 'mono', tool.name);
+        if (tool.changed) { c1.appendChild(document.createTextNode(' ')); c1.appendChild(el('span', 'badge warn', t('mcp_changed'))); }
+        tr.appendChild(c1);
+        tr.appendChild(el('td', null, tool.description));
+        var kb = el('td'); kb.appendChild(el('span', 'badge' + (tool.kind === 'write' ? ' write' : ''), tool.kind ? t('k_' + tool.kind) : t('m_disabled')));
+        tr.appendChild(kb);
+        var sel = el('select');
+        sel.setAttribute('aria-label', tool.name);
+        ['auto', 'read', 'write', 'disabled'].forEach(function (m) {
+          var o = el('option', null, t('m_' + m)); o.value = m; if (m === tool.mode) o.selected = true; sel.appendChild(o);
+        });
+        sel.addEventListener('change', function () {
+          api(mcpUrl(sv.name, '/tools/' + encodeURIComponent(tool.name) + '/mode'), { mode: sel.value }).then(load).catch(function (e) { showError(e.message); });
+        });
+        var c4 = el('td'); c4.appendChild(sel); tr.appendChild(c4);
+        tb.appendChild(tr);
+      });
+      tbl.appendChild(tb);
+      card.appendChild(el('div', 'hint', t('mcp_tools')));
+      card.appendChild(tbl);
+    }
+    var row = el('div', 'row');
+    row.appendChild(button(t('mcp_refresh'), 'small', function () {
+      api(mcpUrl(sv.name, '/refresh'), {}).then(load).catch(function (e) { showError(e.message); load(); });
+    }));
+    row.appendChild(button(sv.permission === 'write' ? t('mcp_read_only') : t('mcp_allow_write'), 'ghost small', function () {
+      api(mcpUrl(sv.name, '/permission'), { permission: sv.permission === 'write' ? 'read' : 'write' }).then(load).catch(function (e) { showError(e.message); });
+    }));
+    row.appendChild(button(t('mcp_remove'), 'danger small', async function () {
+      if (!await confirmAction(t('mcp_confirm_remove', sv.name), { confirm: t('dlg_confirm'), cancel: t('dlg_cancel') })) return;
+      api(mcpUrl(sv.name, '/remove'), {}).then(load).catch(function (e) { showError(e.message); });
+    }));
+    card.appendChild(row);
+    return card;
+  }
+
+  function renderMcp(data) {
+    var list = $('mcp-list'); clear(list);
+    if (!data.servers.length) list.appendChild(el('p', 'hint', t('mcp_none')));
+    data.servers.forEach(function (sv) { list.appendChild(renderMcpServer(sv)); });
+  }
+
+  function parseEnv(text) {
+    var out = {};
+    String(text || '').split('\n').forEach(function (line) {
+      var i = line.indexOf('=');
+      if (i > 0) out[line.slice(0, i).trim()] = line.slice(i + 1);
+    });
+    return out;
+  }
+
+  function syncTransport() {
+    var http = $('mcp-transport').value === 'http';
+    $('mcp-command-row').hidden = http; $('mcp-env-row').hidden = http; $('mcp-secret-row').hidden = http;
+    $('mcp-url-row').hidden = !http; $('mcp-token-row').hidden = !http;
+  }
+
+  function saveMcp() {
+    showError('');
+    var body = { name: $('mcp-name').value.trim(), transport: $('mcp-transport').value };
+    if (body.transport === 'http') {
+      body.url = $('mcp-url').value.trim();
+      if ($('mcp-token').value) body.token = $('mcp-token').value;
+    } else {
+      body.command = $('mcp-command').value;
+      body.env = parseEnv($('mcp-env').value);
+      var sn = $('mcp-secret-name').value.trim();
+      if (sn && $('mcp-secret-value').value) { body.secret_env = {}; body.secret_env[sn] = $('mcp-secret-value').value; }
+    }
+    api('/api/connectors/mcp/servers', body).then(function () {
+      $('mcp-secret-value').value = ''; $('mcp-token').value = '';
+      load();
+    }).catch(function (e) { showError(e.message); });
+  }
+
+  function load() {
+    return Promise.all([
+      api('/api/connectors'), api('/api/connectors/actions?status=pending'), api('/api/connectors/audit?limit=50'),
+      api('/api/connectors/mcp')
+    ]).then(function (res) {
+      renderMcp(res[3]);
+      var data = res[0];
+      $('keychain-warning').hidden = !!data.keychain;
+      var lh = $('legacy-hint');
+      lh.hidden = !data.legacy_token_connections;
+      lh.textContent = t('legacy', data.legacy_token_connections || 0);
+      var list = $('connectors-list'); clear(list);
+      $('connectors-empty').hidden = data.connectors.length > 0;
+      data.connectors.forEach(function (c) { list.appendChild(renderConnector(c)); });
+      renderCatalog(data.connectors);
+      renderPending(res[1].actions || []);
+      renderAudit(res[2].events || []);
+    }).catch(function (e) { showError(e.message); });
+  }
+
+  // The words arrive over the network: the page paints when they are here,
+  // and it paints again when the person changes the language.
+  var paintedLocale = null;
+  function paint() {
+    var loc = locale();
+    var changed = loc !== paintedLocale;
+    paintedLocale = loc;
+    pickLocale();
+    applyStatic();
+    if (changed) load();
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    $('audit-refresh').addEventListener('click', load);
+    $('catalog-search').addEventListener('input', function () { renderCatalog(catalogItems); });
+    var det = $('settings-details');
+    if (det) rememberSettings(det);
+    $('mcp-transport').addEventListener('change', syncTransport);
+    $('mcp-save').addEventListener('click', saveMcp);
+    syncTransport();
+    if (window._i18n && window._i18n.ready) {
+      window._i18n.ready().then(paint);
+      if (window._i18n.onLocaleChange) {
+        window._i18n.onLocaleChange(function () {
+          // i18n.js repaints the page right after this: wait for it.
+          Promise.resolve().then(paint);
+        });
+      }
+    } else {
+      paint();
+    }
+    // The picker of the app tells the page that it changed the language.
+    window.addEventListener('localechange', paint);
+  });
+})();

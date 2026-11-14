@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/toast.js"></script>
+  <script src="/csrf.js" defer></script>
+  <script src="/i18n.js" data-i18n-pages="agents" defer></script>
+  <script src="/locale-switch.js" data-locale-switch="#controls" defer></script>
+  <link rel="stylesheet" href="/theme.css">
+  <link rel="stylesheet" href="/agent-marks.css">
+  <meta charset="utf-8" />
+<link rel="icon" href="data:," />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title data-i18n="agents.doc_title">Agents — ConductLoop</title>
+  <style>
+    /* Colours come from /theme.css. #fff stays for text on the accent fill: the system has no on-accent ink token. */
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--cl-bg);color:var(--cl-ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .wrap{max-width:560px;margin:0 auto;padding:32px 20px 64px}
+    h1{font-size:22px;margin:0 0 4px}
+    p.sub{color:var(--cl-ink-muted);margin:0 0 24px;font-size:14px}
+    .card{background:var(--cl-bg-soft);border:1px solid var(--cl-border);border-radius:14px;padding:18px;margin-bottom:16px}
+    label{display:block;font-size:12px;color:var(--cl-ink-muted);margin:12px 0 4px}
+    input,select,textarea{width:100%;background:var(--cl-bg);border:1px solid var(--cl-border);color:var(--cl-ink);border-radius:8px;padding:9px 11px;font-size:14px;font-family:inherit}
+    button{background:var(--cl-accent);color:#fff;border:0;border-radius:999px;padding:7px 18px;font-size:14px;font-weight:500;cursor:pointer;margin-top:16px}
+    button:disabled{opacity:.5}
+    .agent{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--cl-border)}
+    .agent:last-child{border-bottom:0}
+    /* The mark of an agent moves inside the frame, the way the identity kit
+       moves it. */
+    .agent-mark{width:28px;height:28px;flex:none;border-radius:9px;overflow:hidden;background:#080812;margin-right:10px}
+    .agent-mark img{width:100%;height:100%;display:block}
+    .agent-who{display:flex;align-items:center;min-width:0}
+    .pill{font-size:11px;color:var(--cl-ink-soft);background:var(--cl-bg-3);border:1px solid var(--cl-border);border-radius:999px;padding:2px 8px}
+    .hint{font-size:12px;color:var(--cl-ink-muted);margin-top:10px}
+    a{color:var(--cl-accent-ink)}
+    .two{display:flex;gap:10px}.two>div{flex:1}
+    /* The shift: the standing brief of a role, and the switch that lets it
+       work on its own. */
+    .shift{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--cl-border)}
+    .shift:last-child{border-bottom:0}
+    .shift-who{display:flex;align-items:center;min-width:0}
+    .shift-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
+    .shift-meta{font-size:12px;color:var(--cl-ink-muted);text-align:right}
+    .shift-meta code{font-size:12px}
+    .shift button{background:var(--cl-bg-3);color:var(--cl-ink);border:1px solid var(--cl-border);padding:6px 12px;font-size:12px;margin-top:0;font-weight:600;white-space:nowrap}
+    .shift button.on{background:var(--cl-accent);color:#fff;border-color:transparent}
+    .shift-error{font-size:12px;color:var(--cl-danger);margin-top:4px;word-break:break-word}
+    .shift-warn{font-size:12px;color:var(--cl-warn);margin-top:4px}
+    .card-title{font-size:14px}
+    #shifts{margin-top:10px}
+  </style>
+</head>
+<body>
+<script src="/appearance.js"></script>
+<script src="/app-nav.js"></script>
+  <div class="wrap">
+    <h1><span data-i18n="agents.title">Agents</span></h1>
+    <p class="sub"><span data-i18n="agents.sub_before_link">Create an AI agent. It runs on your connected provider</span> (<a href="/ai" data-i18n="agents.connect_ai">Connect AI</a>)<span data-i18n="agents.sub_after_link">, can use tools, and writes results back into your knowledge graph.</span></p>
+    <div id="controls" style="display:flex;gap:14px;margin-bottom:18px;font-size:13px"><a href="/ai" data-i18n="agents.nav_connect_ai">Connect AI</a><a href="/agents" data-i18n="agents.nav_agents">Agents</a><a href="/runs" data-i18n="agents.nav_runs">Runs</a></div>
+
+    <div class="card">
+      <strong style="font-size:14px" data-i18n="agents.your_agents">Your agents</strong>
+      <div id="list" style="margin-top:10px"><span class="hint" data-i18n="agents.loading">Loading…</span></div>
+    </div>
+
+    <div class="card">
+      <strong class="card-title" data-i18n="agents.shifts">Shifts</strong>
+      <div class="hint" data-i18n="agents.shifts_hint">Each role has a standing brief. Put one on shift and it wakes up on its own, with its own skills.</div>
+      <div id="shifts"><span class="hint" data-i18n="agents.loading">Loading…</span></div>
+    </div>
+
+    <div class="card">
+      <strong style="font-size:14px" data-i18n="agents.new_agent">New agent</strong>
+      <label data-i18n="agents.name">Name</label>
+      <input id="name" placeholder="e.g. Weekly Brief Bot" data-i18n-ph="agents.name_ph" />
+      <div class="two">
+        <div><label data-i18n="agents.role">Role</label><input id="role" value="agent" /></div>
+        <div><label data-i18n="agents.model_provider">Model / provider</label><input id="model" value="minimax" /></div>
+      </div>
+      <label data-i18n="agents.team">Team</label>
+      <select id="team"></select>
+      <label><span data-i18n="agents.capabilities">Capabilities</span> <span style="opacity:.6" data-i18n="agents.capabilities_hint">(what it can do)</span></label>
+      <input id="capabilities" placeholder="e.g. search vault, summarize, write weekly brief" data-i18n-ph="agents.capabilities_ph" />
+      <label><span data-i18n="agents.schedule">Schedule (cron)</span> <span style="opacity:.6" data-i18n="agents.optional">(optional)</span></label>
+      <input id="cron" placeholder="0 9 * * 1   (Mondays 09:00)" data-i18n-ph="agents.cron_ph" />
+      <label><span data-i18n="agents.task_prompt">Task prompt</span> <span style="opacity:.6" data-i18n="agents.runs_on_schedule">(runs on schedule)</span></label>
+      <textarea id="prompt" rows="3" placeholder="Search the vault for changes this week and write a 3-bullet brief. Call write_artifact when done." data-i18n-ph="agents.prompt_ph"></textarea>
+      <button id="create" data-i18n="agents.create">Create agent</button>
+      <div class="hint" data-i18n="agents.cron_hint">With a cron + prompt, the scheduler wakes it automatically. Leave them blank for an on-demand agent.</div>
+    </div>
+  </div>
+
+  <script>
+    let teams = [];
+    let agents = [];
+    let listFailed = false;
+    // The language is the person's choice: every word the page writes comes
+    // from the dictionary, and the page repaints itself when it changes.
+    // A function declaration, not a const: i18n.js declares a global t() as
+    // well, and two function declarations may share a name (a const t here
+    // would be a SyntaxError). Whichever is there last does the work.
+    function t(key, vars) {
+      if (window._i18n && window._i18n.t) return window._i18n.t(key, vars);
+      return key;
+    }
+    // The words arrive over the network: wait for them, or the page would
+    // paint keys instead of sentences. i18n.js is deferred, so it runs right
+    // before DOMContentLoaded — that is when the dictionary can be asked for.
+    function whenWords(fn){
+      const go = () => {
+        if (window._i18n && window._i18n.ready) window._i18n.ready().then(fn, fn);
+        else fn();
+      };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go);
+      else go();
+    }
+    // Team and agent names are free text and end up in innerHTML: escape them
+    // or a name like "<img onerror=…>" runs in the app webview, which holds
+    // the browser_* capabilities (stored XSS -> browser control). 2026-10-23.
+    const esc = s => String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    function renderList(){
+      const el = document.getElementById('list');
+      if (listFailed) { el.innerHTML = '<span class="hint">'+esc(t('agents.could_not_load'))+'</span>'; return; }
+      el.innerHTML = agents.length ? agents.map(a=>{
+        // The mark of the identity kit, when the role has one.
+        const mark = /^[a-z][a-z0-9_]*$/.test(a.mark||'') ? a.mark : '';
+        const face = mark ? '<span class="agent-mark"><img class="mark mark-'+mark+'" src="/assets/agents/'+mark+'.png" alt=""></span>' : '';
+        return '<div class="agent"><div class="agent-who">'+face+
+        '<div><strong>'+esc(a.name)+'</strong> <span class="hint">'+esc(a.capabilities||a.role||'')+'</span></div></div>'+
+        '<span class="pill">'+esc(a.model||'—')+'</span></div>';
+      }).join('')
+        : '<span class="hint">'+esc(t('agents.no_agents'))+'</span>';
+    }
+    // The shift of each agent: the brief it works on when nobody asks, and
+    // whether it is on duty right now.
+    let shifts = [];
+    let shiftsFailed = false;
+    // "3 minutes ago" in the language the person chose, without a word of
+    // our own: the browser knows how to say it.
+    function ago(ts){
+      if(!ts) return '';
+      const locale = (window._i18n && window._i18n.getLocale) ? window._i18n.getLocale() : 'en';
+      const secs = Math.max(0, Math.round((Date.now()/1000) - Number(ts)));
+      let value = -secs, unit = 'second';
+      if(secs >= 86400){ value = -Math.round(secs/86400); unit = 'day'; }
+      else if(secs >= 3600){ value = -Math.round(secs/3600); unit = 'hour'; }
+      else if(secs >= 60){ value = -Math.round(secs/60); unit = 'minute'; }
+      try{ return new Intl.RelativeTimeFormat(locale, {numeric:'auto'}).format(value, unit); }
+      catch(e){ return ''; }
+    }
+    function renderShifts(){
+      const el = document.getElementById('shifts');
+      if(!el) return;
+      if(shiftsFailed){ el.innerHTML = '<span class="hint">'+esc(t('agents.could_not_load'))+'</span>'; return; }
+      if(!shifts.length){ el.innerHTML = '<span class="hint">'+esc(t('agents.no_duty'))+'</span>'; return; }
+      el.innerHTML = shifts.map(a=>{
+        // The mark of the identity kit, when the role has one.
+        const mark = /^[a-z][a-z0-9_]*$/.test(a.mark||'') ? a.mark : '';
+        const face = mark ? '<span class="agent-mark"><img class="mark mark-'+mark+'" src="/assets/agents/'+mark+'.png" alt=""></span>' : '';
+        const when = a.last_fired_at ? ago(a.last_fired_at) : t('agents.never');
+        const meta = '<code>'+esc(a.cron)+'</code> &middot; '+esc(t('agents.shift_last'))+' '+esc(when);
+        const err = a.last_error ? '<div class="shift-error">'+esc(a.last_error)+'</div>' : '';
+        // The role changed while the agent was on shift: it is still running
+        // the old brief, and the person has to be able to stop it.
+        const stale = a.has_duty === false ? '<div class="shift-warn">'+esc(t('agents.shift_stale'))+'</div>' : '';
+        return '<div class="shift"><div class="shift-who">'+face+
+        '<div><strong>'+esc(a.name)+'</strong> <span class="hint">'+esc(a.role)+'</span></div></div>'+
+        '<div class="shift-side"><div class="shift-meta">'+meta+'</div>'+
+        '<button class="'+(a.on_shift?'on':'')+'" data-agent="'+esc(String(a.id))+'" data-on="'+esc(a.on_shift?'1':'0')+'">'+
+        esc(a.on_shift ? t('agents.shift_off') : t('agents.shift_on'))+'</button></div>'+stale+err+'</div>';
+      }).join('');
+    }
+    async function loadShifts(){
+      try{
+        const d = await (await fetch('/api/agents/duties')).json();
+        shifts = d.agents || [];
+        shiftsFailed = false;
+      }catch(e){ shifts = []; shiftsFailed = true; }
+      renderShifts();
+    }
+    document.getElementById('shifts').addEventListener('click', async (ev) => {
+      const btn = ev.target && ev.target.closest ? ev.target.closest('button[data-agent]') : null;
+      if(!btn) return;
+      btn.disabled = true;
+      const id = btn.getAttribute('data-agent');
+      const was = btn.getAttribute('data-on') === '1';
+      const who = (shifts.find(s=>String(s.id)===id)||{}).name || '';
+      try{
+        const r = await fetch('/api/agents/'+encodeURIComponent(id)+'/shift',{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({enabled: !was})
+        });
+        const d = await r.json();
+        if(!d.ok) throw new Error(d.error || 'failed');
+        notify(was ? t('agents.shift_off_toast',{name:who}) : t('agents.shift_on_toast',{name:who}));
+        await loadShifts();
+      }catch(e){ notifyError(t('agents.error',{msg:e.message})); }
+      finally{ btn.disabled = false; }
+    });
+    async function load(){
+      try{
+        teams = await (await fetch('/api/teams')).json();
+        const sel = document.getElementById('team');
+        const squad = teams.find(team=>team.key==='ai-squad') || teams[0];
+        sel.innerHTML = teams.map(team=>'<option value="'+esc(team.id)+'"'+(squad&&team.id===squad.id?' selected':'')+'>'+esc(team.name)+'</option>').join('');
+      }catch(e){}
+      try{
+        const members = await (await fetch('/api/members')).json();
+        agents = members.filter(m=>m.type==='ai_agent');
+        listFailed = false;
+        renderList();
+      }catch(e){ listFailed = true; renderList(); }
+      loadShifts();
+    }
+    document.getElementById('create').onclick = async () => {
+      const btn=document.getElementById('create'); btn.disabled=true; btn.textContent=t('agents.creating');
+      try{
+        const body={
+          name: document.getElementById('name').value.trim(),
+          role: document.getElementById('role').value.trim()||'agent',
+          model: document.getElementById('model').value.trim()||'minimax',
+          team_id: Number(document.getElementById('team').value)||null,
+          capabilities: document.getElementById('capabilities').value.trim()||null,
+          trigger_cron: document.getElementById('cron').value.trim()||null,
+          prompt: document.getElementById('prompt').value.trim()||null,
+        };
+        if(!body.name){ notifyError(t('agents.name_required')); return; }
+        const r=await fetch('/api/agents/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const d=await r.json();
+        if(!d.ok) throw new Error(d.error||'failed');
+        document.getElementById('name').value=''; document.getElementById('capabilities').value='';
+        document.getElementById('cron').value=''; document.getElementById('prompt').value='';
+        await load();
+        notify(t('agents.created'));
+      }catch(e){ notifyError(t('agents.error', {msg:e.message})); }
+      finally{ btn.disabled=false; btn.textContent=t('agents.create'); }
+    };
+    whenWords(() => {
+      // When the person switches the language, the words around the page
+      // change too.
+      if (window._i18n && window._i18n.onLocaleChange) window._i18n.onLocaleChange(() => { renderList(); renderShifts(); });
+      load();
+    });
+  </script>
+</body>
+</html>

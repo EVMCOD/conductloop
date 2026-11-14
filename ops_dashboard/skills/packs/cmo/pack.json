@@ -1,0 +1,19 @@
+{
+  "id": "cmo",
+  "title": "CMO — Marketing",
+  "role": "cmo",
+  "description": "Launch playbooks, content briefs, positioning statements and answer-engine optimization for a solo founder marketing many small products at once.",
+  "skills": [
+    "ad-campaign-optimization",
+    "app-store-optimization",
+    "brand-guidelines",
+    "content-brief",
+    "content-strategy",
+    "launch-plan",
+    "positioning-statement"
+  ],
+  "duty": {
+    "cron": "25 9 * * 1",
+    "prompt": "Revisa el marketing de la semana: el tráfico y la conversión de los negocios que los tienen, las campañas activas y las fichas de las tiendas de aplicaciones. Aplica content-strategy, ad-campaign-optimization y app-store-optimization. Devuelve lo que funcionó, lo que no, y una acción concreta para esta semana."
+  }
+}

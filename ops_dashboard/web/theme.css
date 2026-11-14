@@ -1,0 +1,821 @@
+/* ============================================================================
+   ConductLoop — design system (macOS)
+   ----------------------------------------------------------------------------
+   One place for colour, type, space, radius, elevation and motion, plus the
+   shared components every page should use instead of re-inventing them.
+
+   Load order matters: this file is linked AFTER each page's own stylesheet so
+   the system wins on equal specificity. Pages that still carry their own
+   inline tokens keep working — the `--cl-*` names below are additive, so a
+   page can migrate one component at a time.
+
+   Direction (2026-11-12)
+   ----------------------
+   The app runs in a macOS window, so it should feel like the apps around it
+   (Finder, Notes, System Settings) rather than a web dashboard:
+     · the system font (SF Pro) at 13px, the size macOS uses for body text
+     · Apple's greys: white content, a #f5f5f7 sidebar, hairline separators
+     · one accent, the violet of the app icon, for selection and the one
+       primary action on screen; green/orange/red/blue only for state
+     · capsule buttons, rounded grouped lists, sentence-case section titles
+       (no tracked uppercase labels), no serif headings
+     · light or dark follows the system, unless the person picked one
+   ========================================================================== */
+
+/* ── tokens ─────────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: light;
+
+  /* surfaces */
+  --cl-bg: #ffffff;              /* window content */
+  --cl-bg-soft: #f5f5f7;         /* sidebar, grouped background */
+  --cl-bg-2: #ececf0;            /* controls, wells */
+  --cl-bg-3: #e3e3e8;
+  --cl-bg-hover: #ededf0;
+  --cl-bg-active: #ede5fd;       /* the accent at ~12 % on white: selection */
+  --cl-bg-raised: #ffffff;       /* a card on the grouped background */
+  --cl-overlay: rgba(255, 255, 255, 0.78);
+  --cl-scrim: rgba(0, 0, 0, 0.28);
+
+  /* ink */
+  --cl-ink: #1d1d1f;
+  --cl-ink-soft: #3a3a3c;
+  --cl-ink-muted: #6e6e73;
+  --cl-ink-faint: #a1a1a6;
+  --cl-on-accent: #ffffff;
+
+  /* lines */
+  --cl-border: #e5e5ea;          /* separators */
+  --cl-border-2: #d2d2d7;        /* control outlines */
+  --cl-border-strong: #b0b0b6;
+
+  /* one accent for action, data colours for state (Apple's accessible
+     variants: readable as text on white) */
+  --cl-accent: #7c3aed;
+  --cl-accent-hover: #6d28d9;
+  --cl-accent-soft: rgba(124, 58, 237, 0.12);
+  --cl-accent-ink: #6d28d9;
+  --cl-focus: rgba(124, 58, 237, 0.45);
+
+  --cl-info: #0066cc;
+  --cl-info-soft: rgba(0, 113, 227, 0.10);
+  --cl-ok: #248a3d;
+  --cl-ok-soft: rgba(52, 199, 89, 0.14);
+  --cl-warn: #b25000;
+  --cl-warn-soft: rgba(255, 149, 0, 0.14);
+  --cl-danger: #d70015;
+  --cl-danger-soft: rgba(255, 59, 48, 0.10);
+
+  /* type */
+  --cl-font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif;
+  --cl-font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif;
+  --cl-font-mono: ui-monospace, 'SF Mono', Menlo, 'Cascadia Mono', monospace;
+
+  --cl-text-2xs: 10px;
+  --cl-text-xs: 11px;
+  --cl-text-sm: 12px;
+  --cl-text-base: 13px;
+  --cl-text-md: 14px;
+  --cl-text-lg: 17px;
+  --cl-text-xl: 22px;
+  --cl-text-2xl: 28px;
+  --cl-text-3xl: 34px;
+
+  --cl-leading-tight: 1.2;
+  --cl-leading-normal: 1.45;
+  --cl-leading-loose: 1.6;
+
+  --cl-weight-normal: 400;
+  --cl-weight-medium: 500;
+  --cl-weight-semibold: 600;
+  --cl-weight-bold: 700;
+
+  --cl-tracking-tight: -0.02em;  /* large titles, as SF Display sets them */
+  --cl-tracking-wide: 0;
+  --cl-tracking-caps: 0;
+
+  /* space */
+  --cl-space-1: 4px;
+  --cl-space-2: 8px;
+  --cl-space-3: 12px;
+  --cl-space-4: 16px;
+  --cl-space-5: 20px;
+  --cl-space-6: 24px;
+  --cl-space-8: 32px;
+  --cl-space-10: 40px;
+  --cl-space-12: 48px;
+  --cl-space-16: 64px;
+
+  /* radius */
+  --cl-radius-xs: 5px;
+  --cl-radius-sm: 7px;
+  --cl-radius-md: 10px;
+  --cl-radius-lg: 12px;
+  --cl-radius-xl: 18px;
+  --cl-radius-full: 999px;
+
+  /* elevation */
+  --cl-hairline: 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+  --cl-shadow-1: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --cl-shadow-2: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.08);
+  --cl-shadow-3: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 12px 40px rgba(0, 0, 0, 0.18);
+
+  /* motion */
+  --cl-dur-fast: 120ms;
+  --cl-dur-base: 180ms;
+  --cl-dur-slow: 260ms;
+  --cl-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --cl-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* layout */
+  --cl-rail-w: 220px;
+  --cl-topbar-h: 52px;
+  --cl-status-h: 26px;
+  --cl-content-max: 1200px;
+  --cl-row-h: 28px;
+}
+
+/* Dark: the same vocabulary on macOS's dark surfaces. It applies when the
+   system is dark and nobody chose light (body.light), or when somebody chose
+   dark (body.dark, set by the app's own toggle). The two blocks are the same
+   list; keep them in step. Both set the tokens on :root as well as on body:
+   a page that aliases them on :root (--ink: var(--cl-ink)) resolves the
+   alias there, so with the tokens on body alone it kept the light ones. */
+@media (prefers-color-scheme: dark) {
+  :root:not(:has(> body.light)), body:not(.light) {
+    color-scheme: dark;
+    --cl-bg: #1e1e1e;
+    --cl-bg-soft: #262628;
+    --cl-bg-2: #323234;
+    --cl-bg-3: #3a3a3c;
+    --cl-bg-hover: #2f2f31;
+    --cl-bg-active: #3b2d5c;
+    --cl-bg-raised: #2c2c2e;
+    --cl-overlay: rgba(30, 30, 30, 0.78);
+    --cl-scrim: rgba(0, 0, 0, 0.5);
+
+    --cl-ink: #f5f5f7;
+    --cl-ink-soft: #d1d1d6;
+    --cl-ink-muted: #98989d;
+    --cl-ink-faint: #636366;
+
+    --cl-border: #38383a;
+    --cl-border-2: #48484a;
+    --cl-border-strong: #636366;
+
+    --cl-accent: #8b5cf6;
+    --cl-accent-hover: #9d74f7;
+    --cl-accent-soft: rgba(139, 92, 246, 0.22);
+    --cl-accent-ink: #b9a0ff;
+    --cl-focus: rgba(157, 116, 247, 0.55);
+
+    --cl-info: #409cff;
+    --cl-info-soft: rgba(10, 132, 255, 0.18);
+    --cl-ok: #30d158;
+    --cl-ok-soft: rgba(48, 209, 88, 0.16);
+    --cl-warn: #ffb340;
+    --cl-warn-soft: rgba(255, 159, 10, 0.16);
+    --cl-danger: #ff6961;
+    --cl-danger-soft: rgba(255, 69, 58, 0.16);
+
+    --cl-hairline: 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+    --cl-shadow-1: 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.3);
+    --cl-shadow-2: 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 4px 16px rgba(0, 0, 0, 0.35);
+    --cl-shadow-3: 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 12px 40px rgba(0, 0, 0, 0.5);
+  }
+}
+:root:has(> body.dark), body.dark {
+  color-scheme: dark;
+  --cl-bg: #1e1e1e;
+  --cl-bg-soft: #262628;
+  --cl-bg-2: #323234;
+  --cl-bg-3: #3a3a3c;
+  --cl-bg-hover: #2f2f31;
+  --cl-bg-active: #3b2d5c;
+  --cl-bg-raised: #2c2c2e;
+  --cl-overlay: rgba(30, 30, 30, 0.78);
+  --cl-scrim: rgba(0, 0, 0, 0.5);
+
+  --cl-ink: #f5f5f7;
+  --cl-ink-soft: #d1d1d6;
+  --cl-ink-muted: #98989d;
+  --cl-ink-faint: #636366;
+
+  --cl-border: #38383a;
+  --cl-border-2: #48484a;
+  --cl-border-strong: #636366;
+
+  --cl-accent: #8b5cf6;
+  --cl-accent-hover: #9d74f7;
+  --cl-accent-soft: rgba(139, 92, 246, 0.22);
+  --cl-accent-ink: #b9a0ff;
+  --cl-focus: rgba(157, 116, 247, 0.55);
+
+  --cl-info: #409cff;
+  --cl-info-soft: rgba(10, 132, 255, 0.18);
+  --cl-ok: #30d158;
+  --cl-ok-soft: rgba(48, 209, 88, 0.16);
+  --cl-warn: #ffb340;
+  --cl-warn-soft: rgba(255, 159, 10, 0.16);
+  --cl-danger: #ff6961;
+  --cl-danger-soft: rgba(255, 69, 58, 0.16);
+
+  --cl-hairline: 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+  --cl-shadow-1: 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --cl-shadow-2: 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 4px 16px rgba(0, 0, 0, 0.35);
+  --cl-shadow-3: 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* ── base ───────────────────────────────────────────────────────────────── */
+
+/* Only body paints: with html transparent, the body's colour reaches the
+   whole canvas, so a dark body is never framed by a light html. */
+body {
+  background: var(--cl-bg);
+}
+html, body {
+  color: var(--cl-ink);
+  font-family: var(--cl-font-ui);
+  font-size: var(--cl-text-base);
+  line-height: var(--cl-leading-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  margin: 0;
+  font-family: var(--cl-font-display);
+  font-weight: var(--cl-weight-semibold);
+  line-height: var(--cl-leading-tight);
+  color: var(--cl-ink);
+}
+h1 { letter-spacing: var(--cl-tracking-tight); }
+
+a { color: var(--cl-accent-ink); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, kbd, pre { font-family: var(--cl-font-mono); }
+
+button, input, select, textarea { font-family: inherit; }
+
+:focus-visible {
+  outline: 3px solid var(--cl-focus);
+  outline-offset: 1px;
+  border-radius: var(--cl-radius-xs);
+}
+
+::selection { background: var(--cl-accent-soft); }
+
+/* Thin overlay-style scrollbars, like macOS when a mouse is attached. */
+* { scrollbar-width: thin; scrollbar-color: var(--cl-border-strong) transparent; }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--cl-border-2);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--cl-border-strong); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Line icons (the sprite at the top of index.html). They take the colour of
+   the text around them, like SF Symbols. */
+.cl-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -3px;
+}
+
+/* ── components ─────────────────────────────────────────────────────────── */
+
+.cl-card {
+  background: var(--cl-bg-raised);
+  border: 0;
+  border-radius: var(--cl-radius-lg);
+  box-shadow: var(--cl-shadow-1);
+  padding: var(--cl-space-4);
+}
+
+.cl-card--flat { background: transparent; box-shadow: none; }
+.cl-card--raised { box-shadow: var(--cl-shadow-2); }
+
+/* Capsule buttons, as macOS 26 draws them. */
+.cl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--cl-radius-full);
+  background: var(--cl-bg-2);
+  color: var(--cl-ink);
+  font: inherit;
+  font-size: var(--cl-text-base);
+  font-weight: var(--cl-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--cl-dur-fast) var(--cl-ease),
+              color var(--cl-dur-fast) var(--cl-ease),
+              box-shadow var(--cl-dur-fast) var(--cl-ease);
+}
+.cl-btn:hover { background: var(--cl-bg-3); }
+.cl-btn:active { filter: brightness(0.94); }
+.cl-btn[disabled] { opacity: 0.4; cursor: default; }
+
+.cl-btn--primary { background: var(--cl-accent); color: var(--cl-on-accent); }
+.cl-btn--primary:hover { background: var(--cl-accent-hover); }
+
+.cl-btn--ghost { background: transparent; color: var(--cl-accent-ink); }
+.cl-btn--ghost:hover { background: var(--cl-accent-soft); }
+
+.cl-btn--danger { background: var(--cl-danger-soft); color: var(--cl-danger); }
+.cl-btn--danger:hover { background: var(--cl-danger-soft); filter: brightness(0.96); }
+
+.cl-btn--sm { height: 24px; padding: 0 10px; font-size: var(--cl-text-sm); }
+.cl-btn--lg { height: 36px; padding: 0 20px; font-size: var(--cl-text-md); }
+.cl-btn--block { width: 100%; }
+
+.cl-input,
+.cl-textarea,
+.cl-select {
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 10px;
+  background: var(--cl-bg);
+  border: 1px solid var(--cl-border-2);
+  border-radius: var(--cl-radius-sm);
+  color: var(--cl-ink);
+  font: inherit;
+  font-size: var(--cl-text-base);
+  transition: border-color var(--cl-dur-fast) var(--cl-ease),
+              box-shadow var(--cl-dur-fast) var(--cl-ease);
+}
+.cl-textarea { line-height: var(--cl-leading-normal); resize: vertical; }
+.cl-input::placeholder, .cl-textarea::placeholder { color: var(--cl-ink-faint); }
+.cl-input:focus, .cl-textarea:focus, .cl-select:focus {
+  outline: none;
+  border-color: var(--cl-accent);
+  box-shadow: 0 0 0 3px var(--cl-focus);
+}
+
+.cl-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cl-space-1);
+  padding: 1px 8px;
+  border-radius: var(--cl-radius-full);
+  font-size: var(--cl-text-xs);
+  font-weight: var(--cl-weight-medium);
+  background: var(--cl-bg-2);
+  color: var(--cl-ink-soft);
+  white-space: nowrap;
+}
+.cl-pill--ok { background: var(--cl-ok-soft); color: var(--cl-ok); }
+.cl-pill--warn { background: var(--cl-warn-soft); color: var(--cl-warn); }
+.cl-pill--danger { background: var(--cl-danger-soft); color: var(--cl-danger); }
+.cl-pill--info { background: var(--cl-info-soft); color: var(--cl-info); }
+.cl-pill--accent { background: var(--cl-accent-soft); color: var(--cl-accent-ink); }
+
+/* A section title, the way System Settings writes them: sentence case,
+   secondary colour, no tracking. */
+.cl-label {
+  font-size: var(--cl-text-sm);
+  font-weight: var(--cl-weight-semibold);
+  color: var(--cl-ink-muted);
+}
+
+.cl-kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: var(--cl-radius-xs);
+  background: var(--cl-bg-2);
+  box-shadow: inset 0 -1px 0 var(--cl-border-2);
+  color: var(--cl-ink-muted);
+  font-family: var(--cl-font-ui);
+  font-size: var(--cl-text-xs);
+  text-align: center;
+}
+
+.cl-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cl-space-2);
+  padding: var(--cl-space-12) var(--cl-space-6);
+  color: var(--cl-ink-muted);
+  text-align: center;
+}
+.cl-empty__title {
+  font-size: var(--cl-text-lg);
+  font-weight: var(--cl-weight-semibold);
+  color: var(--cl-ink);
+}
+
+.cl-skeleton {
+  background: linear-gradient(90deg, var(--cl-bg-2) 25%, var(--cl-bg-3) 37%, var(--cl-bg-2) 63%);
+  background-size: 400% 100%;
+  border-radius: var(--cl-radius-sm);
+  animation: cl-shimmer 1.4s ease infinite;
+}
+@keyframes cl-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.cl-stat { display: flex; flex-direction: column; gap: 2px; }
+.cl-stat__value {
+  font-family: var(--cl-font-display);
+  font-size: var(--cl-text-xl);
+  font-weight: var(--cl-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-ink);
+  line-height: var(--cl-leading-tight);
+}
+.cl-stat__label { font-size: var(--cl-text-xs); color: var(--cl-ink-muted); }
+
+.cl-table { width: 100%; border-collapse: collapse; font-size: var(--cl-text-base); }
+.cl-table th {
+  text-align: left;
+  padding: 6px var(--cl-space-3);
+  border-bottom: 1px solid var(--cl-border);
+  font-size: var(--cl-text-sm);
+  font-weight: var(--cl-weight-semibold);
+  color: var(--cl-ink-muted);
+}
+.cl-table td {
+  padding: 7px var(--cl-space-3);
+  border-bottom: 1px solid var(--cl-border);
+  color: var(--cl-ink);
+}
+.cl-table tbody tr:nth-child(even) td { background: var(--cl-bg-soft); }
+.cl-table tbody tr:hover td { background: var(--cl-bg-hover); }
+
+/* Grouped list: rows inside one rounded box, hairlines between them
+   (System Settings). */
+.cl-group {
+  background: var(--cl-bg-raised);
+  border-radius: var(--cl-radius-lg);
+  box-shadow: var(--cl-shadow-1);
+  overflow: hidden;
+}
+.cl-group__row {
+  display: flex;
+  align-items: center;
+  gap: var(--cl-space-3);
+  min-height: 40px;
+  padding: 8px var(--cl-space-4);
+  position: relative;
+}
+.cl-group__row + .cl-group__row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--cl-space-4);
+  right: 0;
+  border-top: 1px solid var(--cl-border);
+}
+
+/* Segmented control. */
+.cl-segmented {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--cl-radius-sm);
+  background: var(--cl-bg-2);
+}
+.cl-segmented > button {
+  height: 24px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--cl-ink-soft);
+  font: inherit;
+  font-size: var(--cl-text-base);
+  cursor: pointer;
+}
+.cl-segmented > button:hover { color: var(--cl-ink); }
+.cl-segmented > button.is-active,
+.cl-segmented > button[aria-selected="true"] {
+  background: var(--cl-bg-raised);
+  color: var(--cl-ink);
+  font-weight: var(--cl-weight-medium);
+  box-shadow: var(--cl-shadow-1);
+}
+
+.cl-toast {
+  display: flex;
+  gap: var(--cl-space-2);
+  padding: var(--cl-space-3) var(--cl-space-4);
+  border-radius: var(--cl-radius-md);
+  background: var(--cl-bg-raised);
+  box-shadow: var(--cl-shadow-3);
+  color: var(--cl-ink);
+  font-size: var(--cl-text-base);
+}
+.cl-toast--error { color: var(--cl-danger); }
+.cl-toast--ok { color: var(--cl-ok); }
+
+/* Messages the user can see (toast.js). alert() is invisible in the
+   desktop app, so every message goes here instead. Shaped like a macOS
+   notification banner. */
+#toast-root {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+  pointer-events: none;
+}
+#toast-root .toast {
+  pointer-events: auto;
+  background: var(--cl-overlay, rgba(255, 255, 255, 0.86));
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  color: var(--cl-ink, #1d1d1f);
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: var(--cl-shadow-3, 0 12px 40px rgba(0, 0, 0, 0.18));
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+#toast-root .toast.error { color: var(--cl-danger, #d70015); }
+
+.cl-divider { height: 1px; background: var(--cl-border); border: 0; margin: var(--cl-space-4) 0; }
+
+/* The app shell: sidebar on the left, status bar at the bottom. */
+.cl-shell {
+  display: grid;
+  grid-template-columns: var(--cl-rail-w) 1fr;
+  grid-template-rows: 1fr var(--cl-status-h);
+  height: 100vh;
+}
+
+.cl-rail {
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--cl-space-3) var(--cl-space-2);
+  background: var(--cl-bg-soft);
+  border-right: 1px solid var(--cl-border);
+}
+
+.cl-statusbar {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--cl-space-4);
+  padding: 0 var(--cl-space-4);
+  background: var(--cl-bg);
+  border-top: 1px solid var(--cl-border);
+  color: var(--cl-ink-muted);
+  font-size: var(--cl-text-xs);
+}
+
+.cl-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cl-space-3);
+  height: var(--cl-topbar-h);
+  padding: 0 var(--cl-space-5);
+  border-bottom: 1px solid var(--cl-border);
+  background: var(--cl-bg);
+}
+
+/* ── The app sidebar (app-nav.js) ──────────────────────────────────────
+   One source list for the whole app: the dashboard draws it in its grid,
+   every other page gets it fixed to the left edge (body.has-app-nav). */
+:root { --bar-w: 232px; }
+@media (max-width: 1200px) { :root { --bar-w: 212px; } }
+body:has(> .app-nav:not(.pinned)), .app:has(> .activity-bar:not(.pinned)) { --bar-w: 52px; }
+.cl-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+body.has-app-nav { padding-left: var(--bar-w); }
+.activity-bar.app-nav {
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  width: var(--bar-w);
+  z-index: 40;
+  font-family: var(--cl-font-ui);
+  line-height: 1.5;
+  text-align: left;
+}
+.activity-bar.app-nav * { box-sizing: border-box; }
+.activity-bar.app-nav:not(.pinned) { overflow: visible; }
+
+/* ── Sidebar (source list) ─────────────────────────────────────────── */
+.activity-bar {
+  grid-row: 1 / 3;
+  background: var(--cl-bg-soft);
+  border-right: 1px solid var(--cl-border);
+  display: flex; flex-direction: column;
+  align-items: stretch;
+  padding: 6px 10px 10px;
+  gap: 0;
+  overflow-y: auto;
+  overflow-x: visible;
+  position: relative;
+  min-width: 0;
+}
+.activity-bar-head {
+  display: flex;
+  justify-content: flex-end;
+  padding: 2px 0 4px;
+}
+.activity-bar-pin,
+.activity-bar-tool {
+  width: 28px; height: 28px;
+  background: transparent; border: 0;
+  color: var(--cl-ink-muted);
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+}
+.activity-bar-pin .cl-icon,
+.activity-bar-tool .cl-icon { width: 18px; height: 18px; vertical-align: 0; }
+.activity-bar-pin:hover,
+.activity-bar-tool:hover { background: var(--cl-bg-3); color: var(--cl-ink); }
+
+.activity-bar .nav-section {
+  position: relative;
+  display: flex; flex-direction: column;
+  padding: 0 0 10px;
+}
+.activity-bar .nav-section-label {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cl-ink-faint);
+  user-select: none;
+  white-space: nowrap;
+}
+.activity-bar .nav-section-label .cl-icon { display: none; }
+.activity-bar .nav-section-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.activity-bar .nav-section-items > button,
+.activity-bar .nav-section-items > a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--cl-ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+  cursor: default;
+  white-space: nowrap;
+}
+.activity-bar .nav-section-items > button .cl-icon,
+.activity-bar .nav-section-items > a .cl-icon {
+  width: 17px; height: 17px;
+  color: var(--cl-accent);
+  vertical-align: 0;
+}
+.activity-bar .nav-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.activity-bar .nav-section-items > button:hover,
+.activity-bar .nav-section-items > a:hover { background: var(--cl-bg-3); text-decoration: none; }
+.activity-bar .nav-section-items > button.active {
+  background: var(--cl-bg-active);
+  font-weight: 500;
+}
+.activity-bar .nav-section-items > a.nav-link--action { color: var(--cl-ink-muted); }
+.activity-bar .nav-section-items > a.nav-link--action .cl-icon { color: var(--cl-ink-muted); }
+/* Shortcuts live in the menu bar and the help sheet, not in the list. */
+.activity-bar .item-hint { display: none; }
+/* The count of things waiting, on a sidebar entry (approvals, Now,
+   Boardroom): grey like Mail's unread counts; red only when it blocks. */
+.activity-bar .nav-section-items .nav-badge {
+  display: none;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--cl-danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 17px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.activity-bar > .spacer { flex: 1; min-height: 8px; }
+.activity-bar > .activity-bar-tool { align-self: flex-start; }
+
+/* Collapsed: a narrow rail of section icons; each section's items open
+   beside it on hover, like a menu. */
+.activity-bar:not(.pinned) { padding: 6px 6px 10px; align-items: center; overflow: visible; }
+.activity-bar:not(.pinned) .activity-bar-head { justify-content: center; }
+.activity-bar:not(.pinned) .nav-section { padding: 2px 0; }
+.activity-bar:not(.pinned) .nav-section-label {
+  width: 36px; height: 32px;
+  justify-content: center;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--cl-ink-muted);
+}
+.activity-bar:not(.pinned) .nav-section-label span { display: none; }
+.activity-bar:not(.pinned) .nav-section-label .cl-icon { display: block; width: 18px; height: 18px; }
+.activity-bar:not(.pinned) .nav-section:hover .nav-section-label { background: var(--cl-bg-3); color: var(--cl-ink); }
+.activity-bar:not(.pinned) .nav-section-items {
+  display: none;
+  position: absolute;
+  left: calc(100% + 6px); top: 0;
+  min-width: 220px;
+  padding: 5px;
+  background: var(--cl-overlay);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  border-radius: 10px;
+  box-shadow: var(--cl-shadow-3);
+  z-index: 100;
+}
+.activity-bar:not(.pinned) .nav-section:hover .nav-section-items { display: flex; }
+.activity-bar:not(.pinned) .nav-section-items::before {
+  content: '';
+  position: absolute;
+  left: -8px; top: 0; bottom: 0;
+  width: 8px;
+}
+.activity-bar:not(.pinned) .nav-section-items > button.active,
+.activity-bar:not(.pinned) .nav-section-items > button:hover,
+.activity-bar:not(.pinned) .nav-section-items > a:hover { background: var(--cl-accent); color: #fff; }
+.activity-bar:not(.pinned) .nav-section-items > button:hover .cl-icon,
+.activity-bar:not(.pinned) .nav-section-items > a:hover .cl-icon { color: #fff; }
+.activity-bar:not(.pinned) > .activity-bar-tool { align-self: center; }
+
+.activity-bar-reopen {
+  position: fixed;
+  left: 10px; top: 10px;
+  z-index: 50;
+  width: 30px; height: 30px;
+  background: var(--cl-bg-raised);
+  border: 0; border-radius: 8px;
+  color: var(--cl-ink-muted);
+  cursor: pointer;
+  box-shadow: var(--cl-shadow-1);
+  display: none;
+  align-items: center; justify-content: center;
+}
+.activity-bar-reopen:hover { color: var(--cl-ink); }
+.app.no-bar .activity-bar-reopen { display: flex; }
+
+
+/* ── Pages inside the app window (body.has-app-nav) ────────────────────
+   The pages that predate the sidebar each drew their own header and boxes.
+   These rules make them read as one app: titles in SF Display, boxes as
+   grouped boxes, and no second row of links repeating the sidebar. */
+body.has-app-nav h1 {
+  font-family: var(--cl-font-display);
+  font-weight: var(--cl-weight-bold);
+  letter-spacing: var(--cl-tracking-tight);
+}
+body.has-app-nav .card {
+  background: var(--cl-bg-raised);
+  border: 0;
+  border-radius: var(--cl-radius-lg);
+  box-shadow: var(--cl-shadow-1);
+}
+body.has-app-nav a.is-in-sidebar { display: none; }
+/* /chat: the sidebar already leads back to the dashboard. */
+
+body.has-app-nav .rail .rail-top { display: none; }
+/* An entry the app hides (the in-app browser outside the desktop app, the
+   install button when there is nothing to install) stays hidden: the
+   display rules above would otherwise win over the hidden attribute. */
+.activity-bar [hidden] { display: none !important; }

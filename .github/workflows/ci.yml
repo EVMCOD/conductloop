@@ -1,0 +1,169 @@
+name: CI
+
+# CI runs on every change (there is no paths-ignore, docs-only changes
+# included), a newer push cancels the older run of the same branch/PR, and the
+# Rust/Tauri jobs live in desktop.yml, which only runs when desktop/ changes.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # ubuntu-latest is 26.04; apt for ffmpeg has fetched at ~50 kB/s (~22 min)
+    # and burned the old 30m budget mid-pytest (run 42025737575). Keep the
+    # floating label (workflows_guard) but give the suite headroom.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dev dependencies
+        # requirements-dev.txt pulls the lean core runtime + ruff/mypy/pytest/
+        # pytest-cov. requests is needed to collect the live-worker test module.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Updater pubkey matches pinned key id — blocking
+        # The app only accepts updates signed by the key embedded in
+        # tauri.conf.json. desktop/UPDATER_KEY_ID pins that key id (public, no
+        # secrets); a drift here means installed apps can no longer update.
+        run: python scripts/check_updater_pubkey.py --expected-file desktop/UPDATER_KEY_ID
+
+      - name: Lint (ruff) — blocking
+        run: ruff check ops_dashboard tests
+
+      - name: Security lint (ruff S / bandit rules) — advisory
+        continue-on-error: true
+        # S608 audited safe (parameterized values, whitelisted structure — see
+        # tests/test_sql_injection.py); S110 is idempotent-ALTER try/except-pass.
+        run: ruff check --select S --ignore S608,S110 ops_dashboard
+
+      - name: Type check (mypy) — advisory (whole tree)
+        continue-on-error: true
+        run: mypy ops_dashboard
+
+      - name: Type check (mypy) — blocking (typed-module ratchet)
+        # These modules are type-clean and must stay clean. The list lives in
+        # scripts/mypy-ratchet.txt (one path per line, no comments), shared with
+        # scripts/verify.sh so CI and the local check cannot diverge. Add modules
+        # there as they are annotated — the strict set grows over time toward the
+        # goal of a blocking whole-tree check.
+        run: mypy --follow-imports=silent $(cat scripts/mypy-ratchet.txt)
+
+      - name: Evals (offline) — blocking
+        # Replays synthetic cassettes through brain.ask / db.search with the
+        # network blocked and no keys. Fails if any required case fails or a
+        # score drops > 5 points vs evals/baseline.json (D10). Recording is
+        # maintainer-only and refuses to run here (D9).
+        run: python -m ops_dashboard.evals run --report evals-report.json
+
+      - name: Dependency vulnerability scan (pip-audit) — blocking
+        # Audits the environment installed above (runtime + dev deps) against
+        # the PyPI advisory database. --strict also fails if a package cannot be
+        # audited. A vulnerability with no fix yet is the only reason to add an
+        # exception: `--ignore-vuln <ID>` here, with the ID, the package and a
+        # reason in a comment, and a date to look at it again.
+        run: pip-audit --strict
+
+      - name: Browser test (headless Chrome) — "Conectores" page
+        # Runs before the main pytest step and uninstalls Playwright afterwards,
+        # so the main run keeps skipping every browser test (no change for the
+        # other browser tests). Uses the runner's preinstalled Google Chrome; the
+        # test only talks to its in-process server on 127.0.0.1.
+        env:
+          CONNECTORS_BROWSER_REQUIRED: "1"
+        run: |
+          pip install "playwright>=1.47"
+          pytest -q -p no:cacheprovider tests/test_connectors_ui_browser.py tests/test_token_ui_browser.py
+          pip uninstall -y playwright
+
+      - name: Package builds (pip install .)
+        run: pip install . --no-deps
+
+      - name: Install bubblewrap and ffmpeg (real sandbox and real mixing)
+        # apt on the hosted runner has hung for 15-30 minutes several times;
+        # fail this step fast so a re-run is the obvious next move.
+        timeout-minutes: 10
+        # tests/test_sessions_code_tools.py proves network/write isolation for
+        # real; CONDUCTLOOP_REQUIRE_SANDBOX makes it fail instead of skipping.
+        # ffmpeg is the same idea for the media pipeline: the narration and
+        # the assembly are proven with the real tool, not with a fake.
+        run: |
+          # The runner's default mirror does not carry the newest Ubuntu yet
+          # (ubuntu-latest moved to 26.04 and the Azure mirror answers
+          # "Ign: resolute InRelease") and the canonical ones are not always
+          # resolvable from the runner, so apt gets three chances: the
+          # kernel.org mirror first (it carries the new release), then the
+          # canonical one, then the one that is configured. The packages are
+          # still verified with the image's Ubuntu keys, whichever answers.
+          #
+          # The image keeps its mirror in two places: the sources point at
+          # "mirror+file:/etc/apt/apt-mirrors.txt" and that file holds the
+          # "Uri:" line. Both are rewritten, or the change would not reach
+          # apt at all.
+          try_mirror() {
+            for f in /etc/apt/sources.list.d/*.sources /etc/apt/sources.list; do
+              [ -f "$f" ] || continue
+              sudo sed -i -E "s|mirror[+]file:[^ ]+|$1|g; s|https?://[^/ ]+/ubuntu|$1|g" "$f"
+            done
+            if [ -f /etc/apt/apt-mirrors.txt ]; then
+              sudo sed -i -E "s|https?://[^/ ]+/ubuntu|$1|g" /etc/apt/apt-mirrors.txt
+            fi
+            sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=15 \
+              -o Acquire::Languages=none update -q &&
+            sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=15 \
+              install -y -q --no-install-recommends bubblewrap ffmpeg
+          }
+          for mirror in "http://mirrors.edge.kernel.org/ubuntu" \
+                        "http://archive.ubuntu.com/ubuntu" \
+                        "http://azure.archive.ubuntu.com/ubuntu"; do
+            echo "::group::apt from $mirror"
+            if try_mirror "$mirror"; then
+              echo "::endgroup::"
+              break
+            fi
+            echo "::endgroup::"
+            echo "::warning::$mirror did not answer"
+          done
+          command -v bwrap >/dev/null || { echo "::error::bubblewrap is missing"; exit 1; }
+          command -v ffmpeg >/dev/null || { echo "::error::ffmpeg is missing"; exit 1; }
+          command -v ffprobe >/dev/null || { echo "::error::ffprobe is missing"; exit 1; }
+          # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          bwrap --unshare-net --ro-bind / / --dev /dev --proc /proc true
+          ffmpeg -version | head -1
+
+      - name: Test (pytest + coverage)
+        env:
+          CONDUCTLOOP_REQUIRE_SANDBOX: "1"
+          CONDUCTLOOP_REQUIRE_FFMPEG: "1"
+        # Floor prevents regressions. Measured 66% locally (2026-10-28, without
+        # the Chrome tests and the real sandbox/ffmpeg ones, which CI adds), so 60
+        # leaves a margin; raise it as coverage grows, never lower it to pass.
+        run: pytest -m "not live" --cov=ops_dashboard --cov-report=term-missing:skip-covered --cov-fail-under=60
+
+      - name: Browser tests (headless Chrome) — every tests/test_*ui_browser.py
+        # Separate step so the main pytest run keeps skipping browser tests.
+        # Uses the runner's preinstalled Google Chrome (no browser download);
+        # the tests only talk to their in-process server on 127.0.0.1.
+        env:
+          LEARNING_BROWSER_REQUIRED: "1"
+          CONNECTORS_BROWSER_REQUIRED: "1"
+        run: |
+          pip install "playwright>=1.47"
+          pytest -q -p no:cacheprovider tests/test_*ui_browser.py

@@ -1,0 +1,110 @@
+name: Windows (compile and tests)
+
+# Windows is NOT a supported platform yet (docs/PORTABILITY.md). This workflow
+# only answers two questions on every change that could affect it, so a Windows
+# regression is seen before anyone ships Windows:
+#   1. does the Tauri wrapper still COMPILE for Windows (cargo check), and
+#   2. does the Windows-safe part of the Python suite still pass on Windows.
+# It builds no installer, signs nothing, publishes nothing, uploads no artifact
+# and uses no secret. It is not a required check (branch protection does not
+# list it), so a red run here does not block a merge; look at it when it is red.
+# Runs only on GitHub-hosted runners (this repo is public); never a
+# self-hosted one (tests/test_workflows_guard.py).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: &paths
+      - "ops_dashboard/**"
+      - "tests/**"
+      - "desktop/**"
+      - "requirements*.txt"
+      - "pyproject.toml"
+      - ".github/workflows/windows.yml"
+  pull_request:
+    paths: *paths
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-python:
+    # The Python suite on Windows. Tests that need something Windows does not
+    # have (bubblewrap/seatbelt, bash scripts, AF_UNIX agent sockets, POSIX
+    # permission bits) are skipped with an explicit reason: see
+    # tests/windows_skips.py, which tests/conftest.py applies on win32 only.
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      # The sidecar will be started with UTF-8 mode on Windows (plan item 8);
+      # the CI matches that. Encoding problems of the default cp1252 are not
+      # what this job looks for.
+      PYTHONUTF8: "1"
+    steps:
+      - name: Keep line endings as they are in the repository
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Test (pytest, Windows-safe subset)
+        # Not run here: the live license worker, the two headless-Chrome JS
+        # tests and the *_ui_browser tests (they need Chrome/Playwright and
+        # run in ci.yml), and no coverage floor (ci.yml owns it).
+        run: >
+          pytest -m "not live" -p no:cacheprovider -q -ra
+          --ignore=tests/test_license_worker.py
+          --ignore=tests/test_browser_visibility_js.py
+          --ignore=tests/test_desktop_nav_js.py
+          --ignore-glob="tests/test_*ui_browser.py"
+
+  windows-rust:
+    # Compile-only: cargo check of the Tauri wrapper for the Windows target
+    # (this is where a missing #[cfg(windows)] branch shows up) and the tests of
+    # the pure-Rust URL policy. The wrapper's own tests are not run: they would
+    # link the WebView2 loader, and nothing here launches the app.
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Placeholder sidecar (tauri-build checks externalBin exists)
+        run: |
+          mkdir -p desktop/src-tauri/binaries
+          triple="$(rustc -vV | sed -n 's/host: //p' | tr -d '\r')"
+          : > "desktop/src-tauri/binaries/conductloop-server-${triple}.exe"
+
+      - name: cargo check (locked)
+        working-directory: desktop/src-tauri
+        run: cargo check --locked --all-targets
+
+      - name: cargo test (url-policy)
+        run: cargo test --manifest-path desktop/url-policy/Cargo.toml
