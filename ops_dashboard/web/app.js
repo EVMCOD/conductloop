@@ -5725,6 +5725,11 @@ async function renderTemplatesView() {
 // Chat: POST /api/members/{id}/chat?stream=1 (SSE)
 //
 var _agentSelectedId = null;
+var _agentTreeScroll = null;  // where the tree diagram was scrolled to, kept across re-renders
+var _agentTreeZoom = (function() {
+  try { var z = parseFloat(localStorage.getItem('cl.agentTree.zoom')); return z > 0 ? z : 1; } catch (e) { return 1; }
+})();
+var ORG_SLOT = 150, ORG_LEVEL = 200;  // tree diagram: column width, row height
 var _agentChatHistory = {};   // member_id -> [{role, content}]
 var _agentEditing = false;
 var _agentTab = 'edit';       // 'edit' | 'chat' | 'activity'
@@ -5786,14 +5791,22 @@ function renderAgentsMount(mount, data) {
   html += '<h1>' + esc(tr('dashboard.agents_dashboard_title')) + '</h1>';
   html += '<span class="agents-stats">' + esc(tr('dashboard.agents_stats', { members: stats.total_members, ai: stats.ai_agents, humans: stats.humans })) + '</span>';
   html += '<div class="spacer"></div>';
+  html += '<div class="org-zoom" role="group" aria-label="Zoom">'
+    + '<button class="ui-btn is-quiet" data-org-zoom="out" title="' + esc(tr('dashboard.zoom_out')) + '" aria-label="' + esc(tr('dashboard.zoom_out')) + '">−</button>'
+    + '<button class="ui-btn is-quiet" data-org-zoom="fit" title="' + esc(tr('dashboard.zoom_fit')) + '">' + esc(tr('dashboard.zoom_fit')) + '</button>'
+    + '<button class="ui-btn is-quiet" data-org-zoom="in" title="' + esc(tr('dashboard.zoom_in')) + '" aria-label="' + esc(tr('dashboard.zoom_in')) + '">+</button>'
+    + '</div>';
   html += '<button id="agent-edit-toggle" class="ui-btn' + (_agentEditing ? ' is-on' : '') + '">' + esc(tr(_agentEditing ? 'dashboard.edit_mode_on' : 'dashboard.edit_mode')) + '</button>';
   html += '<button id="agent-add-btn" class="ui-btn is-primary">' + esc(tr('dashboard.new_agent')) + '</button>';
   html += '</div>';
 
-  // Two columns: the organisation as a tree (who reports to whom), the
-  // selected agent beside it.
-  html += '<div class="agents-layout">';
-  html += '<div class="agents-tree org-tree" role="tree">';
+  // The organisation as a tree diagram, top-down: each manager, and in the
+  // row below, joined by straight lines, whoever reports to it. The selected
+  // agent's card opens beside it.
+  html += '<div class="agents-layout' + (_agentSelectedId ? ' has-detail' : '') + '">';
+  html += '<div class="org-col">';
+  html += '<div class="org-wrap" id="org-wrap">';
+  if (!_agentSelectedId) html += '<p class="org-hint">' + esc(tr('dashboard.select_agent')) + '</p>';
 
   // Every member once, with where it sits (team, project) for its subtitle.
   var byId = {};
@@ -5831,9 +5844,18 @@ function renderAgentsMount(mount, data) {
   function isCeo(m) {
     return !!m.is_ceo && (m.level === 'ceo' || String(m.role || '').toLowerCase() === 'ceo');
   }
+  // "vp_mobile" reads "VP Mobile"; left out when the name already says it
+  // ("Mira (CMO)"), and then the project or team says where it sits.
+  function subtitle(m) {
+    var words = String(m.role || '').split(/[_\s]+/).filter(Boolean);
+    var role = words.map(function(w) { return w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
+    var lowName = String(m.name || '').toLowerCase();
+    if (words.length && words.every(function(w) { return lowName.indexOf(w.toLowerCase()) >= 0; })) role = '';
+    return role || m._project || m._team || '';
+  }
 
-  // The tops of the tree: whoever has people under them, or leads (a CEO);
-  // the biggest organisation first, so the Holding CEO opens the list.
+  // The tops: whoever has people under them, or leads (a CEO); the biggest
+  // organisation first, so the Holding CEO comes first.
   var roots = Object.keys(byId).map(function(id) { return byId[id]; })
     .filter(function(m) { return m.manager_id == null || !byId[m.manager_id]; });
   var tops = roots.filter(function(m) { return children[m.id] || isCeo(m); })
@@ -5850,64 +5872,129 @@ function renderAgentsMount(mount, data) {
   var collapsed = {};
   try { collapsed = JSON.parse(localStorage.getItem('cl.agentTree.collapsed') || '{}') || {}; } catch (e) { collapsed = {}; }
 
-  function renderBranch(m, path) {
-    path = path || {};
-    var kids = path[m.id] ? [] : sortMembers((children[m.id] || []).slice());
-    var open = kids.length && !collapsed[m.id];
-    var out = '<li role="treeitem"' + (kids.length ? ' aria-expanded="' + (open ? 'true' : 'false') + '"' : '') + '>';
-    out += renderMember(m, kids.length, !!open);
-    if (open) {
-      var next = Object.assign({}, path); next[m.id] = true;
-      out += '<ul class="org-branch" role="group">' + kids.map(function(k) { return renderBranch(k, next); }).join('') + '</ul>';
+  // Layout: every leaf takes a column, left to right; a manager sits centred
+  // over its first and last report; one row per level.
+  var SLOT = ORG_SLOT, LEVEL = ORG_LEVEL, PAD = 24, GAP = 56;
+  var pos = {}, edges = [], nextX = PAD, maxDepth = 0;
+  function place(m, depth, path) {
+    var kids = (path[m.id] || collapsed[m.id]) ? [] : sortMembers((children[m.id] || []).slice());
+    maxDepth = Math.max(maxDepth, depth);
+    if (!kids.length) {
+      pos[m.id] = { x: nextX + SLOT / 2, depth: depth };
+      nextX += SLOT;
+      return;
     }
-    return out + '</li>';
+    var next = Object.assign({}, path); next[m.id] = true;
+    kids.forEach(function(k) { place(k, depth + 1, next); edges.push([m.id, k.id]); });
+    pos[m.id] = { x: (pos[kids[0].id].x + pos[kids[kids.length - 1].id].x) / 2, depth: depth };
   }
+  tops.forEach(function(t, i) { if (i) nextX += GAP; place(t, 0, {}); });
+  var width = nextX + PAD, height = (maxDepth + 1) * LEVEL + 24;
 
-  function renderMember(m, kidCount, open) {
+  html += '<div class="org-canvas" id="org-canvas" role="tree" data-w="' + width + '" data-h="' + height + '">';
+  // The lines are drawn once the nodes are in place (their labels have a
+  // height only then): from under each manager's label down to each report.
+  html += '<svg class="org-lines" width="' + width + '" height="' + height + '" aria-hidden="true"></svg>';
+  Object.keys(pos).forEach(function(id) {
+    var m = byId[id], p = pos[id];
+    var kids = (children[id] || []).length;
     var status = m.status === 'active' ? ' is-active' : m.status === 'paused' ? ' is-paused' : '';
-    var selected = _agentSelectedId === m.id;
-    var where = m._project || m._team;
-    // "vp_mobile" reads "VP Mobile"; left out when the name already says it ("Mira (CMO)").
-    var words = String(m.role || '').split(/[_\s]+/).filter(Boolean);
-    var role = words.map(function(w) { return w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
-    var lowName = String(m.name || '').toLowerCase();
-    if (words.length && words.every(function(w) { return lowName.indexOf(w.toLowerCase()) >= 0; })) role = '';
-    var sub = [role, where].filter(Boolean).join(' · ');
-    var toggle = kidCount
-      ? '<button class="org-toggle' + (open ? ' is-open' : '') + '" data-org-toggle="' + m.id + '" aria-label="' +
-        esc(tr(open ? 'dashboard.tree_collapse' : 'dashboard.tree_expand')) + '"><svg class="cl-icon"><use href="#i-chevron"/></svg></button>'
-      : '<span class="org-toggle is-leaf" aria-hidden="true"></span>';
-    return '<div class="agents-member' + (selected ? ' is-selected' : '') + '" data-member-id="' + m.id + '" data-member-name="' + esc(m.name) + '" data-member-type="' + esc(m.type) + '" ' +
-      'draggable="' + (_agentEditing ? 'true' : 'false') + '">'
-      + toggle
-      + agentAvatar(m.type)
-      + '<div class="agents-member-body"><div class="agents-member-name">' + esc(m.name) + '</div>'
-      + (sub ? '<div class="agents-member-role">' + esc(sub) + '</div>' : '') + '</div>'
-      + (kidCount ? '<span class="org-count" title="' + esc(tr('dashboard.tree_reports', { n: teamSize(m.id) })) + '">' + teamSize(m.id) + '</span>' : '')
-      + '<span class="agents-status' + status + '" title="' + esc(m.status || '') + '"></span>'
+    var folded = kids && collapsed[id];
+    var sub = subtitle(m);
+    html += '<div class="org-node' + (_agentSelectedId === m.id ? ' is-selected' : '') + (tops.length && +id === tops[0].id ? ' is-first' : '') + '"'
+      + ' data-member-id="' + m.id + '" data-member-name="' + esc(m.name) + '" data-member-type="' + esc(m.type) + '"'
+      + ' data-x="' + (p.x - SLOT / 2) + '" data-y="' + (p.depth * LEVEL + 12) + '"'
+      + ' draggable="' + (_agentEditing ? 'true' : 'false') + '" role="treeitem" aria-level="' + (p.depth + 1) + '">'
+      + '<span class="org-dot">' + agentAvatar(m.type) + '<span class="agents-status' + status + '" title="' + esc(m.status || '') + '"></span></span>'
+      + '<span class="org-name">' + esc(m.name) + '</span>'
+      + (sub ? '<span class="org-sub">' + esc(sub) + '</span>' : '')
+      + (kids ? '<button class="org-fold' + (folded ? ' is-folded' : '') + '" data-org-toggle="' + id + '" title="' + esc(tr('dashboard.tree_reports', { n: teamSize(+id) })) + '" aria-label="' +
+          esc(tr(folded ? 'dashboard.tree_expand' : 'dashboard.tree_collapse')) + '">' + (folded ? '+' + teamSize(+id) : '−') + '</button>' : '')
       + '</div>';
-  }
+  });
+  html += '</div>';  // .org-canvas
+  html += '</div>';  // .org-wrap
 
-  html += '<ul class="org-roots" role="group">' + tops.map(function(m) { return renderBranch(m); }).join('') + '</ul>';
+  // Whoever has no manager, outside the scrolling diagram so it never scrolls away.
   if (loose.length) {
     html += '<div class="org-loose" data-org-unassign="1">';
     html += '<div class="agents-project-name">' + esc(tr('dashboard.tree_unassigned')) + '</div>';
     html += '<div class="org-loose-hint">' + esc(tr('dashboard.tree_unassigned_hint')) + '</div>';
-    html += '<ul class="org-roots" role="group">' + loose.map(function(m) { return '<li role="treeitem">' + renderMember(m, 0, false) + '</li>'; }).join('') + '</ul>';
+    html += '<div class="org-chips">' + loose.map(function(m) {
+      return '<span class="org-chip' + (_agentSelectedId === m.id ? ' is-selected' : '') + '" data-member-id="' + m.id + '" data-member-name="' + esc(m.name) + '" data-member-type="' + esc(m.type) + '" draggable="' + (_agentEditing ? 'true' : 'false') + '">'
+        + agentAvatar(m.type) + '<span>' + esc(m.name) + '</span></span>';
+    }).join('') + '</div>';
     html += '</div>';
   }
-  html += '</div>';  // .agents-tree
+  html += '</div>';  // .org-col
 
-  // RIGHT: Detail panel
-  html += '<div id="agent-detail-panel" class="agents-detail">';
-  html += renderAgentDetail();
-  html += '</div>';
+  // The selected agent's card, beside the tree.
+  if (_agentSelectedId) {
+    html += '<div id="agent-detail-panel" class="agents-detail">';
+    html += renderAgentDetail();
+    html += '</div>';
+  }
 
   html += '</div>';  // .agents-layout
   html += '</div>';  // .md-view
 
   mount.innerHTML = html;
   renderOutline();
+
+  // Place the diagram. Positions go through the CSSOM (allowed by the page's
+  // style policy), not style attributes.
+  var canvas = document.getElementById('org-canvas');
+  if (canvas) {
+    canvas.style.width = canvas.dataset.w + 'px';
+    canvas.style.height = canvas.dataset.h + 'px';
+    var nodeOf = {};
+    canvas.querySelectorAll('.org-node').forEach(function(n) {
+      n.style.left = n.dataset.x + 'px';
+      n.style.top = n.dataset.y + 'px';
+      nodeOf[n.dataset.memberId] = n;
+    });
+    var svg = canvas.querySelector('.org-lines');
+    edges.forEach(function(e) {
+      var from = nodeOf[e[0]], to = nodeOf[e[1]];
+      if (!from || !to) return;
+      var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', parseFloat(from.dataset.x) + ORG_SLOT / 2);
+      line.setAttribute('y1', parseFloat(from.dataset.y) + from.offsetHeight + 6);
+      line.setAttribute('x2', parseFloat(to.dataset.x) + ORG_SLOT / 2);
+      line.setAttribute('y2', parseFloat(to.dataset.y) - 6);
+      svg.appendChild(line);
+    });
+    var wrap = document.getElementById('org-wrap');
+    // Zoom scales the whole diagram, lines included (CSS zoom keeps the
+    // scroll area in step with it).
+    canvas.style.zoom = _agentTreeZoom;
+    function centreFirst() {
+      var top = canvas.querySelector('.org-node.is-first');
+      if (top) wrap.scrollLeft = Math.max(0, (parseFloat(top.dataset.x) + ORG_SLOT / 2) * _agentTreeZoom - wrap.clientWidth / 2);
+    }
+    if (_agentTreeScroll) {
+      wrap.scrollLeft = _agentTreeScroll.left;
+      wrap.scrollTop = _agentTreeScroll.top;
+    } else {
+      centreFirst();  // first visit: the first top (the Holding CEO) in the middle
+    }
+    wrap.addEventListener('scroll', function() {
+      _agentTreeScroll = { left: wrap.scrollLeft, top: wrap.scrollTop };
+    });
+    mount.querySelectorAll('[data-org-zoom]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var w = parseFloat(canvas.dataset.w) || 1;
+        var z = _agentTreeZoom;
+        if (btn.dataset.orgZoom === 'in') z = z * 1.2;
+        else if (btn.dataset.orgZoom === 'out') z = z / 1.2;
+        else z = (wrap.clientWidth - 8) / w;   // fit: the whole tree across the panel
+        _agentTreeZoom = Math.round(Math.min(1.5, Math.max(0.3, z)) * 100) / 100;
+        try { localStorage.setItem('cl.agentTree.zoom', String(_agentTreeZoom)); } catch (e) {}
+        canvas.style.zoom = _agentTreeZoom;
+        if (btn.dataset.orgZoom === 'fit') wrap.scrollLeft = 0; else centreFirst();
+      });
+    });
+  }
 
   // Click member → select + show detail. In edit mode a member can be
   // dragged onto another to change who it reports to.
@@ -6030,6 +6117,7 @@ function renderAgentDetail() {
   html += '<div class="agent-role">' + esc(m.role || '—') + (m.model ? ' · ' + esc(m.model) : '') + '</div></div>';
   html += '<button data-agent-del="' + m.id + '" class="ui-btn is-danger">' + esc(tr('dashboard.delete')) + '</button>';
   html += '<button data-agent-wake-btn="' + m.id + '" class="ui-btn is-primary">' + esc(tr('dashboard.wake_now')) + '</button>';
+  html += '<button data-agent-close class="ui-btn is-quiet" aria-label="' + esc(tr('dashboard.close')) + '" title="' + esc(tr('dashboard.close')) + '">✕</button>';
   html += '</div>';
 
   // Tabs as a segmented control
@@ -6382,6 +6470,13 @@ function renderLogEntry(r) {
 }
 
 async function wireAgentDetail() {
+  // Close the card: back to the whole tree.
+  var closeBtn = document.querySelector('[data-agent-close]');
+  if (closeBtn) closeBtn.addEventListener('click', function() {
+    _agentSelectedId = null;
+    _agentSelectedMember = null;
+    renderAgentsView();
+  });
   // Tab switching
   document.querySelectorAll('.agent-tabs [data-tab]').forEach(function(b) {
     b.addEventListener('click', function() {

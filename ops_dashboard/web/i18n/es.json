@@ -981,7 +981,7 @@
     "enable_edit_mode": "activa el modo edición para cambiar de jefe",
     "confirm_reparent": "¿Hacer que {source} reporte a {target}?",
     "reparent_failed": "no se pudo cambiar de jefe",
-    "select_agent": "Elige un agente de la lista o pulsa «Nuevo agente» para crear uno.",
+    "select_agent": "Pulsa un agente del árbol para abrir su ficha, o «Nuevo agente» para crear uno.",
     "loading_agent": "cargando el agente…",
     "tab_edit": "Editar",
     "tab_chat": "Chat",
@@ -1057,7 +1057,11 @@
     "tree_unassigned": "Sin línea de mando",
     "tree_unassigned_hint": "Activa Editar y arrastra cada uno sobre la persona de la que depende.",
     "confirm_unassign": "¿Sacar a {source} de la línea de mando?",
-    "reparent_loop": "Eso crearía un bucle: ya está por encima en el árbol."
+    "reparent_loop": "Eso crearía un bucle: ya está por encima en el árbol.",
+    "close": "Cerrar",
+    "zoom_in": "Acercar",
+    "zoom_out": "Alejar",
+    "zoom_fit": "Ajustar"
   },
   "skills": {
     "body": "Cuerpo",

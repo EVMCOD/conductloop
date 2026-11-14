@@ -450,7 +450,7 @@
     h3 { font-size: 13px !important; }
     .card div[style*="font-size:13px"] { font-size: 12px !important; }
     button { min-height: 36px; }
-    .agents-layout { grid-template-columns: 1fr; }
+    .agents-layout, .agents-layout.has-detail { grid-template-columns: 1fr; }
   }
   @media (max-width: 480px) {
     [style*="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))"],
@@ -587,15 +587,9 @@
   .ui-btn.is-quiet { background: transparent; color: var(--muted); }
   .ui-btn.is-quiet:hover { background: var(--cl-bg-2); color: var(--ink); }
 
-  .md-view.agents-view { max-width: 1120px; }
-  .agents-layout { display: grid; grid-template-columns: minmax(340px, 40%) 1fr; gap: 20px; align-items: start; }
-  .agents-tree {
-    background: var(--cl-bg-soft);
-    border-radius: 12px;
-    padding: 8px;
-    max-height: calc(100vh - 210px);
-    overflow-y: auto;
-  }
+  .md-view.agents-view { max-width: none; }
+  .agents-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+  .agents-layout.has-detail { grid-template-columns: minmax(0, 1fr) minmax(360px, 440px); }
   .agents-project + .agents-project { margin-top: 10px; }
   .agents-project-name { font-size: 12px; font-weight: 600; color: var(--muted); padding: 8px 8px 4px; }
   .agents-team { margin: 0 0 6px; }
@@ -615,42 +609,66 @@
   .agents-member[draggable="true"] { cursor: grab; }
   .agents-member-body { flex: 1; min-width: 0; }
 
-  /* The organisation as a tree: each manager, and under it, joined by
-     hairlines, whoever reports to it. */
-  .org-roots, .org-branch { list-style: none; margin: 0; padding: 0; }
-  .org-roots > li + li { margin-top: 2px; }
-  .org-branch { position: relative; margin-left: 16px; padding-left: 12px; }
-  .org-branch > li { position: relative; }
-  .org-branch > li::before {            /* the line down the branch */
-    content: ""; position: absolute; left: -12px; top: 0; bottom: 0;
-    border-left: 1px solid var(--cl-border);
+  /* The organisation as a tree diagram, top-down (positions set by app.js
+     through the CSSOM): a circle per member, its name under it, and straight
+     lines from each manager down to whoever reports to it. */
+  .org-wrap {
+    position: relative; min-width: 0;
+    background: var(--cl-bg-soft); border-radius: 12px;
+    overflow: auto; max-height: calc(100vh - 290px);
+    padding: 8px 0 16px;
   }
-  .org-branch > li:last-child::before { bottom: auto; height: 20px; }
-  .org-branch > li::after {             /* the line into the member */
-    content: ""; position: absolute; left: -12px; top: 20px; width: 10px;
-    border-top: 1px solid var(--cl-border);
+  .org-hint { margin: 6px 16px 0; font-size: 12px; color: var(--muted); }
+  .org-canvas { position: relative; margin: 0 auto; }
+  .org-lines { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+  .org-lines line { stroke: var(--cl-ink-faint); stroke-width: 1.25; stroke-linecap: round; }
+  .org-node {
+    position: absolute; width: 150px; box-sizing: border-box; padding: 0 8px;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    cursor: pointer;
   }
-  .agents-member .org-toggle {
-    width: 18px; height: 18px; flex-shrink: 0; margin-right: -4px;
-    display: inline-flex; align-items: center; justify-content: center;
-    border: 0; padding: 0; border-radius: 5px; background: transparent;
-    color: var(--muted); cursor: pointer;
+  .org-node[draggable="true"] { cursor: grab; }
+  .org-dot { position: relative; width: 44px; height: 44px; }
+  .org-dot .agent-avatar { width: 44px; height: 44px; box-shadow: 0 0 0 4px var(--cl-bg-soft); transition: box-shadow 0.15s ease; }
+  .org-dot .agent-avatar .cl-icon { width: 20px; height: 20px; }
+  .org-dot .agents-status { position: absolute; right: 1px; bottom: 1px; box-shadow: 0 0 0 2px var(--cl-bg-soft); }
+  .org-node:hover .agent-avatar { box-shadow: 0 0 0 4px var(--cl-bg-soft), 0 0 0 6px var(--cl-accent-soft); }
+  .org-node.is-selected .agent-avatar { background: var(--cl-accent); color: #fff; box-shadow: 0 0 0 4px var(--cl-bg-soft), 0 0 0 6px var(--cl-accent); }
+  .org-node.is-drop .agent-avatar { box-shadow: 0 0 0 4px var(--cl-bg-soft), 0 0 0 6px var(--cl-accent); }
+  .org-name {
+    margin-top: 7px; max-width: 100%;
+    font-size: 12.5px; font-weight: 500; line-height: 1.25; color: var(--ink);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   }
-  .agents-member .org-toggle:hover { background: var(--cl-bg-2); color: var(--ink); }
-  .agents-member .org-toggle .cl-icon { width: 12px; height: 12px; transition: transform 0.15s ease; }
-  .agents-member .org-toggle.is-open .cl-icon { transform: rotate(90deg); }
-  .agents-member .org-toggle.is-leaf { cursor: default; }
-  .agents-member.is-selected .org-toggle { color: rgba(255, 255, 255, 0.85); }
-  .agents-member.is-selected .org-toggle:hover { background: rgba(255, 255, 255, 0.18); }
-  .org-count {
-    flex-shrink: 0; min-width: 18px; padding: 0 6px; border-radius: 9px;
-    font-size: 11px; line-height: 18px; text-align: center;
-    background: var(--cl-bg-2); color: var(--muted);
+  .org-node.is-selected .org-name { color: var(--cl-accent-ink); font-weight: 600; }
+  .org-sub { max-width: 100%; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .org-fold {
+    margin-top: 5px; min-width: 22px; height: 18px; padding: 0 6px;
+    border: 1px solid var(--cl-border); border-radius: 9px;
+    background: var(--cl-bg-raised); color: var(--muted);
+    font-size: 11px; line-height: 16px; cursor: pointer;
   }
-  .agents-member.is-selected .org-count { background: rgba(255, 255, 255, 0.22); color: #fff; }
-  .org-loose { margin-top: 12px; padding-top: 6px; border-top: 1px solid var(--cl-border); border-radius: 8px; }
+  .org-fold:hover { color: var(--ink); border-color: var(--cl-ink-faint); }
+  .org-fold.is-folded { background: var(--cl-accent-soft); color: var(--cl-accent-ink); border-color: transparent; }
+  .org-col { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .org-zoom { display: inline-flex; gap: 2px; margin-right: 6px; }
+  .org-zoom .ui-btn { min-width: 30px; padding-left: 10px; padding-right: 10px; }
+  .org-loose { background: var(--cl-bg-soft); border-radius: 12px; padding: 4px 8px 12px; }
   .org-loose.is-drop { box-shadow: inset 0 0 0 2px var(--cl-accent); }
-  .org-loose-hint { font-size: 11px; color: var(--muted); padding: 0 8px 6px; }
+  .org-loose-hint { font-size: 11px; color: var(--muted); padding: 0 8px 8px; }
+  .org-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px; }
+  .org-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px 3px 3px; border-radius: 999px;
+    background: var(--cl-bg-raised); border: 1px solid var(--cl-border);
+    font-size: 12px; cursor: pointer;
+  }
+  .org-chip[draggable="true"] { cursor: grab; }
+  .org-chip .agent-avatar { width: 22px; height: 22px; }
+  .org-chip .agent-avatar .cl-icon { width: 12px; height: 12px; }
+  .org-chip.is-selected { background: var(--cl-accent); color: #fff; border-color: transparent; }
+  .org-chip.is-selected .agent-avatar { background: rgba(255, 255, 255, 0.22); color: #fff; }
+  .org-chip.is-drop { box-shadow: 0 0 0 2px var(--cl-accent); }
   .agents-member-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .agents-member-role { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .agents-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--cl-ink-faint); }
