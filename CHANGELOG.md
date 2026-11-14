@@ -2,6 +2,15 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.27 — 2026-11-14 — An agent's branch, and zoom that follows the trackpad
+
+### An agent's branch, and zoom that follows the trackpad
+
+- **The tree starts from the agent you choose.** Picking an agent now draws only its branch: it at the top and whoever reports to it below. One with nobody under it shows under its manager, beside its peers. Above the tree, the path of managers ("Whole organisation › Holding CEO › Atlas (CTO)") takes you back up, or to the whole organisation; ✕ on the card does too.
+- **Zoom with a pinch or Ctrl/⌘ + scroll**, around the pointer, as well as with − and +. The zoom level shows between them (click it to go back to 100%), and Fit now fits the height as well as the width.
+- **Drag the background to move around** the diagram.
+- Picking another agent kept the previous agent's card on screen; it now shows the one you picked.
+
 ## 1.2.26 — 2026-11-14 — The organisation as a tree diagram
 
 ### The organisation as a tree diagram
