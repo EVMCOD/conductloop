@@ -21,6 +21,7 @@ SKIPPED_ON_WINDOWS: dict[str, str] = {
     "test_verify_script.py": "runs scripts/verify.sh (bash) with POSIX tools",
     "test_launchd_scripts.py": "runs the macOS launchd job scripts (bash); launchd does not exist on Windows",
     "test_linux_packaging.py": "checks scripts/build-linux.sh and Linux packaging files (bash)",
+    "test_release_platforms.py": "runs scripts/release-platforms.sh (bash) and the gh and curl it calls; Windows has no bash",
     "test_browser_agent.py": "uses AF_UNIX sockets for the agent bridge; Windows has no bridge (docs/PORTABILITY.md 3.3)",
     # Code sessions are switched off on Windows (platform_caps): the API refuses.
     "test_sessions_api.py": "code sessions are turned off on Windows (platform_unsupported), so the API refuses to start them",
