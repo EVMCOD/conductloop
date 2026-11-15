@@ -13,6 +13,28 @@ pip install -r requirements-dev.txt
 pre-commit install
 ```
 
+## Scheduled jobs
+The app can run a few things on a schedule (a daily digest, the Google Analytics
+and Search Console poll, revenue, a URL check, the boardroom recap, log
+rotation). Each job is a shell script under `bin/` or `scripts/` and each one
+loads `bin/ops_env.sh`, which decides three things and fails loudly if it gets
+them wrong:
+
+- **Which code runs** — the checkout the script lives in, never whatever
+  `ops_dashboard/` happens to be under the current directory. Python puts the
+  current directory first on `sys.path`, so a job that keeps running from
+  another folder silently runs that folder's copy. This is not hypothetical: it
+  is how the daily GA/GSC poll died every day for weeks without a word in the
+  logs.
+- **Which database is written** — `OPS_DATA_DIR`, set explicitly so the job
+  writes to the live library instead of to a checkout that happens to have a
+  `data/` folder.
+- **Where the logs go** — `OPS_LOG_DIR`.
+
+Machine-specific values live in `scripts/ops.local.env` (gitignored; copy
+`scripts/ops.local.env.example`). `tests/test_launchd_scripts.py` keeps the
+behaviour honest.
+
 ## Checks (same as CI)
 Run everything CI runs, before you push:
 ```bash

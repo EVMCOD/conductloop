@@ -19,6 +19,7 @@ SKIPPED_ON_WINDOWS: dict[str, str] = {
     "test_sessions_code_tools.py": "runs commands inside bubblewrap/seatbelt; code sessions are disabled on Windows",
     "test_sessions_worktrees.py": "drives git worktrees through POSIX shell scripts; code sessions are disabled on Windows",
     "test_verify_script.py": "runs scripts/verify.sh (bash) with POSIX tools",
+    "test_launchd_scripts.py": "runs the macOS launchd job scripts (bash); launchd does not exist on Windows",
     "test_linux_packaging.py": "checks scripts/build-linux.sh and Linux packaging files (bash)",
     "test_browser_agent.py": "uses AF_UNIX sockets for the agent bridge; Windows has no bridge (docs/PORTABILITY.md 3.3)",
     # Code sessions are switched off on Windows (platform_caps): the API refuses.

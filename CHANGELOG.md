@@ -2,6 +2,14 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased
+
+### The scheduled jobs run the app you have
+
+- **The daily Google Analytics and Search Console poll works again.** The scheduled jobs imported an old copy of the app that happened to sit in a folder, so they died on "No module named 'google.analytics'" every single day and the numbers in the panel quietly stopped refreshing. The fix was in the app all along; the job just never ran it.
+- **The jobs now say what they run and what they write.** Each one loads the checkout it lives in, names the database it writes to instead of letting the app guess, and stops with a clear message if it ever finds itself running a different copy.
+- Machine-specific paths for the jobs live in `scripts/ops.local.env` (see `scripts/ops.local.env.example`).
+
 ## 1.2.27 — 2026-11-14 — An agent's branch, and zoom that follows the trackpad
 
 ### An agent's branch, and zoom that follows the trackpad
