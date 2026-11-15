@@ -630,6 +630,32 @@
   .org-path-item.is-current { color: var(--ink); font-weight: 600; cursor: default; }
   .org-path-item.is-current:hover { background: transparent; }
   .org-path-sep { color: var(--muted); }
+  /* In edit mode a name of the path takes a dropped member: its boss
+     becomes that person (the tree keeps a branch closed otherwise). */
+  .org-path-item.is-drop { background: var(--cl-accent-soft); color: var(--cl-accent-ink); }
+  .org-path-item[data-org-drop] { cursor: copy; }
+
+  /* "Go to an agent…": the organisation is big and the diagram is wide. */
+  .org-search { position: relative; margin: 0 0 10px; }
+  .org-search-input {
+    width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
+    padding: 6px 10px; border-radius: 8px;
+    border: 1px solid var(--cl-border); background: var(--cl-bg); color: var(--cl-ink);
+  }
+  .org-search-input:focus { outline: 2px solid var(--cl-focus, #2563eb); outline-offset: 1px; }
+  .org-search-results {
+    position: absolute; z-index: 40; left: 0; right: 0; top: 100%; margin-top: 4px;
+    background: var(--cl-bg); border: 1px solid var(--cl-border); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14); max-height: 260px; overflow-y: auto;
+  }
+  .org-search-item {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    border: 0; background: transparent; font: inherit; font-size: 13px;
+    color: var(--cl-ink); padding: 6px 10px; text-align: left; cursor: pointer;
+  }
+  .org-search-item:hover, .org-search-item:focus { background: var(--cl-bg-hover); }
+  .org-search-empty { padding: 8px 10px; font-size: 12px; color: var(--muted); }
+
   .org-canvas { position: relative; margin: 0 auto; }
   .org-lines { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
   .org-lines line { stroke: var(--cl-ink-faint); stroke-width: 1.25; stroke-linecap: round; }
@@ -644,6 +670,10 @@
   .org-dot .agent-avatar .cl-icon { width: 20px; height: 20px; }
   .org-dot .agents-status { position: absolute; right: 1px; bottom: 1px; box-shadow: 0 0 0 2px var(--cl-bg-soft); }
   .org-node:hover .agent-avatar { box-shadow: 0 0 0 4px var(--cl-bg-soft), 0 0 0 6px var(--cl-accent-soft); }
+  /* The node the keyboard is on (the tree can be walked without a mouse). */
+  .org-node.is-keyboard .agent-avatar { box-shadow: 0 0 0 4px var(--cl-bg-soft), 0 0 0 6px var(--cl-focus, #2563eb); }
+  .org-canvas:focus { outline: none; }
+  .org-canvas:focus-visible { outline: 2px solid var(--cl-focus, #2563eb); outline-offset: 2px; border-radius: 8px; }
   .org-node.is-selected .agent-avatar { background: var(--cl-accent); color: #fff; box-shadow: 0 0 0 4px var(--cl-bg-soft), 0 0 0 6px var(--cl-accent); }
   .org-node.is-drop .agent-avatar { box-shadow: 0 0 0 4px var(--cl-bg-soft), 0 0 0 6px var(--cl-accent); }
   .org-name {

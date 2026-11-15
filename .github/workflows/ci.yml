@@ -161,9 +161,12 @@ jobs:
         # Separate step so the main pytest run keeps skipping browser tests.
         # Uses the runner's preinstalled Google Chrome (no browser download);
         # the tests only talk to their in-process server on 127.0.0.1.
+        # WebKit (the engine the macOS app uses) is installed too, and the
+        # tests that care about it skip themselves when it is not there.
         env:
           LEARNING_BROWSER_REQUIRED: "1"
           CONNECTORS_BROWSER_REQUIRED: "1"
         run: |
           pip install "playwright>=1.47"
+          playwright install --with-deps webkit || echo "::warning::WebKit could not be installed; its tests are skipped"
           pytest -q -p no:cacheprovider tests/test_*ui_browser.py

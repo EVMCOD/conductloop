@@ -3806,11 +3806,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if not team_id or not name:
             self._send(400, b'{"error":"team_id and name required"}', "application/json")
             return
+        # The new agent may report to somebody from the start: the form for a
+        # new agent asks for it (prompt-minimax-2026-11-15 P1-1).
+        manager = data.get("manager_id")
+        if manager in (None, ""):
+            manager = None
+        else:
+            try:
+                manager = int(manager)
+            except (TypeError, ValueError):
+                self._send(400, b'{"error":"bad manager_id"}', "application/json")
+                return
+            if not db.get_member(manager):
+                self._send(400, b'{"error":"manager not found"}', "application/json")
+                return
         new_id = db.add_member(
             team_id=int(team_id), name=name, type=data.get("type", "human"),
             role=data.get("role"), status=data.get("status", "active"),
             contact=data.get("contact"), capabilities=data.get("capabilities"),
             model=data.get("model"), notes=data.get("notes"),
+            manager_id=manager,
         )
         self._send(200, _json({"ok": True, "id": new_id}).encode(), "application/json")
 
