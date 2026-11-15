@@ -210,8 +210,8 @@ def test_the_dry_run_prints_the_plan(tmp_path):
     assert "Dry run" in out
     assert "gh workflow run linux-bundles.yml --ref main" in out
     assert "gh workflow run windows-bundles.yml --ref main" in out
-    assert "gh release upload v1.2.28" in out
-    assert "gh release edit v1.2.28" in out
+    assert f"gh release upload v{VERSION}" in out
+    assert f"gh release edit v{VERSION}" in out
     for name in _artifact_names(LINUX_WORKFLOW) | _artifact_names(WINDOWS_WORKFLOW):
         assert name in out, name
 
