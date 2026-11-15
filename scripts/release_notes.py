@@ -158,7 +158,7 @@ def _downloads_table(version: str, repo: str) -> str:
         "|---|---|---|",
         "| macOS 13+ (Apple Silicon) | "
         f"{link('dmg')} | Open the DMG and drag ConductLoop to Applications. "
-        "Signed and notarized; it updates itself. |",
+        "Signed and notarized; it updates itself. The in-app browser needs macOS 14 (Sonoma). |",
         "| Linux x86_64 (Ubuntu 22.04+) | "
         f"{link('deb')} | `sudo apt install ./{names['deb']}` |",
         "| | "
@@ -210,7 +210,7 @@ def build_notes(version: str, changelog_text: str, repo: str = RELEASE_REPO) -> 
     parts: list[str] = [
         f"ConductLoop {version} for macOS, Linux and Windows. Free and open source (MIT): "
         "build your AI team, direct the CEO agent, and connect the apps it can use. "
-        "Everything runs on your computer.",
+        "The app runs on your computer; the AI model is the one you choose, with your own key.",
         "",
         f"## What's new in {version}",
         "",

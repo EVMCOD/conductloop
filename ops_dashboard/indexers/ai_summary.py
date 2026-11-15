@@ -19,6 +19,7 @@ Used by:
 from __future__ import annotations
 
 import datetime as dt
+import re
 from pathlib import Path
 
 from .. import brain, db
@@ -79,6 +80,10 @@ def _gather_day_context(target: dt.date) -> dict:
 
     ctx = {
         "date": target.isoformat(),
+        # No source connected means revenue is not measured, which is not the
+        # same as no sales: the summary used to report "€0.00, 0 events" every
+        # day and told the person to look into "the 0 revenue".
+        "revenue_connected": bool(db.list_revenue_sources(enabled_only=True)),
         "revenue": {
             "yesterday": db.revenue_summary(since=day_start, until=day_end),
             "last_7d": db.revenue_summary(since=week_start, until=day_end),
@@ -109,6 +114,17 @@ def _format_context_for_prompt(ctx: dict) -> str:
     rev_y = ctx["revenue"]["yesterday"]
     rev_w = ctx["revenue"]["last_7d"]
     rev_p = ctx["revenue"]["prev_7d"]
+    if not ctx.get("revenue_connected", True):
+        lines.append("REVENUE — not measured: no revenue source is connected. This is NOT zero sales. "
+                     "Do not report a revenue figure and do not suggest looking into missing revenue; "
+                     "at most, say in one short clause that no revenue source is connected.")
+    else:
+        lines.extend(_revenue_lines(ctx, rev_y, rev_w, rev_p))
+    return _format_rest(ctx, lines)
+
+
+def _revenue_lines(ctx: dict, rev_y: dict, rev_w: dict, rev_p: dict) -> list[str]:
+    lines: list[str] = []
     lines.append(f"REVENUE — yesterday ({ctx['date']}): €{rev_y['total_cents']/100:,.2f} from {rev_y['count']} events")
     lines.append(f"  Last 7d: €{rev_w['total_cents']/100:,.2f} ({rev_w['count']} events)")
     if rev_p["total_cents"] > 0:
@@ -122,7 +138,10 @@ def _format_context_for_prompt(ctx: dict) -> str:
         lines.append("  By event type:")
         for r in rev_y["by_type"]:
             lines.append(f"    {r['event_type']}: €{r['total']/100:,.0f} ({r['cnt']})")
+    return lines
 
+
+def _format_rest(ctx: dict, lines: list[str]) -> str:
     ga_y = ctx["ga"]["yesterday"]
     if ga_y:
         u = sum(d["users"] or 0 for d in ga_y)
@@ -173,6 +192,28 @@ On the very last line, output ONLY this emoji: 🟢 or 🟡 or 🔴
 (🟢 if everything normal, 🟡 if some anomalies, 🔴 if major issues). No other text after the emoji."""
 
 
+# Characters of scripts the summary is never written in. A model can drift
+# into another script mid-sentence; MiniMax-M3 wrote "GA4意識" and
+# "tráficoajar而下" into a Spanish summary on 15-nov-2026.
+_FOREIGN_SCRIPT = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff\uff66-\uff9f]+")
+
+
+def _ask_in_language(provider, system: str, prompt: str, language: str) -> str:
+    """Ask, and ask once more if the answer drifts into another script.
+
+    If the second answer drifts too, the stray characters are removed: a
+    summary with a mangled word reads better than one with Chinese in it.
+    """
+    text = provider.ask(system, [{"role": "user", "content": prompt}])
+    if not text or not _FOREIGN_SCRIPT.search(text):
+        return text
+    retry_system = (system + f" Use only the {language} alphabet: never Chinese, Japanese or Korean characters.")
+    again = provider.ask(retry_system, [{"role": "user", "content": prompt}])
+    if again and not _FOREIGN_SCRIPT.search(again):
+        return again
+    return _FOREIGN_SCRIPT.sub("", again or text)
+
+
 def generate_ai_summary(target: dt.date | None = None, *, provider_name: str | None = None) -> dict:
     """Call the LLM to summarize the day's activity. Returns {markdown, model, path}."""
     target = target or (dt.date.today() - dt.timedelta(days=1))
@@ -186,8 +227,8 @@ def generate_ai_summary(target: dt.date | None = None, *, provider_name: str | N
 
     try:
         provider = brain.resolve_provider(provider_name)
-        summary_text = provider.ask(SYSTEM_PROMPT.format(language=w["language"]),
-                                    [{"role": "user", "content": prompt}])
+        summary_text = _ask_in_language(provider, SYSTEM_PROMPT.format(language=w["language"]),
+                                        prompt, w["language"])
         if not summary_text or not summary_text.strip():
             summary_text = w["empty"]
         model_name = getattr(provider, "model", "unknown") or "unknown"

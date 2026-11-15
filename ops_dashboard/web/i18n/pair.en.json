@@ -2,7 +2,7 @@
   "pair": {
     "doc_title": "Pair a phone — ConductLoop",
     "title": "Pair a phone",
-    "intro": "Generate a one-time code, scan it from the ConductLoop iOS app. The phone then connects to this machine over your network. Your data never leaves this device.",
+    "intro": "Generate a one-time code and scan it from the ConductLoop iOS app. The phone then connects straight to this computer, over your network or your own Tailscale: nothing goes through a ConductLoop server.",
     "device_name": "Device name",
     "generate_qr": "Generate QR",
     "qr_alt": "pairing QR",

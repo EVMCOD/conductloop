@@ -33,6 +33,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "title": "# Daily digest — {date}",
         "generated": "_Generated at {ts}_",
         "revenue_title": "## 💰 Revenue",
+        "revenue_none": "_No revenue source connected: revenue is not measured yet._",
         "yesterday": "Yesterday",
         "from_events": "{amount} from {n} events",
         "last_7d": "Last 7 days total",
@@ -67,6 +68,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "title": "# Digest diario — {date}",
         "generated": "_Generado el {ts}_",
         "revenue_title": "## 💰 Ingresos",
+        "revenue_none": "_No hay ninguna fuente de ingresos conectada: los ingresos todavía no se miden._",
         "yesterday": "Ayer",
         "from_events": "{amount} de {n} eventos",
         "last_7d": "Total de los últimos 7 días",
@@ -139,19 +141,24 @@ def build_markdown(target_date: dt.date | None = None) -> str:
 
     # ----- REVENUE -----
     lines.append(w["revenue_title"])
-    rev = db.revenue_summary(since=day_start, until=day_end)
-    rev_week = db.revenue_summary(since=week_start, until=day_end)
-    rev_prev_week = db.revenue_summary(since=week_start - 7 * 86400, until=week_start)
-    lines.append(f"- **{w['yesterday']}**: "
-                 + w["from_events"].format(amount=_fmt_eur(rev["total_cents"]), n=rev["count"]))
-    lines.append(f"- **{w['last_7d']}**: {_fmt_eur(rev_week['total_cents'])} "
-                 + w["vs_prev"].format(pct=_pct(rev_week["total_cents"], rev_prev_week["total_cents"])))
-    if rev["by_project"]:
-        lines.append(f"- **{w['by_project']}**:")
-        for r in sorted(rev["by_project"], key=lambda x: -x["total"])[:5]:
-            lines.append("  - " + w["project_line"].format(
-                project=r["project_key"], amount=_fmt_eur(r["total"]), n=r["cnt"]))
-    lines.append("")
+    if not db.list_revenue_sources(enabled_only=True):
+        # Not measured is not zero: "€0.00 from 0 events" read as no sales.
+        lines.append(w["revenue_none"])
+        lines.append("")
+    else:
+        rev = db.revenue_summary(since=day_start, until=day_end)
+        rev_week = db.revenue_summary(since=week_start, until=day_end)
+        rev_prev_week = db.revenue_summary(since=week_start - 7 * 86400, until=week_start)
+        lines.append(f"- **{w['yesterday']}**: "
+                     + w["from_events"].format(amount=_fmt_eur(rev["total_cents"]), n=rev["count"]))
+        lines.append(f"- **{w['last_7d']}**: {_fmt_eur(rev_week['total_cents'])} "
+                     + w["vs_prev"].format(pct=_pct(rev_week["total_cents"], rev_prev_week["total_cents"])))
+        if rev["by_project"]:
+            lines.append(f"- **{w['by_project']}**:")
+            for r in sorted(rev["by_project"], key=lambda x: -x["total"])[:5]:
+                lines.append("  - " + w["project_line"].format(
+                    project=r["project_key"], amount=_fmt_eur(r["total"]), n=r["cnt"]))
+        lines.append("")
 
     # ----- GA -----
     lines.append(w["traffic_title"])
@@ -286,7 +293,7 @@ def run(target_date: dt.date | None = None, *, with_ai_summary: bool = True) -> 
     if with_ai_summary:
         try:
             from . import ai_summary
-            ai_result = ai_summary.generate_ai_summary(target_date=target)
+            ai_result = ai_summary.generate_ai_summary(target)
         except Exception as e:
             ai_result = {"error": str(e)}
     # Log to activity feed
