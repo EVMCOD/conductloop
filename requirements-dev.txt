@@ -4,7 +4,7 @@
 
 pytest>=8.0
 requests>=2.31          # collection of the live-worker test module
-pyinstaller>=6.10       # the bundle guard imports the real collector: without
+pyinstaller>=6.22.3       # the bundle guard imports the real collector: without
                         # it, the test that checks the frozen app really
                         # contains every connector cannot run in CI (and was
                         # failing there while passing locally)
@@ -12,9 +12,9 @@ anthropic>=0.111.0     # the Anthropic SDK, so the MiniMax plan test can check
                         # the real signature of Messages.create() (not heavy)
 openai>=2.43.0         # the OpenAI SDK, for the same reason: the tool-calling
                         # loop is proven against the real client (not heavy)
-ruff==0.17.3           # lint + format (pinned: matches .pre-commit rev, avoids CI/local drift)
+ruff==0.17.4           # lint + format (pinned: matches .pre-commit rev, avoids CI/local drift)
 mypy>=1.11              # static type check
 pytest-cov>=5.0         # coverage reporting
 pre-commit>=4.7.0         # local git hooks (see .pre-commit-config.yaml)
-virtualenv>=21.14.13      # pre-commit dependency; security floor (GHSA-cx6f-vjhg-g3cc)
+virtualenv>=21.15.6      # pre-commit dependency; security floor (GHSA-cx6f-vjhg-g3cc)
 pip-audit>=2.10.1          # dependency vulnerability scan
