@@ -73,7 +73,14 @@ def test_dismissing_the_byok_banner_does_not_end_the_first_run(onboarding, monke
     prompt-minimax-2026-11-15 P0-3).
     """
     from ops_dashboard import brain, byok_keys
-    monkeypatch.setattr(brain, "CONFIG_PATH", tmp_path / "config.json")
+    # Both readers of the configuration have to look at the same file: the
+    # brain reads its own (a constant taken at import time) and the vault
+    # reads app_paths.config_path() (the environment). The sandbox the suite
+    # shares may hold a vault root from another test, and that alone would
+    # end the first run.
+    cfg_path = tmp_path / "config.json"
+    monkeypatch.setenv("OPS_CONFIG_PATH", str(cfg_path))
+    monkeypatch.setattr(brain, "CONFIG_PATH", cfg_path)
     cfg = brain._load_config()
     byok_keys.dismiss_prompt(cfg)
     brain._save_config(cfg)
