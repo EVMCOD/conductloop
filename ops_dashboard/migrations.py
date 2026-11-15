@@ -1337,3 +1337,54 @@ def _mig_42_default_reporting_lines(conn: sqlite3.Connection) -> None:
 
 MIGRATIONS.append((42, "team_members: default reporting lines (C-Suite under the Holding CEO)",
                     _mig_42_default_reporting_lines))
+
+
+def _mig_43_site_credentials_to_secrets(conn: sqlite3.Connection) -> None:
+    """The Google credentials of every site leave the database.
+
+    ``ga_sites.service_account_json`` and ``gsc_sites.credentials_json`` held
+    the OAuth blob of the site in clear text: a refresh token, which is enough
+    to act as the Google account behind it. They move into the secrets store
+    (the keychain, or a 0600 file when ``OPS_DISABLE_KEYCHAIN=1``) and the
+    column is emptied — the row keeps only the reference.
+
+    If the secrets store cannot take the value, the column is left as it was:
+    losing a credential is worse than keeping it where it was.
+    """
+    from . import secrets_store, site_credentials
+
+    targets = (
+        ("ga_sites", "service_account_json",
+         site_credentials.ga_secret_name, site_credentials.set_ga_credentials),
+        ("gsc_sites", "credentials_json",
+         site_credentials.gsc_secret_name, site_credentials.set_gsc_credentials),
+    )
+    for table, column, name_for, set_fn in targets:
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()
+        if exists is None:
+            continue
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in cols:
+            continue
+        rows = conn.execute(
+            f"SELECT id, {column} FROM {table} WHERE {column} IS NOT NULL AND {column} != ''"
+        ).fetchall()
+        for site_id, blob in rows:
+            try:
+                set_fn(site_id, blob)
+            except Exception:
+                log.warning("could not move the credentials of %s %s into the secrets store",
+                            table, site_id, exc_info=True)
+                continue
+            # Only empty the column when the value really landed in the store.
+            if not secrets_store.get_secret(name_for(site_id)):
+                log.warning("the secrets store did not keep the credentials of %s %s; "
+                            "they stay in the database", table, site_id)
+                continue
+            conn.execute(f"UPDATE {table} SET {column} = NULL WHERE id = ?", (site_id,))
+
+
+MIGRATIONS.append((43, "ga_sites/gsc_sites: the Google credentials move to the secrets store",
+                    _mig_43_site_credentials_to_secrets))

@@ -510,6 +510,25 @@ def secrets_dir() -> Path:
     return _secrets_dir()
 
 
+def delete_secret(name: str) -> bool:
+    """Remove a secret from the keychain and from the file fallback.
+
+    Returns True when neither place holds it afterwards. Used when the thing
+    the secret belonged to is gone for good (a site that was deleted), so the
+    credential does not outlive it.
+    """
+    gone = True
+    if _keychain_enabled():
+        gone = keychain_delete(name) and gone
+    p = _file(name)
+    try:
+        if p.exists():
+            p.unlink()
+    except OSError:
+        gone = False
+    return gone and _lookup(name)[0] is None
+
+
 def get_or_create_secret(name: str, factory) -> str:
     """Return the stored secret, or create+store one via ``factory()`` (a
     no-arg callable returning str).

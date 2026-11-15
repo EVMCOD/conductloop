@@ -112,8 +112,11 @@ class GA4Source(BaseSource):
         if pid and not pid.startswith("properties/"):
             pid = f"properties/{pid}"
         self.property_id = pid
-        # service account JSON is stored on the site_row itself
-        self.sa_json = (site_row.get("service_account_json") or "") or (credentials or {}).get("service_account_json", "")
+        # The OAuth blob lives in the secrets store (the column is only the
+        # fallback for a database that has not been migrated yet).
+        from .. import site_credentials
+        self.sa_json = (site_credentials.get_ga_credentials(site_row)
+                        or (credentials or {}).get("service_account_json", ""))
 
     API = "https://analyticsdata.googleapis.com/v1beta"
     SCOPES = ["https://www.googleapis.com/auth/analytics.readonly"]
