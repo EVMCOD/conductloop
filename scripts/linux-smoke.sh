@@ -118,8 +118,23 @@ if [[ -n "$up" ]]; then
   version="$(curl -s "$BASE/api/health" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version"))')"
   ok "server answered in $(( $(date +%s) - started )) s as $version"
 else
-  bad "the server did not answer within $WAIT s (app $(kill -0 "$APP_PID" 2>/dev/null && echo running || echo exited))"
-  tail -40 "$LOG" || true
+  # The loop stops as soon as the app is gone (the line above breaks out of
+  # it), so "within $WAIT s" could be a lie: the AppImage died on the runner
+  # once in twenty runs, after five seconds, and the message said 120. The
+  # time it really waited, and the fact that the app exited, are what make
+  # the next occurrence diagnosable (2026-11-15, prompt-minimax-2026-11-15 P0-3).
+  elapsed=$(( $(date +%s) - started ))
+  if kill -0 "$APP_PID" 2>/dev/null; then
+    state="the app is still running"
+  else
+    state="the app exited"
+  fi
+  bad "the server did not answer after $elapsed s (waited up to $WAIT s; $state)"
+  if [[ -s "$LOG" ]]; then
+    tail -40 "$LOG" || true
+  else
+    echo "    (the app wrote nothing to $LOG)"
+  fi
   exit 1
 fi
 
