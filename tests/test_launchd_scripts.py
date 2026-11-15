@@ -210,3 +210,40 @@ def test_an_explicit_data_directory_wins(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert Path(result.stdout.strip().splitlines()[-1]).resolve() == other.resolve()
+
+
+def test_the_local_env_file_reaches_python(tmp_path: Path) -> None:
+    """What scripts/ops.local.env sets must be exported, not just set in the shell.
+
+    The Python jobs read these through os.environ: a value that stays in the
+    shell is a value the job does not see, and the job silently runs with the
+    default configuration instead of the configured one.
+    """
+    local_env = ROOT / "scripts" / "ops.local.env"
+    if local_env.exists():
+        pytest.skip("this checkout has a machine-specific scripts/ops.local.env")
+
+    fake_repo = tmp_path / "repo"
+    (fake_repo / "bin").mkdir(parents=True)
+    (fake_repo / "scripts").mkdir(parents=True)
+    (fake_repo / "bin" / "ops_env.sh").write_text(OPS_ENV.read_text(encoding="utf-8"), encoding="utf-8")
+    (fake_repo / "scripts" / "ops.local.env").write_text(
+        "OPS_CONFIG_PATH=/tmp/config-from-the-local-file.json\n"
+        "OPS_SECRETS_DIR=/tmp/secrets-from-the-local-file\n"
+        "OPS_DISABLE_KEYCHAIN=1\n",
+        encoding="utf-8",
+    )
+
+    result = _run_bash(
+        f'. "{fake_repo / "bin" / "ops_env.sh"}"; '
+        '"$OPS_PYTHON" -c "import os; print(os.environ.get(\'OPS_CONFIG_PATH\',\'\')); '
+        'print(os.environ.get(\'OPS_SECRETS_DIR\',\'\')); '
+        'print(os.environ.get(\'OPS_DISABLE_KEYCHAIN\',\'\'))"',
+        env={"OPS_PYTHON": sys.executable},
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == [
+        "/tmp/config-from-the-local-file.json",
+        "/tmp/secrets-from-the-local-file",
+        "1",
+    ], "the local settings did not reach the job"

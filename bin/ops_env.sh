@@ -32,6 +32,17 @@ if [ -f "$OPS_REPO_ROOT/scripts/ops.local.env" ]; then
   . "$OPS_REPO_ROOT/scripts/ops.local.env"
 fi
 
+# The overrides the local file may set are read by Python through os.environ,
+# so they have to be exported, not just set in the shell.
+for _ops_var in OPS_PYTHON OPS_DATA_DIR OPS_LOG_DIR OPS_CONFIG_PATH \
+                OPS_SECRETS_DIR OPS_DISABLE_KEYCHAIN; do
+  if [ -n "${!_ops_var:-}" ]; then
+    # shellcheck disable=SC2163  # the name is in a variable on purpose
+    export "$_ops_var"
+  fi
+done
+unset _ops_var
+
 # 1. The interpreter: this checkout's virtualenv, else the legacy one, else PATH.
 if [ -z "${OPS_PYTHON:-}" ]; then
   for candidate in "$OPS_REPO_ROOT/.venv/bin/python" "$HOME/ops-dashboard/.venv/bin/python"; do
