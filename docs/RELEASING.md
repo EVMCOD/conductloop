@@ -81,6 +81,65 @@ Follow [desktop/docs/DISTRIBUTION.md](../desktop/docs/DISTRIBUTION.md):
 against the signing key and the produced signature, which this dry run cannot
 do because it never sees the private key or the `.sig`.
 
+### Quit the installed app first
+
+The smoke test at the end of `release-desktop.sh` starts the freshly built app
+and waits for its server to answer on `127.0.0.1:7777`. **If the installed
+ConductLoop is running, that port is already taken and the script stops with
+"Something already answers on 127.0.0.1:7777"** — after the build, the signing
+and the notarization, which is the most expensive way to find out. Quit the app
+first:
+
+```bash
+osascript -e 'tell application "ConductLoop" to quit'
+```
+
+The smoke test uses a throwaway data folder, so the real library is never
+touched; but the installed app has to be closed for the port.
+
+### The notes `release-desktop.sh` publishes are not the changelog's
+
+`release-desktop.sh` creates the release with a **fixed text** in the script, not
+with the section of `CHANGELOG.md`. Rewrite the notes right after it publishes,
+before `release-platforms.sh` runs (that script rewrites them again, so the
+release only ends up wrong if the platform step fails):
+
+```bash
+python3 scripts/release_notes.py 1.2.29 --out /tmp/notes.md
+gh release edit v1.2.29 --repo EVMCOD/conductloop-releases --notes-file /tmp/notes.md
+```
+
+The fixed text in the script also claims that nothing ever leaves the machine,
+which the app stopped promising in 1.2.29 — publishing it would put a claim the
+product no longer makes on the release page.
+
+## The website carries the version too
+
+`conductloop.com` lives in its own private repo (`EVMCOD/conductloop-web`) and
+**writes the version down in the source**: `lib/oss.ts` holds `APP_VERSION` and
+`PLATFORM_VERSION` (the tag behind every Linux and Windows download link), and
+each of the nine dictionaries in `lib/i18n/` carries the version in its pill and
+its byline. The macOS link points at `releases/latest`, so it follows the
+release on its own; **the Linux and Windows links do not**, and until they are
+bumped the download page offers the previous version's binaries.
+
+Bump it in the same release, and **deploy the website after the assets are
+uploaded**, not before: the links would answer 404 until the bundle workflows
+finish.
+
+```bash
+cd ~/conductloop                       # EVMCOD/conductloop-web
+# lib/oss.ts: APP_VERSION and PLATFORM_VERSION -> <VERSION>
+# lib/i18n/dict.*.ts: the version in the pill and the byline (18 strings)
+git commit -am "fix(web): <VERSION> for macOS, Linux and Windows"
+git push origin master
+npm run deploy
+```
+
+Check it live afterwards: the download page must point at `v<VERSION>`, the
+JSON-LD's `softwareVersion` and `llms.txt` must say `<VERSION>`, and every
+download URL must answer 200.
+
 ## Linux and Windows: one command
 
 `release-desktop.sh` builds, signs and publishes the **macOS** app only. The
