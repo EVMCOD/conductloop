@@ -4,6 +4,7 @@ the one POST that stores it."""
 from __future__ import annotations
 
 import re
+from html import unescape
 from pathlib import Path
 
 WEB = Path(__file__).resolve().parent.parent / "ops_dashboard" / "web"
@@ -13,6 +14,29 @@ SINKS = re.compile(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\bev
 
 def _code(name: str) -> str:
     return re.sub(r"^\s*//.*$", "", (WEB / name).read_text(), flags=re.M)
+
+
+def _dictionary(name: str) -> dict[str, str]:
+    """The {key: 'text'} pairs of one dictionary in welcome.js."""
+    js = _code("welcome.js")
+    start = js.index(f"    {name}: {{")
+    end = js.index("\n    },", start)
+    out: dict[str, str] = {}
+    for m in re.finditer(r"\b([a-z][a-z0-9_]*):\s*'((?:[^'\\]|\\.)*)'", js[start:end]):
+        out[m.group(1)] = m.group(2).replace("\\'", "'")
+    return out
+
+
+def _page_text() -> dict[str, str]:
+    """The text the page paints per key: the element text and the placeholder."""
+    html = (WEB / "welcome.html").read_text()
+    out: dict[str, str] = {}
+    for m in re.finditer(r'data-welcome="([a-z0-9_]+)"[^>]*>([^<]*)<', html):
+        out[m.group(1)] = unescape(m.group(2)).strip()
+    for m in re.finditer(r"<input[^>]*data-welcome-ph=\"([a-z0-9_]+)\"[^>]*>", html):
+        ph = re.search(r'placeholder="([^"]*)"', m.group(0))
+        out[m.group(1)] = unescape(ph.group(1)).strip() if ph else ""
+    return out
 
 
 def test_no_html_sinks_and_nothing_remote():
@@ -72,6 +96,52 @@ def test_every_text_in_the_page_has_a_spanish_version():
     used = set(re.findall(r'data-welcome(?:-ph)?="([a-z0-9_]+)"', html))
     assert used and used <= es_keys, used - es_keys
     assert "data-i18n" not in html, "the welcome page must not use the global attribute"
+
+
+def test_the_two_dictionaries_offer_the_same_keys():
+    """English and Spanish must offer the same strings: a key that exists in
+    one and not in the other shows up as the other language in the page."""
+    es = _dictionary("es")
+    en = _dictionary("en")
+    assert set(es) == set(en), set(es) ^ set(en)
+
+
+def test_the_english_fallback_in_the_page_matches_the_english_dictionary():
+    """The page paints in English before welcome.js arrives, so the English
+    text also lives in welcome.html. The two copies must not drift apart."""
+    en = _dictionary("en")
+    page = _page_text()
+    assert page, "the page has no data-welcome text"
+    for key, text in page.items():
+        assert key in en, key
+        assert text == en[key], (key, text, en[key])
+
+
+def test_the_welcome_page_does_not_promise_that_nothing_leaves_the_computer():
+    """The product is BYOK and it can write outside: the page says what
+    actually happens instead of "nothing leaves your computer"."""
+    html = (WEB / "welcome.html").read_text().lower()
+    assert "nothing leaves your computer" not in html
+    assert "no cloud" not in html
+    # what is true is said plainly
+    assert "provider" in html          # the question goes to the provider you chose
+    assert "confirmation" in html      # a connector write waits for it
+    assert "pair a phone" in html      # the local network is a switch you control
+    # and the promise that is true is kept
+    assert "no conductloop account" in html
+    assert "no conductloop cloud" in html
+    assert "no subscription" in html
+
+
+def test_the_spanish_copy_says_what_the_english_copy_says():
+    """The Spanish page must carry the same truth as the English one."""
+    text = " ".join(_dictionary("es").values()).lower()
+    assert "nada sale de tu ordenador" not in text
+    assert "proveedor" in text
+    assert "confirmación" in text
+    assert "móvil" in text
+    assert "ni cuenta de conductloop" in text
+    assert "ni suscripción" in text
 
 
 def test_the_dashboard_checks_for_a_first_run_and_the_page_is_strict():

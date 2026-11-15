@@ -19,10 +19,10 @@
   var T = {
     es: {
       title: 'Te damos la bienvenida a ConductLoop',
-      lead: 'Tu ordenador se convierte en un segundo cerebro de IA privado. Tus notas, tu código y tus cifras se quedan en tu máquina — y puedes preguntarle desde el móvil.',
-      value1: 'Lee tus notas y responde con ellas, con un enlace a la nota que usó cada respuesta.',
-      value2: 'Un equipo de agentes trabaja en tus proyectos mientras tú haces otra cosa.',
-      value3: 'Nada sale de tu ordenador: ni cuenta, ni nube, ni suscripción. Nunca.',
+      lead: 'Tu ordenador se convierte en un segundo cerebro de IA. Tus notas, tu código y tus cifras se quedan en tu máquina — y puedes preguntarle desde el móvil.',
+      value1: 'Lee tus notas y responde con ellas, con un enlace a la nota que usó cada respuesta. La pregunta, y las notas que necesita, van al proveedor de IA que elegiste.',
+      value2: 'Un equipo de agentes trabaja en tus proyectos mientras tú haces otra cosa. Si conectas un servicio, su conector puede escribir en él, y cada escritura espera tu confirmación.',
+      value3: 'Ni cuenta de ConductLoop, ni nube de ConductLoop, ni suscripción. Emparejar un móvil es un interruptor en la página «Empareja un móvil»: apagado salvo que lo actives tú.',
       try_demo: 'Probarlo con datos de ejemplo',
       setup_now: 'Configurar con mis notas',
       try_demo_hint: 'Los datos de ejemplo son ficticios y se borran en cuanto indexes tus propias notas.',
@@ -73,6 +73,37 @@
       demo_cleared: 'Datos de ejemplo borrados.'
     },
     en: {
+      // The same keys as the Spanish dictionary above, in the same order. The
+      // English text of the page also lives in welcome.html (it is the
+      // fallback that paints before this file loads); the static tests keep
+      // the two copies from drifting apart.
+      title: 'Welcome to ConductLoop',
+      lead: 'Your computer becomes an AI second brain. Your notes, your code and your numbers stay on your machine — and you can ask it questions from your phone.',
+      value1: 'It reads your notes and answers from them, with a link to the note each answer used. The question, and the notes it needs, go to the AI provider you chose.',
+      value2: 'A team of agents works on your projects while you get on with something else. If you connect a service, its connector can write to it, and every write waits for your confirmation.',
+      value3: 'No ConductLoop account, no ConductLoop cloud, no subscription. Pairing a phone is a switch on the Pair a phone page, off unless you turn it on.',
+      try_demo: 'Try it with sample data',
+      setup_now: 'Set up with my notes',
+      try_demo_hint: 'Sample data is fictional, and it is removed the moment you index your own notes.',
+      setup_title: 'Two quick things and you are set',
+      subtitle: 'Both are optional, and everything stays on this computer.',
+      notes_title: '1 · Your notes',
+      notes_hint: 'ConductLoop reads your notes to answer from them. It never writes into your notes folder: its own notes (daily briefing, agent notes) go to a folder of their own.',
+      notes_label: 'Folder with your notes, e.g. an Obsidian vault (optional)',
+      notes_ph: '~/Documents/Obsidian/MyVault',
+      write_label: 'Folder for ConductLoop\'s own notes',
+      create_label: 'Create it if it does not exist',
+      save_folders: 'Save and index my notes',
+      key_title: '2 · AI key (optional)',
+      key_hint: 'Search and notes work without it. To chat and summarise, paste a key from your AI provider. It is stored in the system keychain (the Keychain on a Mac), or in an encrypted file if there is none, and it is never shown again.',
+      provider_label: 'Provider',
+      key_label: 'API key',
+      save_key: 'Save key',
+      open_credentials: 'Open Credentials',
+      finish: 'Open ConductLoop',
+      back: 'Back',
+      skip: 'Skip for now',
+      open_setup: 'See the full setup checklist',
       write_env: 'This folder is set by an environment variable on this computer: it cannot be changed here.',
       saved_folders: 'Saved. Indexing your notes in the background.',
       saved_folders_only: 'Saved.',
@@ -98,8 +129,7 @@
       saved_key_plaintext: 'Key saved in plain text — open Credentials to encrypt it.',
       demo_failed: 'The sample data could not be loaded.',
       demo_present: 'Sample data is loaded ({n} fictional notes). It is removed the moment you index your own notes.',
-      demo_cleared: 'Sample data removed.',
-      back: 'Back'
+      demo_cleared: 'Sample data removed.'
     }
   };
   function t(key) {
