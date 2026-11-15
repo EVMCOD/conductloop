@@ -138,11 +138,39 @@ else
 fi
 
 # 3. A first run.
-if curl -s "$BASE/api/onboarding/state" | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("fresh") is True else 1)' \
-   && curl -s "$BASE/welcome" | grep -q "ConductLoop"; then
-  ok "first run: onboarding is fresh and /welcome is served"
+# The port opens before the app has finished starting (the database is
+# created, the full-text index is built, the window opens), and the state
+# was sampled ONCE, 40 ms after /api/health answered: a coin flip. The 1.2.26
+# smoke failed with "onboarding not fresh" and passed when it was re-run.
+# So wait for the state to settle, ask twice in a row (a state that flickers
+# is not a first run) and say which of the two things was wrong.
+state=""
+first_run=0
+for _ in $(seq 1 30); do
+  state="$(curl -s -m 5 "$BASE/api/onboarding/state" 2>/dev/null || true)"
+  if printf '%s' "$state" | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("fresh") is True else 1)' 2>/dev/null; then
+    first_run=$((first_run + 1))
+    if [[ "$first_run" -ge 2 ]]; then break; fi
+  else
+    first_run=0
+  fi
+  sleep 1
+done
+if [[ "$first_run" -ge 2 ]]; then
+  ok "first run: the onboarding state is fresh"
 else
-  bad "first run: onboarding not fresh or /welcome missing"
+  bad "first run: the onboarding state is not fresh (state: ${state:-no answer})"
+fi
+welcome=""
+for _ in $(seq 1 10); do
+  welcome="$(curl -s -m 5 "$BASE/welcome" 2>/dev/null || true)"
+  if printf '%s' "$welcome" | grep -q "ConductLoop"; then break; fi
+  sleep 1
+done
+if printf '%s' "$welcome" | grep -q "ConductLoop"; then
+  ok "first run: /welcome is served"
+else
+  bad "first run: /welcome is not served (${#welcome} bytes)"
 fi
 
 # 4. A window, and what it shows.

@@ -27,6 +27,12 @@ def _free_port() -> int:
 def base(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("e2e")
     import os
+    # These stay in the environment for every test after this module: a
+    # vault root that outlived it said to the app that the user had already
+    # chosen a folder, and the onboarding state was never "fresh" again.
+    # They are put back the way they were.
+    previous = {k: os.environ.get(k) for k in (
+        "CONDUCTLOOP_DB_PATH", "OPS_VAULT_ROOT", "OPS_DISABLE_KEYCHAIN", "OPS_SECRETS_DIR")}
     os.environ["CONDUCTLOOP_DB_PATH"] = str(tmp / "e2e.db")
     os.environ["OPS_VAULT_ROOT"] = str(tmp / "vault")
     os.environ["OPS_DISABLE_KEYCHAIN"] = "1"
@@ -49,6 +55,11 @@ def base(tmp_path_factory):
         yield f"http://127.0.0.1:{port}"
     finally:
         srv.shutdown()
+        for k, v in previous.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 def _get(url):
