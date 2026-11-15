@@ -80,3 +80,53 @@ Follow [desktop/docs/DISTRIBUTION.md](../desktop/docs/DISTRIBUTION.md):
 `./scripts/release-desktop.sh <VERSION>`. That script runs its own key checks
 against the signing key and the produced signature, which this dry run cannot
 do because it never sees the private key or the `.sig`.
+
+## Linux and Windows: one command
+
+`release-desktop.sh` builds, signs and publishes the **macOS** app only. The
+Linux and Windows builds were done by hand, one step at a time: dispatch the
+two bundle workflows, wait, download the artifacts, write `SHA256SUMS`,
+upload the files to the release, copy the previous release's notes and edit
+them. That is six steps to remember, and forgetting one leaves a release with
+a broken download.
+
+`scripts/release-platforms.sh <VERSION>` does all of it:
+
+```bash
+./scripts/release-platforms.sh 1.2.28           # publish Linux and Windows
+./scripts/release-platforms.sh 1.2.28 --dry-run # print the plan, touch nothing
+```
+
+It dispatches `linux-bundles.yml` and `windows-bundles.yml` on `main`, waits
+for both runs, downloads the four bundles, writes `SHA256SUMS`, uploads them
+to the tag `v<VERSION>` with `gh release upload --clobber`, rewrites the
+release notes and checks that every download URL answers 200.
+
+**It never creates the tag and never creates a release.** The tag belongs to
+the macOS release: run `scripts/release-desktop.sh <VERSION>` first, and this
+script adds the other platforms to that same release. That is also why the
+Linux and Windows assets must go in the same tag as the macOS ones: the
+updater endpoint (`releases/latest/download/update-macos-aarch64.json`) must
+keep answering.
+
+The notes are built by `scripts/release_notes.py`, out of the `## <VERSION>`
+section of `CHANGELOG.md` and the real download URLs:
+
+```bash
+python3 scripts/release_notes.py 1.2.28                # print the notes
+python3 scripts/release_notes.py 1.2.28 --out notes.md # write them
+python3 scripts/release_notes.py 1.2.28 --urls         # the download URLs
+```
+
+It fails (exit 1) when the changelog has no section for that version, or when
+the section is empty, so a release is never published with notes that say
+nothing. `--dry-run` prints the notes and writes nothing.
+
+The whole sequence, in order:
+
+```bash
+python3 scripts/release_check.py --version 1.2.28   # pre-flight
+./scripts/release-desktop.sh 1.2.28                 # macOS: builds, signs, publishes
+./scripts/release-platforms.sh 1.2.28               # Linux and Windows
+```
+

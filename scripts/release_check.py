@@ -189,17 +189,28 @@ def _version_in_heading(heading: str, version: str) -> bool:
     return re.search(rf"(?<![\w.])v?{re.escape(version)}(?![\w]|\.\d)", heading) is not None
 
 
+def changelog_sections(text: str) -> list[tuple[str, str]]:
+    """Every ``## `` section of the changelog, as (heading, body), in file order.
+
+    A section runs from its ``## `` heading to the next one. This is the only
+    place that decides what a section is: scripts/release_notes.py builds the
+    release notes out of the same sections, so the pre-flight check and the
+    published notes can never disagree about where a release starts.
+    """
+    lines = text.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith("## ")]
+    sections: list[tuple[str, str]] = []
+    for n, start in enumerate(starts):
+        end = starts[n + 1] if n + 1 < len(starts) else len(lines)
+        sections.append((lines[start], "\n".join(lines[start + 1 : end])))
+    return sections
+
+
 def changelog_section(text: str, version: str) -> tuple[str, str] | None:
     """(heading, body) of the first ``## `` section whose heading names ``version``."""
-    lines = text.splitlines()
-    for i, line in enumerate(lines):
-        if line.startswith("## ") and _version_in_heading(line, version):
-            body: list[str] = []
-            for nxt in lines[i + 1 :]:
-                if nxt.startswith("## "):
-                    break
-                body.append(nxt)
-            return line, "\n".join(body)
+    for heading, body in changelog_sections(text):
+        if _version_in_heading(heading, version):
+            return heading, body
     return None
 
 
