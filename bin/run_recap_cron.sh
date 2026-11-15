@@ -6,17 +6,19 @@
 # Runs the same flow as the Web UI's "↻ Regenerate" button: forces a fresh
 # synthesis, then pushes it to Discord if DISCORD_WEBHOOK_URL is set.
 # Telegram is not used here: the Telegram channel sends only run results.
-set -e
+#
+# bin/ops_env.sh decides which code runs, which database is read and where the
+# logs go — see the comment there for the incident that made this file.
+set -euo pipefail
 
-OPS_HOME="$HOME/ops-dashboard"
-LOG_DIR="$OPS_HOME/logs"
-mkdir -p "$LOG_DIR"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=bin/ops_env.sh
+. "$REPO_ROOT/bin/ops_env.sh"
 
-cd "$OPS_HOME"
-# shellcheck disable=SC1091
-source .venv/bin/activate
+cd "$OPS_REPO_ROOT"
+ops_check_code
 
-python - <<'PY'
+"$OPS_PYTHON" - <<'PY'
 import time
 from ops_dashboard import boardroom as br
 from ops_dashboard import discord_bridge as dc
