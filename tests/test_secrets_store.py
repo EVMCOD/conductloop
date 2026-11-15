@@ -34,6 +34,20 @@ def test_get_or_create_is_stable(store):
     assert calls["n"] == 1  # factory ran once, then read from store
 
 
+def test_a_name_with_a_colon_still_round_trips(store, tmp_path):
+    """Windows forbids a colon in a file name: the file fallback must cope."""
+    store.set_secret("site:credentials:1", "value")
+    assert store.get_secret("site:credentials:1") == "value"
+    assert (tmp_path / ".site-credentials-1.secret").exists()
+
+
+def test_delete_removes_the_secret_from_the_file(store, tmp_path):
+    store.set_secret("gone:1", "value")
+    assert store.delete_secret("gone:1") is True
+    assert store.get_secret("gone:1") is None
+    assert not (tmp_path / ".gone-1.secret").exists()
+
+
 @pytest.mark.posix_perms
 def test_file_is_owner_only(store, tmp_path):
     store.set_secret("sekret", "value")

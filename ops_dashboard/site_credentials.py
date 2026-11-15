@@ -20,8 +20,8 @@ from typing import Any
 
 from . import secrets_store
 
-GA_PREFIX = "ga_site_credentials:"
-GSC_PREFIX = "gsc_site_credentials:"
+GA_PREFIX = "ga-site-credentials-"
+GSC_PREFIX = "gsc-site-credentials-"
 
 
 def ga_secret_name(site_id: Any) -> str:

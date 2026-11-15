@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -64,7 +65,15 @@ def _secrets_dir() -> Path:
 
 
 def _file(name: str) -> Path:
-    return _secrets_dir() / f".{name}.secret"
+    """Where a secret lives in the file fallback.
+
+    The name is sanitised: Windows forbids ``<>:"/\\|?*`` in a file name, and
+    a name carrying one of them (``a:b``) made every write fail there with
+    ``WinError 87``. The keychain keeps the name as it is; only the file name
+    changes, and only for the characters Windows cannot hold.
+    """
+    safe = re.sub(r'[<>:"/\\|?*]', "-", name)
+    return _secrets_dir() / f".{safe}.secret"
 
 
 # The ``security`` CLI must never receive a secret VALUE as an argument: argv
