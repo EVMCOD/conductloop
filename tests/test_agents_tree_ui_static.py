@@ -114,3 +114,21 @@ def test_the_keys_of_both_dictionaries_are_the_same():
         return out
 
     assert keys(en) == keys(es), sorted(keys(en) ^ keys(es))[:20]
+
+
+def test_the_browser_test_does_not_ask_the_page_for_a_canvas_that_may_not_be_there():
+    """The questions the test asks the page must survive the panel rebuild.
+
+    The panel is rebuilt from scratch when the data arrives, and for a moment
+    there is no canvas at all. Asking a missing canvas for its attribute
+    throws inside the page, and Playwright reports that as a page error -- so
+    the test read its own question as a bug of the app, and failed once in
+    eight runs on a loaded machine (2026-11-15).
+
+    The question has to ask for the canvas first and look at it afterwards.
+    """
+    browser = (ROOT / "tests" / "test_agents_tree_ui_browser.py").read_text(encoding="utf-8")
+    assert "getElementById('org-canvas').getAttribute" not in browser
+    # The canvas is looked up before it is used.
+    assert "const c = document.getElementById('org-canvas');" in browser
+    assert "return c ? c.getAttribute('aria-activedescendant') : null;" in browser
