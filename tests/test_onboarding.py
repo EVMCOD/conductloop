@@ -81,7 +81,11 @@ def test_dismissing_the_byok_banner_does_not_end_the_first_run(onboarding, monke
     cfg_path = tmp_path / "config.json"
     monkeypatch.setenv("OPS_CONFIG_PATH", str(cfg_path))
     monkeypatch.setattr(brain, "CONFIG_PATH", cfg_path)
+    # A vault root in the environment says the user chose a folder, and that
+    # alone ends the first run. It is not this test's business.
+    monkeypatch.delenv("OPS_VAULT_ROOT", raising=False)
     cfg = brain._load_config()
     byok_keys.dismiss_prompt(cfg)
     brain._save_config(cfg)
-    assert onboarding.state()["fresh"] is True
+    st = onboarding.state()
+    assert st["fresh"] is True, st
