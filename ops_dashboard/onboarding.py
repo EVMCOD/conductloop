@@ -244,9 +244,12 @@ def state() -> dict:
     # Any setting already in config.json (a provider, a folder, a vault...) means
     # this is not a first run; the marker of this very page does not count.
     # Neither does the language: choosing it is part of the first run, not a
-    # sign that the app is already set up.
+    # sign that the app is already set up. Nor does dismissing the BYOK
+    # banner: saying "not now" to a prompt configures nothing, and counting
+    # it made the app forget it was on its first run (2026-11-15, P0-3).
+    from .byok_keys import PROMPT_FIELD
     settings = [k for k in brain._load_config()
-                if k not in ("onboarding", i18n.CONFIG_KEY)]
+                if k not in ("onboarding", i18n.CONFIG_KEY, PROMPT_FIELD)]
     configured = source != "default" or bool(library.index_folders()) or bool(settings)
     fresh = not (dismissed or completed or documents or has_key or configured)
     return {

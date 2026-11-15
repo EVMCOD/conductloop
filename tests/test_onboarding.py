@@ -62,3 +62,19 @@ def test_details_need_no_terminal_in_the_desktop_app(onboarding, monkeypatch):
         detail = by_id[cid]["detail"]
         assert "pip install" not in detail and "OPS_PROJECTS_FILE" not in detail and "`ops " not in detail, detail
     assert "not in the desktop app" in by_id["embeddings"]["detail"]
+
+
+def test_dismissing_the_byok_banner_does_not_end_the_first_run(onboarding, monkeypatch, tmp_path):
+    """Saying "not now" to the BYOK banner configures nothing.
+
+    The dismissal is remembered in config.json, and it used to count as a
+    setting: the app then reported it was no longer on its first run and the
+    welcome page never came back. The Linux smoke test caught it (2026-11-15,
+    prompt-minimax-2026-11-15 P0-3).
+    """
+    from ops_dashboard import brain, byok_keys
+    monkeypatch.setattr(brain, "CONFIG_PATH", tmp_path / "config.json")
+    cfg = brain._load_config()
+    byok_keys.dismiss_prompt(cfg)
+    brain._save_config(cfg)
+    assert onboarding.state()["fresh"] is True

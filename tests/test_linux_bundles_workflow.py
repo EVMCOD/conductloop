@@ -124,3 +124,25 @@ def test_it_publishes_nothing_and_takes_no_secret():
 def test_the_script_it_calls_exists_and_is_executable():
     script = ROOT / "scripts" / "build-linux.sh"
     assert script.is_file() and script.stat().st_mode & 0o111
+
+
+def test_the_smoke_script_waits_for_the_first_run_state_and_says_what_was_wrong():
+    """The port opens before the app has finished starting.
+
+    The onboarding state used to be sampled ONCE, 40 ms after /api/health
+    answered: the 1.2.26 smoke failed with "onboarding not fresh" and passed
+    when it was re-run (2026-11-15, prompt-minimax-2026-11-15 P0-3). So the
+    script waits for the state, asks twice in a row, and tells the two
+    failures apart so the next one is diagnosable.
+    """
+    code = "\n".join(re.sub(r"(^|\s)#.*$", "", line)
+                     for line in SMOKE.read_text(encoding="utf-8").splitlines())
+    assert "/api/onboarding/state" in code
+    # It waits for the state instead of sampling it once.
+    assert re.search(r"for _ in \$\(seq 1 \d+\); do", code) is not None
+    # It asks twice in a row: a state that flickers is not a first run.
+    assert "first_run" in code
+    # The two failures are told apart.
+    assert "the onboarding state is not fresh" in code
+    assert "/welcome is not served" in code
+    assert "onboarding not fresh or /welcome missing" not in code
