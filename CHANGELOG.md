@@ -2,6 +2,25 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## 1.2.29 — 2026-11-15 — The agents panel, walked with the keyboard
+
+### The agents panel, walked with the keyboard
+
+### The tree of agents works without a mouse
+
+- **The diagram can be walked with the keyboard.** It already said it was a tree, but nothing answered the keyboard: the arrows move between the boss, their reports and their colleagues, `Enter` opens the person the keyboard is on, and `Escape` closes their card and goes back to the whole organisation.
+- **A box above the tree finds somebody by name.** The organisation is wide, and with a real number of people there was no way to jump to one. The search ignores accents: "Jefe" finds "Jefé".
+- **Dropping somebody on a name of the path above the tree makes them report to that person.** Inside a branch there was no way to take anybody out of it.
+- **"New agent" is a form now, not three questions.** It asked for the team as a number — which defaulted to 1 and filed the agent under the wrong team — and for the type written by hand. It is one dialog in the page: name, team, type and the boss it reports to, proposed as the agent whose branch you are looking at.
+
+### The buttons answer in your language
+
+- **Confirmations and prompts say "Confirm", "Cancel" and "Accept" in the language of the app.** The dialogs kept English as their default, so a Spanish app showed English buttons.
+
+### The welcome page tells the truth
+
+- **It no longer promises that nothing leaves your computer.** With your own API key, the text of the question goes to the provider you chose; a connector you connect can write to that service, and every write waits for your confirmation; and the local network is a switch that stays off unless you turn it on. What is true is still there: no ConductLoop account, no ConductLoop cloud, no subscription, and your notes, your code and your numbers stay on your machine.
+
 ## 1.2.28 — 2026-11-15 — The daily poll works again, and your Google sign-in leaves the database
 
 ### The daily poll works again, and your Google sign-in leaves the database
