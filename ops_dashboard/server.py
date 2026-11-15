@@ -5159,15 +5159,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
             project_key = (data.get("project_key") or "").strip()
             if not property_id or not display_name or not project_key:
                 self._send(400, b'{"error":"property_id, display_name, project_key required"}', "application/json"); return
+            # The credential goes into the secrets store, not into the row:
+            # a refresh token in clear text in the database is what this
+            # replaces.
+            blob = (data.get("service_account_json") or "").strip()
             try:
                 sid = db.add_ga_site(
                     property_id=property_id, display_name=display_name, project_key=project_key,
                     url=data.get("url"),
-                    service_account_json=data.get("service_account_json"),
+                    source_type="ga4" if blob else None,
                     enabled=bool(data.get("enabled", True)),
                 )
             except Exception as e:
                 self._send(400, json.dumps({"error": str(e)}).encode(), "application/json"); return
+            if blob:
+                from . import site_credentials
+                try:
+                    site_credentials.set_ga_credentials(sid, blob)
+                except Exception as e:
+                    db.delete_ga_site(sid)
+                    self._send(400, json.dumps({"error": f"could not store the credentials: {e}"}).encode(), "application/json"); return
             self._send(200, json.dumps({"ok": True, "id": sid}).encode(), "application/json")
         else:
             self._send(405, b'{"error":"method not allowed"}', "application/json")
@@ -5177,16 +5188,31 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if self.command == "GET":
             row = db.get_ga_site(site_id)
             if not row: self._send(404, b'{"error":"not found"}', "application/json"); return
+            # The credential never leaves the machine through the API.
+            row.pop("service_account_json", None)
             self._send(200, json.dumps(row, default=str).encode(), "application/json")
         elif self.command == "PUT":
             try: data = self._read_json()
             except Exception: data = {}
+            blob = (data.get("service_account_json") or "").strip()
+            if blob:
+                from . import site_credentials
+                try:
+                    site_credentials.set_ga_credentials(site_id, blob)
+                except Exception as e:
+                    self._send(400, json.dumps({"error": f"could not store the credentials: {e}"}).encode(), "application/json"); return
+                data.pop("service_account_json", None)
             ok = db.update_ga_site(site_id, **data)
             if not ok: self._send(400, b'{"error":"bad update"}', "application/json"); return
             self._send(200, b'{"ok":true}', "application/json")
         elif self.command == "DELETE":
             ok = db.delete_ga_site(site_id)
             if not ok: self._send(404, b'{"error":"not found"}', "application/json"); return
+            from . import site_credentials
+            try:
+                site_credentials.delete_ga_credentials(site_id)
+            except Exception:
+                pass
             self._send(200, b'{"ok":true}', "application/json")
         else:
             self._send(405, b'{"error":"method not allowed"}', "application/json")

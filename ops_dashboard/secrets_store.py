@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -64,7 +65,15 @@ def _secrets_dir() -> Path:
 
 
 def _file(name: str) -> Path:
-    return _secrets_dir() / f".{name}.secret"
+    """Where a secret lives in the file fallback.
+
+    The name is sanitised: Windows forbids ``<>:"/\\|?*`` in a file name, and
+    a name carrying one of them (``a:b``) made every write fail there with
+    ``WinError 87``. The keychain keeps the name as it is; only the file name
+    changes, and only for the characters Windows cannot hold.
+    """
+    safe = re.sub(r'[<>:"/\\|?*]', "-", name)
+    return _secrets_dir() / f".{safe}.secret"
 
 
 # The ``security`` CLI must never receive a secret VALUE as an argument: argv
@@ -508,6 +517,25 @@ def keychain_delete(name: str) -> bool:
 def secrets_dir() -> Path:
     """Where the file fallback keeps the secrets."""
     return _secrets_dir()
+
+
+def delete_secret(name: str) -> bool:
+    """Remove a secret from the keychain and from the file fallback.
+
+    Returns True when neither place holds it afterwards. Used when the thing
+    the secret belonged to is gone for good (a site that was deleted), so the
+    credential does not outlive it.
+    """
+    gone = True
+    if _keychain_enabled():
+        gone = keychain_delete(name) and gone
+    p = _file(name)
+    try:
+        if p.exists():
+            p.unlink()
+    except OSError:
+        gone = False
+    return gone and _lookup(name)[0] is None
 
 
 def get_or_create_secret(name: str, factory) -> str:

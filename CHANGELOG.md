@@ -4,6 +4,14 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### The Google credentials leave the database
+
+- **Your Google sign-in is no longer stored in clear text inside the app's database.** The GA property and Search Console credentials were kept in the database as they are — an OAuth blob with a refresh token, which is enough to act as your Google account. They now live in the secrets store (the macOS keychain, or a 0600 file when the keychain is off) and the database keeps only the reference.
+- **Adding a property stores the credential in the same place**, instead of writing it into the row.
+- **The API no longer hands the credential out**: asking for one property used to answer with the whole row, credential included.
+- Deleting a property takes its credential with it.
+- A database that has not been migrated yet keeps working: the old column is still read as a fallback.
+
 ### The scheduled jobs run the app you have
 
 - **The daily Google Analytics and Search Console poll works again.** The scheduled jobs imported an old copy of the app that happened to sit in a folder, so they died on "No module named 'google.analytics'" every single day and the numbers in the panel quietly stopped refreshing. The fix was in the app all along; the job just never ran it.

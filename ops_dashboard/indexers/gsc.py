@@ -46,7 +46,10 @@ class GSCSource:
     def __init__(self, site_row: dict):
         self.site_row = site_row
         self.site_url = site_row["site_url"]
-        self.credentials_json = site_row.get("credentials_json") or ""
+        # The OAuth blob lives in the secrets store (the column is only the
+        # fallback for a database that has not been migrated yet).
+        from .. import site_credentials
+        self.credentials_json = site_credentials.get_gsc_credentials(site_row)
 
     def _query(self, body: dict) -> dict:
         url = f"{API_BASE}/sites/{urllib.parse.quote(self.site_url, safe='')}/searchAnalytics/query"
