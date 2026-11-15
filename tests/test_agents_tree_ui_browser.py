@@ -115,6 +115,21 @@ def _settled(page):
     )
 
 
+# Where is the keyboard? These are the questions the test asks the page, and
+# they have to survive the canvas not being there: the panel is rebuilt when
+# the data arrives, and for a moment there is no canvas at all. Asking a
+# missing canvas for its attribute throws inside the page, and Playwright
+# reports that as a page error -- which the test then reads as a bug of the
+# app. It was the test's own question that broke (once in eight runs, on a
+# loaded machine), not the app.
+_ACTIVE = ("() => { const c = document.getElementById('org-canvas');"
+           " return c ? c.getAttribute('aria-activedescendant') : null; }")
+_ACTIVE_MOVED = ("(prev) => { const c = document.getElementById('org-canvas');"
+                 " return c ? c.getAttribute('aria-activedescendant') !== prev : false; }")
+_ACTIVE_BACK = ("(prev) => { const c = document.getElementById('org-canvas');"
+                " return c ? c.getAttribute('aria-activedescendant') === prev : false; }")
+
+
 def _press_until(page, key, condition, tries=3, arg=None):
     """Press a key on the tree until the tree answers.
 
@@ -169,27 +184,20 @@ def test_the_tree_is_walked_with_the_keyboard(org, engine):
             # locator.press() focuses the element and presses in one go: the
             # panel is re-rendered when the data arrives, and the element the
             # focus was on is replaced with it.
-            assert _press_until(pg, "ArrowDown",
-                                 "() => document.getElementById('org-canvas').getAttribute('aria-activedescendant')"), \
+            assert _press_until(pg, "ArrowDown", _ACTIVE), \
                 "the tree did not answer the keyboard"
             first = pg.get_attribute("#org-canvas", "aria-activedescendant")
             assert first, "the tree did not answer the keyboard"
 
             # Down moves to the next node.
-            assert _press_until(
-                pg, "ArrowDown",
-                "(prev) => document.getElementById('org-canvas').getAttribute('aria-activedescendant') !== prev",
-                arg=first,
-            ), "the tree did not move down"
+            assert _press_until(pg, "ArrowDown", _ACTIVE_MOVED, arg=first), \
+                "the tree did not move down"
             second = pg.get_attribute("#org-canvas", "aria-activedescendant")
             assert second != first
 
             # Up goes back to the node the keyboard came from.
-            assert _press_until(
-                pg, "ArrowUp",
-                "(prev) => document.getElementById('org-canvas').getAttribute('aria-activedescendant') === prev",
-                arg=first,
-            ), "the tree did not go back up"
+            assert _press_until(pg, "ArrowUp", _ACTIVE_BACK, arg=first), \
+                "the tree did not go back up"
             assert pg.get_attribute("#org-canvas", "aria-activedescendant") == first
 
             # Enter opens the node the keyboard is on: its card appears and
