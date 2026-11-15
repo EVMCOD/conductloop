@@ -316,14 +316,17 @@ SOURCES: dict[str, type[BaseSource]] = {
 
 
 def get_source(site_row: dict) -> BaseSource | None:
-    # No explicit source_type: a site with a service account is real GA4,
-    # anything else is the mock generator.
-    default = "ga4" if (site_row.get("service_account_json") or "").strip() else "mock"
+    from .. import site_credentials
+    # No explicit source_type: a site with a credential is real GA4,
+    # anything else is the mock generator. The credential lives in the secrets
+    # store (the column is only the fallback for a database that has not been
+    # migrated yet), so look there before calling a site a mock.
+    default = "ga4" if site_credentials.get_ga_credentials(site_row) else "mock"
     cls = SOURCES.get(site_row.get("source_type") or default)
     if not cls:
         return None
-    # Credentials (currently service_account_json is on the site row itself,
-    # not a separate connection). Pass empty for now.
+    # Credentials (in the secrets store, not in a separate connection).
+    # Pass empty for now.
     return cls(site_row, {})
 
 

@@ -182,6 +182,31 @@ def test_a_database_that_has_not_been_migrated_still_works(env, monkeypatch):
     assert src.fetch_metrics(days=7) == []
 
 
+def test_a_site_with_only_a_stored_credential_is_not_taken_for_a_mock(env):
+    """The credential moved out of the column: the site is still real GA4."""
+    from ops_dashboard import site_credentials
+    from ops_dashboard.indexers import ga
+
+    site_id = env.add_ga_site("properties/1", "Acme", "acme")
+    site_credentials.set_ga_credentials(site_id, BLOB_JSON)
+    # A row without an explicit type: the credential decides, and it now lives
+    # in the secrets store instead of the column.
+    with env.get_connection() as conn:
+        conn.execute("UPDATE ga_sites SET source_type = NULL WHERE id = ?", (site_id,))
+    row = env.get_ga_site(site_id)
+    assert row["service_account_json"] is None
+    assert row["source_type"] is None
+
+    assert isinstance(ga.get_source(row), ga.GA4Source)
+
+
+def test_a_site_without_any_credential_is_still_a_mock(env):
+    from ops_dashboard.indexers import ga
+
+    site_id = env.add_ga_site("properties/1", "Acme", "acme")
+    assert isinstance(ga.get_source(env.get_ga_site(site_id)), ga.MockSource)
+
+
 # ── the API ───────────────────────────────────────────────────────────────────
 
 @pytest.fixture()
