@@ -116,6 +116,9 @@ Thumbs.db
 # Maintainer-only release identity (see scripts/release.local.env.example)
 scripts/release.local.env
 
+# Machine-specific settings for the scheduled jobs (see scripts/ops.local.env.example)
+scripts/ops.local.env
+
 # Maintainer's local data, never published: project playbooks (they are your
 # own notes; ops_dashboard/indexers/playbook.py reads ./playbook if present),
 # the internal tracker / changelog and old internal release notes.
