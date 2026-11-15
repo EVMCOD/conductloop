@@ -475,3 +475,15 @@ def test_an_artifact_without_a_file_stops_the_run(fake_gh):
     assert r.returncode == 1
     assert "the build produced no" in r.stderr
     assert fake_gh["uploaded"].read_text(encoding="utf-8").strip() == ""
+
+
+def test_a_changelog_without_the_section_publishes_nothing(fake_gh, tmp_path):
+    """The notes are built before the upload: a changelog that says nothing
+    about this version stops the run with the release untouched."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# Changelog\n\n## 0.0.1 - 2026-01-01 - Something else\n\n- Nothing.\n")
+    env = {**fake_gh["env"], "CHANGELOG_FILE": str(changelog)}
+    r = subprocess.run([str(SCRIPT), VERSION], capture_output=True, text=True, env=env, cwd=ROOT)
+    assert r.returncode == 1
+    assert "no '##" in r.stderr
+    assert fake_gh["uploaded"].read_text(encoding="utf-8").strip() == ""

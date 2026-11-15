@@ -85,6 +85,9 @@ fi
 
 TAG="v${VERSION}"
 NOTES_SCRIPT="$SCRIPT_DIR/release_notes.py"
+# The changelog the notes are built from. The release's own CHANGELOG.md,
+# unless CHANGELOG_FILE says otherwise.
+CHANGELOG_FILE="${CHANGELOG_FILE:-$ROOT/CHANGELOG.md}"
 
 # The names the assets are published under. They are the names the builds
 # produce and the names the published releases carry (v1.2.27).
@@ -288,7 +291,15 @@ done
 cat "$UPLOAD_DIR/SHA256SUMS"
 echo ""
 
-# ── 4. Upload to the existing tag ────────────────────────────────────────────
+# ── 4. The release notes ─────────────────────────────────────────────────────
+# Built before anything is published: a changelog without the section of this
+# version stops the run here, with the release untouched.
+echo "▸ Building the release notes"
+NOTES_FILE="$STAGE/release-notes.md"
+python3 "$NOTES_SCRIPT" "$VERSION" --changelog "$CHANGELOG_FILE" --out "$NOTES_FILE"
+echo ""
+
+# ── 5. Upload to the existing tag ────────────────────────────────────────────
 echo "▸ Uploading to the release $TAG in $RELEASE_REPO"
 gh release upload "$TAG" --repo "$RELEASE_REPO" --clobber \
   "$UPLOAD_DIR/$APPIMAGE_NAME" \
@@ -299,10 +310,8 @@ gh release upload "$TAG" --repo "$RELEASE_REPO" --clobber \
 echo "  ✓ uploaded the four files and SHA256SUMS"
 echo ""
 
-# ── 5. Release notes ─────────────────────────────────────────────────────────
+# ── 6. Rewrite the notes of the release ──────────────────────────────────────
 echo "▸ Writing the release notes"
-NOTES_FILE="$STAGE/release-notes.md"
-python3 "$NOTES_SCRIPT" "$VERSION" --out "$NOTES_FILE"
 gh release edit "$TAG" --repo "$RELEASE_REPO" --notes-file "$NOTES_FILE"
 echo "  ✓ the notes of $TAG are the ones of the changelog"
 echo ""
