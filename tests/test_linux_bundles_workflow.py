@@ -126,6 +126,25 @@ def test_the_script_it_calls_exists_and_is_executable():
     assert script.is_file() and script.stat().st_mode & 0o111
 
 
+def test_the_smoke_script_says_how_long_it_waited_and_whether_the_app_exited():
+    """The message about a server that never answered was a lie.
+
+    The wait loop stops as soon as the app process is gone, so the AppImage
+    that died on the runner after five seconds (once in twenty runs) was
+    reported as "did not answer within 120 s". The time it really waited, the
+    fact that the app exited, and an empty app log said out loud are what
+    make the next occurrence diagnosable
+    (2026-11-15, prompt-minimax-2026-11-15 P0-3).
+    """
+    code = "\n".join(re.sub(r"(^|\s)#.*$", "", line)
+                     for line in SMOKE.read_text(encoding="utf-8").splitlines())
+    assert "did not answer within $WAIT s" not in code
+    assert "the app exited" in code and "the app is still running" in code
+    assert 'elapsed=$(( $(date +%s) - started ))' in code
+    # An empty log is a fact, not a missing tail.
+    assert '-s "$LOG"' in code and "the app wrote nothing to" in code
+
+
 def test_the_smoke_script_waits_for_the_first_run_state_and_says_what_was_wrong():
     """The port opens before the app has finished starting.
 
