@@ -241,6 +241,7 @@ def state() -> dict:
     has_key = _has_key()
     source = db.vault_root_source()
     from . import brain
+
     # Any setting already in config.json (a provider, a folder, a vault...) means
     # this is not a first run; the marker of this very page does not count.
     # Neither does the language: choosing it is part of the first run, not a
