@@ -2,7 +2,9 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
-## Unreleased
+## 1.2.28 — 2026-11-15 — The daily poll works again, and your Google sign-in leaves the database
+
+### The daily poll works again, and your Google sign-in leaves the database
 
 ### The Google credentials leave the database
 
