@@ -99,6 +99,18 @@ function tr(key, vars) {
   return window._i18n ? window._i18n.t(key, vars) : key;
 }
 
+// The words on the dialog's buttons, in the language of this page.
+// confirm.js keeps English as its default -- the product's default copy is
+// English -- so a page that ships another language has to pass its own
+// labels. The dashboard did not, and the buttons answered in English inside
+// a Spanish app (2026-11-15, prompt-minimax-2026-11-15 P1-2).
+function _confirmLabels() {
+  return { confirm: tr('dashboard.dlg_confirm'), cancel: tr('dashboard.dlg_cancel') };
+}
+function _promptLabels(opts) {
+  return Object.assign({ ok: tr('dashboard.dlg_ok'), cancel: tr('dashboard.dlg_cancel') }, opts || {});
+}
+
 // ---- Theme ----
 // Light or dark follows the system until the person picks one; appearance.js
 // keeps that choice and applies it on every page (theme.css reads the class).
@@ -1092,7 +1104,7 @@ function showDocEditorModal(docId, title, path, source, content, projectKey) {
     }
   });
   document.getElementById('doc-edit-delete').addEventListener('click', async function() {
-    if (!await confirmAction(tr('dashboard.confirm_delete_doc'))) return;
+    if (!await confirmAction(tr('dashboard.confirm_delete_doc'), _confirmLabels())) return;
     try {
       var r = await fetch('/api/docs/delete?doc_id=' + docId, { method: 'DELETE' });
       if (!r.ok) {
@@ -2077,7 +2089,7 @@ async function refreshMembers() {
 
 async function assignTodoPrompt(todoId) {
   if (!_members || !_members.length) { await refreshMembers(); }
-  var choice = await promptAction(tr('dashboard.assign_to_prompt') + _members.map(function(m){ return m.id + '. ' + (m.type === 'ai_agent' ? '🤖' : '👤') + ' ' + m.name + (m.workload ? tr('dashboard.workload_todos', { n: m.workload }) : ''); }).join('\n'));
+  var choice = await promptAction(tr('dashboard.assign_to_prompt') + _members.map(function(m){ return m.id + '. ' + (m.type === 'ai_agent' ? '🤖' : '👤') + ' ' + m.name + (m.workload ? tr('dashboard.workload_todos', { n: m.workload }) : ''); }).join('\n'), _promptLabels());
   if (choice === null) return;
   choice = choice.trim();
   if (!choice) return;
@@ -2310,7 +2322,7 @@ async function toggleUserTodo(id) {
 }
 
 async function deleteUserTodo(id) {
-  if (!await confirmAction(tr('dashboard.confirm_delete_todo'))) return;
+  if (!await confirmAction(tr('dashboard.confirm_delete_todo'), _confirmLabels())) return;
   try {
     var r = await fetch('/api/user_todos/' + id, { method: 'DELETE' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -2323,7 +2335,7 @@ async function editUserTodo(id) {
   // In-page dialog: a native prompt does not work in the desktop app.
   var d = _userTodos.find(function(x) { return x.id === id; });
   if (!d) return;
-  var nv = await promptAction(tr('dashboard.edit_todo_prompt'), { defaultValue: d.content });
+  var nv = await promptAction(tr('dashboard.edit_todo_prompt'), _promptLabels({ defaultValue: d.content }));
   if (nv == null) return;
   fetch('/api/user_todos/' + id, {
     method: 'PUT',
@@ -2474,7 +2486,7 @@ async function updateIdeaStatus(id, status) {
 }
 
 async function deleteIdea(id) {
-  if (!await confirmAction(tr('dashboard.confirm_delete_idea'))) return;
+  if (!await confirmAction(tr('dashboard.confirm_delete_idea'), _confirmLabels())) return;
   try {
     var r = await fetch('/api/ideas/' + id, { method: 'DELETE' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -4313,7 +4325,7 @@ async function renderApprovalsView() {
     });
     main.querySelectorAll('[data-approval-reject]').forEach(function(b) {
       b.addEventListener('click', async function() {
-        if (!await confirmAction(tr('dashboard.confirm_reject_proposal'))) return;
+        if (!await confirmAction(tr('dashboard.confirm_reject_proposal'), _confirmLabels())) return;
         await fetch('/api/approvals/' + b.dataset.approvalReject + '/reject', {method:'POST'});
         renderApprovalsView();
         refreshApprovalsBadge();
@@ -4866,15 +4878,15 @@ async function renderDecisionsView() {
     main.innerHTML = html;
     renderOutline();
     document.getElementById('add-decision').addEventListener('click', async function() {
-      var t = await promptAction(tr('dashboard.decision_title_prompt'));
+      var t = await promptAction(tr('dashboard.decision_title_prompt'), _promptLabels());
       if (!t) return;
-      var d = await promptAction(tr('dashboard.what_decided_prompt'));
+      var d = await promptAction(tr('dashboard.what_decided_prompt'), _promptLabels());
       if (!d) return;
       fetch('/api/decision', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title: t, decision: d})}).then(function(){renderDecisionsView();});
     });
     main.querySelectorAll('[data-decision-del]').forEach(function(b) {
       b.addEventListener('click', async function() {
-        if (!await confirmAction(tr('dashboard.confirm_delete_decision'))) return;
+        if (!await confirmAction(tr('dashboard.confirm_delete_decision'), _confirmLabels())) return;
         fetch('/api/decision/' + b.dataset.decisionDel, {method:'DELETE'}).then(function(){renderDecisionsView();});
       });
     });
@@ -4926,12 +4938,12 @@ async function renderCostsView() {
     main.innerHTML = html;
     renderOutline();
     document.getElementById('add-cost').addEventListener('click', async function() {
-      var provider = await promptAction(tr('dashboard.provider_prompt'));
+      var provider = await promptAction(tr('dashboard.provider_prompt'), _promptLabels());
       if (!provider) return;
-      var amount = await promptAction(tr('dashboard.amount_prompt'));
+      var amount = await promptAction(tr('dashboard.amount_prompt'), _promptLabels());
       if (!amount) return;
-      var currency = await promptAction(tr('dashboard.currency_prompt'), { defaultValue: 'EUR' }) || 'EUR';
-      var desc = await promptAction(tr('dashboard.description_prompt')) || '';
+      var currency = await promptAction(tr('dashboard.currency_prompt'), _promptLabels({ defaultValue: 'EUR' })) || 'EUR';
+      var desc = await promptAction(tr('dashboard.description_prompt'), _promptLabels()) || '';
       fetch('/api/cost', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({provider: provider, amount: parseFloat(amount), currency: currency, description: desc})}).then(function(){renderCostsView();});
     });
   } catch (e) { main.innerHTML = '<div class="empty-state">' + esc(tr('dashboard.error_prefix')) + esc(e.message) + '</div>'; }
@@ -5698,7 +5710,7 @@ async function renderTemplatesView() {
     renderOutline();
     main.querySelectorAll('[data-tpl-run]').forEach(function(b) {
       b.addEventListener('click', async function() {
-        var proj = await promptAction(tr('dashboard.attach_project_prompt'));
+        var proj = await promptAction(tr('dashboard.attach_project_prompt'), _promptLabels());
         fetch('/api/templates/by-key/' + b.dataset.tplRun + '/instantiate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({project_key: proj || null})})
           .then(function(r){return r.json();})
           .then(function(d){notify(tr('dashboard.created_todos', { n: d.ids.length }));});
@@ -5732,6 +5744,22 @@ var _agentTreeZoom = (function() {
 var ORG_SLOT = 150, ORG_LEVEL = 200;  // tree diagram: column width, row height
 var ORG_ZOOM_MIN = 0.25, ORG_ZOOM_MAX = 2;
 var _agentTreeLastFocus;      // the branch the diagram last showed (null: the whole organisation)
+// Whose branch is on screen: the head of what the diagram shows. The form
+// for a new agent proposes it as the boss (prompt-minimax-2026-11-15 P1-1).
+var _agentTreeFocusId = null;
+// The node the keyboard is on, and whether the diagram should take the focus
+// back after the next render (the diagram is replaced, and with it the
+// focus). P1-4.
+var _agentTreeFocusNodeId = null;
+var _agentTreeFocusCanvas = false;
+// What was typed in "Go to an agent…": it lives outside the DOM because the
+// panel is re-rendered when the data arrives (P1-4).
+var _agentSearchQuery = '';
+// How many times the diagram has been drawn. The panel is rebuilt when the
+// data arrives, and the element that had the focus is replaced with it, so
+// anything that drives the tree (a test, a script) can wait for the drawing
+// to settle (P1-4).
+var _agentTreeRenderCount = 0;
 var _agentChatHistory = {};   // member_id -> [{role, content}]
 var _agentEditing = false;
 var _agentTab = 'edit';       // 'edit' | 'chat' | 'activity'
@@ -5898,6 +5926,32 @@ function renderAgentsMount(mount, data) {
     });
     html += '</nav>';
   }
+  // Whose branch is on screen: the head of what the diagram shows. The form
+  // for a new agent proposes it as the boss (P1-1).
+  _agentTreeFocusId = focusId != null ? focusId : (tops.length ? tops[0].id : null);
+
+  // Choosing an agent: its card opens beside the diagram and the diagram
+  // shows its branch. The mouse, the keyboard and the search all end here.
+  function selectNode(id) {
+    _agentTreeFocusNodeId = id;
+    _agentSelectedId = id;
+    _agentChatHistory[id] = _agentChatHistory[id] || [];
+    _agentTab = 'edit';
+    _agentTreeFocusCanvas = true;
+    renderAgentsView();
+  }
+
+  // "Go to an agent…": the organisation is big (43 people in a real install),
+  // and the diagram is wide. Choosing somebody from here does what pressing
+  // Enter on them does (P1-4).
+  html += '<div class="org-search">'
+    + '<input id="agent-search" type="search" class="org-search-input" autocomplete="off"'
+    + ' placeholder="' + esc(tr('dashboard.agent_search_ph')) + '"'
+    + ' aria-label="' + esc(tr('dashboard.agent_search_ph')) + '"'
+    + ' value="' + esc(_agentSearchQuery) + '" />'
+    + '<div id="agent-search-results" class="org-search-results" role="listbox" hidden></div>'
+    + '</div>';
+
   html += '<div class="org-wrap" id="org-wrap">';
   if (!_agentSelectedId) html += '<p class="org-hint">' + esc(tr('dashboard.select_agent')) + '</p>';
 
@@ -5908,8 +5962,12 @@ function renderAgentsMount(mount, data) {
   // over its first and last report; one row per level.
   var SLOT = ORG_SLOT, LEVEL = ORG_LEVEL, PAD = 24, GAP = 56;
   var pos = {}, edges = [], nextX = PAD, maxDepth = 0;
+  // The order the nodes are walked in: a manager, then its reports, then
+  // theirs. The keyboard follows it (prompt-minimax-2026-11-15 P1-4).
+  var order = [];
   function place(m, depth, path) {
     var kids = (path[m.id] || (collapsed[m.id] && m.id !== focusId)) ? [] : sortMembers((children[m.id] || []).slice());
+    order.push(m.id);
     maxDepth = Math.max(maxDepth, depth);
     if (!kids.length) {
       pos[m.id] = { x: nextX + SLOT / 2, depth: depth };
@@ -5923,7 +5981,9 @@ function renderAgentsMount(mount, data) {
   tops.forEach(function(t, i) { if (i) nextX += GAP; place(t, 0, {}); });
   var width = nextX + PAD, height = (maxDepth + 1) * LEVEL + 24;
 
-  html += '<div class="org-canvas" id="org-canvas" role="tree" data-w="' + width + '" data-h="' + height + '">';
+  html += '<div class="org-canvas" id="org-canvas" role="tree" tabindex="0" data-render="' + (++_agentTreeRenderCount) + '"'
+    + ' aria-label="' + esc(tr('dashboard.tree_path')) + '"'
+    + ' data-w="' + width + '" data-h="' + height + '">';
   // The lines are drawn once the nodes are in place (their labels have a
   // height only then): from under each manager's label down to each report.
   html += '<svg class="org-lines" width="' + width + '" height="' + height + '" aria-hidden="true"></svg>';
@@ -5934,9 +5994,11 @@ function renderAgentsMount(mount, data) {
     var folded = kids && collapsed[id];
     var sub = subtitle(m);
     html += '<div class="org-node' + (_agentSelectedId === m.id ? ' is-selected' : '') + (tops.length && +id === tops[0].id ? ' is-first' : '') + '"'
+      + ' id="org-node-' + m.id + '"'
       + ' data-member-id="' + m.id + '" data-member-name="' + esc(m.name) + '" data-member-type="' + esc(m.type) + '"'
       + ' data-x="' + (p.x - SLOT / 2) + '" data-y="' + (p.depth * LEVEL + 12) + '"'
-      + ' draggable="' + (_agentEditing ? 'true' : 'false') + '" role="treeitem" aria-level="' + (p.depth + 1) + '">'
+      + ' draggable="' + (_agentEditing ? 'true' : 'false') + '" role="treeitem" aria-level="' + (p.depth + 1) + '"'
+      + ' aria-selected="' + (_agentSelectedId === m.id ? 'true' : 'false') + '">'
       + '<span class="org-dot">' + agentAvatar(m.type) + '<span class="agents-status' + status + '" title="' + esc(m.status || '') + '"></span></span>'
       + '<span class="org-name">' + esc(m.name) + '</span>'
       + (sub ? '<span class="org-sub">' + esc(sub) + '</span>' : '')
@@ -5970,6 +6032,10 @@ function renderAgentsMount(mount, data) {
   html += '</div>';  // .agents-layout
   html += '</div>';  // .md-view
 
+  // The panel is rebuilt from scratch, and the element that had the focus is
+  // about to be replaced with it. Whether the tree had it is remembered, so
+  // the keyboard carries on where it was (P1-4).
+  var hadTreeFocus = !!(document.activeElement && document.activeElement.id === 'org-canvas');
   mount.innerHTML = html;
   renderOutline();
 
@@ -6087,6 +6153,80 @@ function renderAgentsMount(mount, data) {
     function endPan() { pan = null; wrap.classList.remove('is-panning'); }
     wrap.addEventListener('pointerup', endPan);
     wrap.addEventListener('pointercancel', endPan);
+
+    // ---- The keyboard walks the diagram (P1-4) ----
+    // The canvas is the tree: the arrows move between the boss, the reports
+    // and the colleagues; Enter opens the node the keyboard is on; Escape
+    // closes the card and goes back to the whole organisation.
+    function markFocus(id) {
+      canvas.querySelectorAll('.org-node.is-keyboard').forEach(function(n) { n.classList.remove('is-keyboard'); });
+      var el = id != null ? canvas.querySelector('[data-member-id="' + id + '"]') : null;
+      if (el) {
+        el.classList.add('is-keyboard');
+        canvas.setAttribute('aria-activedescendant', el.id);
+        _agentTreeFocusNodeId = id;
+      } else {
+        canvas.removeAttribute('aria-activedescendant');
+        _agentTreeFocusNodeId = null;
+      }
+    }
+    function unfold(id) {
+      var state = {};
+      try { state = JSON.parse(localStorage.getItem('cl.agentTree.collapsed') || '{}') || {}; } catch (e) { state = {}; }
+      delete state[id];
+      try { localStorage.setItem('cl.agentTree.collapsed', JSON.stringify(state)); } catch (e) {}
+      _agentTreeFocusNodeId = id;
+      _agentTreeFocusCanvas = true;
+      renderAgentsView();
+    }
+    canvas.addEventListener('keydown', function(e) {
+      var id = _agentTreeFocusNodeId;
+      var i = id != null ? order.indexOf(id) : -1;
+      if (i < 0) {
+        // The first arrow puts the keyboard on the first node of the tree.
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+          if (order.length) { markFocus(order[0]); e.preventDefault(); }
+        }
+        return;
+      }
+      var m = byId[id];
+      if (e.key === 'ArrowDown') {
+        if (i < order.length - 1) markFocus(order[i + 1]);
+        e.preventDefault();
+      } else if (e.key === 'ArrowUp') {
+        if (i > 0) markFocus(order[i - 1]);
+        e.preventDefault();
+      } else if (e.key === 'ArrowRight') {
+        // Into the first report; a folded branch opens.
+        var kids = children[id] || [];
+        if (kids.length) {
+          if (collapsed[id]) unfold(id);
+          else markFocus(kids[0].id);
+        }
+        e.preventDefault();
+      } else if (e.key === 'ArrowLeft') {
+        // To the boss.
+        if (m && m.manager_id != null && byId[m.manager_id]) markFocus(m.manager_id);
+        e.preventDefault();
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        selectNode(id);
+        e.preventDefault();
+      } else if (e.key === 'Escape') {
+        // Close the card and go back to the whole organisation. The key must
+        // not reach the document: its handler navigates back to the files.
+        e.preventDefault();
+        e.stopPropagation();
+        _agentSelectedId = null;
+        _agentSelectedMember = null;
+        renderAgentsView();
+      }
+    });
+    // The diagram was replaced by the last render: the focus went with it.
+    markFocus(_agentTreeFocusNodeId);
+    if (hadTreeFocus || _agentTreeFocusCanvas) {
+      _agentTreeFocusCanvas = false;
+      try { canvas.focus(); } catch (e) { /* no focus in this environment */ }
+    }
   }
 
   // The path above a branch: up to a manager, or back to the whole organisation.
@@ -6101,6 +6241,23 @@ function renderAgentsMount(mount, data) {
       }
       renderAgentsView();
     });
+    // In edit mode, dropping a member on a name of the path changes its boss
+    // to that person: inside a branch nobody could be taken out of it
+    // (prompt-minimax-2026-11-15 P1-4).
+    if (_agentEditing) btn.setAttribute('data-org-drop', '1');
+    btn.addEventListener('dragover', function(e) {
+      if (!_agentEditing) return;
+      e.preventDefault();
+      btn.classList.add('is-drop');
+    });
+    btn.addEventListener('dragleave', function() { btn.classList.remove('is-drop'); });
+    btn.addEventListener('drop', function(e) {
+      if (!_agentEditing) return;
+      e.preventDefault();
+      btn.classList.remove('is-drop');
+      var target = btn.dataset.orgFocus ? parseInt(btn.dataset.orgFocus) : null;
+      window._agentDrop(target, e);
+    });
   });
 
   // Click member → select + show detail. In edit mode a member can be
@@ -6109,10 +6266,7 @@ function renderAgentsMount(mount, data) {
     var id = parseInt(el.dataset.memberId);
     el.addEventListener('click', function(e) {
       if (e.target.closest('input,button,select,textarea')) return;
-      _agentSelectedId = id;
-      _agentChatHistory[_agentSelectedId] = _agentChatHistory[_agentSelectedId] || [];
-      _agentTab = 'edit';
-      renderAgentsView();
+      selectNode(id);
     });
     el.addEventListener('dragstart', function(e) {
       window._agentDragId = id;
@@ -6143,6 +6297,83 @@ function renderAgentsMount(mount, data) {
     });
   });
 
+  // "Go to an agent…": the organisation is big (43 people in a real install)
+  // and the diagram is wide. Choosing somebody from here does what pressing
+  // Enter on them does (prompt-minimax-2026-11-15 P1-4).
+  var searchInput = document.getElementById('agent-search');
+  var searchResults = document.getElementById('agent-search-results');
+  if (searchInput && searchResults) {
+    function plain(s) {
+      // "Jefe" has to find "Jefé".
+      return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+    function closeSearch() {
+      var box = document.getElementById('agent-search-results');
+      if (!box) return;
+      box.innerHTML = '';
+      box.hidden = true;
+    }
+    function showMatches(q) {
+      // The box is looked up now, not taken from the render: the panel can
+      // be replaced between the keystroke and the moment it is handled, and
+      // the matches belong to the box that is on screen.
+      var box = document.getElementById('agent-search-results');
+      if (!box) return;
+      if (!q) { box.innerHTML = ''; box.hidden = true; return; }
+      var matches = Object.keys(byId).map(function(id) { return byId[id]; })
+        .filter(function(m) { return plain(m.name).indexOf(q) >= 0; })
+        .slice(0, 8);
+      if (!matches.length) {
+        box.innerHTML = '<div class="org-search-empty">' + esc(tr('dashboard.agent_search_none')) + '</div>';
+        box.hidden = false;
+        return;
+      }
+      box.innerHTML = matches.map(function(m) {
+        return '<button type="button" class="org-search-item" role="option" data-search-member-id="' + m.id + '">'
+          + agentAvatar(m.type) + '<span>' + esc(m.name) + '</span></button>';
+      }).join('');
+      box.hidden = false;
+    }
+    searchInput.addEventListener('input', function() {
+      _agentSearchQuery = searchInput.value.trim();
+      showMatches(plain(_agentSearchQuery));
+    });
+    searchInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        var box = document.getElementById('agent-search-results');
+        var first = box && box.querySelector('[data-search-member-id]');
+        if (first) {
+          e.preventDefault();
+          selectNode(parseInt(first.dataset.searchMemberId));
+          _agentSearchQuery = '';
+          searchInput.value = '';
+          closeSearch();
+        }
+      } else if (e.key === 'Escape') {
+        searchInput.value = '';
+        closeSearch();
+      }
+    });
+    // The click is delegated from the panel, which outlives the box: the
+    // panel is replaced when the data arrives, and a handler bound to the
+    // box that went with it would never fire again. It is bound once.
+    if (!mount._agentSearchWired) {
+      mount._agentSearchWired = true;
+      mount.addEventListener('click', function(e) {
+        var item = e.target.closest('[data-search-member-id]');
+        if (!item) return;
+        selectNode(parseInt(item.dataset.searchMemberId));
+        _agentSearchQuery = '';
+        var input = document.getElementById('agent-search');
+        if (input) input.value = '';
+        closeSearch();
+      });
+    }
+    // The panel is re-rendered when the data arrives: the query lives outside
+    // the DOM, so what was typed is not lost with it.
+    if (_agentSearchQuery) showMatches(plain(_agentSearchQuery));
+  }
+
   // In edit mode, dropping a member on "No reporting line" removes its manager.
   var looseBox = mount.querySelector('[data-org-unassign]');
   if (looseBox) {
@@ -6162,21 +6393,37 @@ function renderAgentsMount(mount, data) {
     renderAgentsView();
   });
 
-  // New agent button
+  // New agent button.
+  // One form, not three questions in a row: the team was a NUMBER typed by
+  // hand (defaulting to 1, which filed the agent under the wrong team) and
+  // the type was free text (2026-11-15, prompt-minimax-2026-11-15 P1-1).
   document.getElementById('agent-add-btn').addEventListener('click', async function() {
-    var name = await promptAction(tr('dashboard.agent_name_prompt'));
-    if (!name) return;
-    var teamId = await promptAction(tr('dashboard.team_id_prompt')) || '1';
-    var type = await promptAction(tr('dashboard.type_prompt'), { defaultValue: 'ai_agent' }) || 'ai_agent';
+    var teams = _agentTeamsCache || await fetchJSON('/api/teams');
+    var members = _agentMembersCache || await fetchJSON('/api/members');
+    // The boss defaults to the agent whose branch is being looked at: that
+    // is where a new agent usually belongs.
+    var boss = _agentSelectedId != null ? _agentSelectedId : _agentTreeFocusId;
+    var sel = null;
+    for (var i = 0; i < members.length; i++) { if (members[i].id === boss) { sel = members[i]; break; } }
+    var d = await openNewAgentDialog({
+      teams: teams,
+      members: members,
+      defaultTeamId: sel ? sel.team_id : (teams.length ? teams[0].id : null),
+      defaultManagerId: boss != null ? boss : null
+    });
+    if (!d) return;
+    var body = { name: d.name, type: d.type };
+    if (d.team_id != null) body.team_id = d.team_id;
+    if (d.manager_id != null) body.manager_id = d.manager_id;
     fetch('/api/members', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({team_id: parseInt(teamId), name: name.trim(), type: type.trim()})
-    }).then(function(r){return r.json();}).then(function(d) {
-      if (d.id) {
-        _agentSelectedId = d.id;
+      body: JSON.stringify(body)
+    }).then(function(r){return r.json();}).then(function(res) {
+      if (res.id) {
+        _agentSelectedId = res.id;
         _agentEditing = false;
         renderAgentsView();
-      } else notify(tr('dashboard.error_prefix') + (d.error || tr('dashboard.unknown')));
+      } else notify(tr('dashboard.error_prefix') + (res.error || tr('dashboard.unknown')));
     });
   });
 
@@ -6191,15 +6438,20 @@ window._agentDrop = async function(targetMemberId, ev) {
   window._agentDragId = null;
   if (!sourceId || sourceId === targetMemberId) return;
   if (!_agentEditing) { notify(tr('dashboard.enable_edit_mode')); return; }
-  // The question names the people, not their database ids.
+  // The question names the people, not their database ids. A boss dropped on
+  // a name of the path is not in the diagram, so the path is looked at too.
   function nameOf(id) {
+    if (id == null) return '';
     var el = document.querySelector('[data-member-id="' + id + '"]');
-    return el ? el.dataset.memberName : '#' + id;
+    if (el) return el.dataset.memberName;
+    var path = document.querySelector('[data-org-focus="' + id + '"]');
+    if (path) return path.textContent;
+    return '#' + id;
   }
   var question = targetMemberId == null
     ? tr('dashboard.confirm_unassign', { source: nameOf(sourceId) })
     : tr('dashboard.confirm_reparent', { source: nameOf(sourceId), target: nameOf(targetMemberId) });
-  if (!await confirmAction(question)) return;
+  if (!await confirmAction(question, _confirmLabels())) return;
   fetch('/api/members/' + sourceId, {
     method: 'PUT', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({manager_id: targetMemberId})
@@ -6431,7 +6683,7 @@ async function loadAgentMemory(mid) {
     });
     mount.querySelectorAll('[data-mem-del]').forEach(function(b) {
       b.addEventListener('click', async function() {
-        if (!await confirmAction(tr('dashboard.confirm_delete_memory'))) return;
+        if (!await confirmAction(tr('dashboard.confirm_delete_memory'), _confirmLabels())) return;
         var r = await fetch('/api/agents/' + mid + '/memory/' + b.dataset.memDel, {method:'DELETE'});
         if (r.ok) loadAgentMemory(mid);
       });
@@ -6494,7 +6746,7 @@ async function loadAgentTriggers(mid) {
     });
     mount.querySelectorAll('[data-trig-del]').forEach(function(b) {
       b.addEventListener('click', async function() {
-        if (!await confirmAction(tr('dashboard.confirm_delete_trigger'))) return;
+        if (!await confirmAction(tr('dashboard.confirm_delete_trigger'), _confirmLabels())) return;
         var r = await fetch('/api/agents/' + mid + '/triggers/' + b.dataset.trigDel, {method:'DELETE'});
         if (r.ok) loadAgentTriggers(mid);
       });
@@ -6601,7 +6853,7 @@ async function wireAgentDetail() {
   // Wake button
   var wakeBtn = document.querySelector('[data-agent-wake-btn]');
   if (wakeBtn) wakeBtn.addEventListener('click', async function() {
-    var wakeText = await promptAction(tr('dashboard.wake_prompt')) || '';
+    var wakeText = await promptAction(tr('dashboard.wake_prompt'), _promptLabels()) || '';
     wakeBtn.disabled = true; wakeBtn.textContent = tr('dashboard.waking');
     var r = await fetch('/api/agents/' + wakeBtn.dataset.agentWakeBtn + '/wake', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -6622,7 +6874,7 @@ async function wireAgentDetail() {
   // Delete
   var delBtn = document.querySelector('[data-agent-del]');
   if (delBtn) delBtn.addEventListener('click', async function() {
-    if (!await confirmAction(tr('dashboard.confirm_delete_agent'))) return;
+    if (!await confirmAction(tr('dashboard.confirm_delete_agent'), _confirmLabels())) return;
     var r = await fetch('/api/members/' + delBtn.dataset.agentDel, {method: 'DELETE'});
     if (r.ok) { _agentSelectedId = null; renderAgentsView(); }
     else notify(tr('dashboard.delete_failed_short'));

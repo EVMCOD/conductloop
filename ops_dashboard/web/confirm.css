@@ -52,3 +52,20 @@ dialog.confirm .confirm__input:focus {
   outline: 2px solid var(--cl-focus, #2563eb);
   outline-offset: 1px;
 }
+
+/* A form inside the dialog (web/agent-new.js): a label above its control. */
+dialog.confirm .confirm__field {
+  display: block;
+  margin-bottom: 10px;
+}
+dialog.confirm .confirm__label {
+  display: block;
+  font-size: 11px;
+  color: var(--cl-ink-soft, #5b6472);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+dialog.confirm select.confirm__input {
+  height: 32px;
+}
