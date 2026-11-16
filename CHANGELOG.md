@@ -4,6 +4,10 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### The agent asks for the tools it needs, several at a time
+
+- **A code session uses the tool calling of the provider, and can call several tools in the same turn.** Until now the model answered with one JSON object written in the text, so a turn was one tool, and every turn paid again for the whole conversation. With Anthropic, MiniMax through its Coding Plan, OpenAI or Ollama the model now asks for the tools it wants itself — three reads in the same turn are three reads in the same turn — and the session runs them with its own rules: the reservations of the session, the sandbox and the events. A model that answers in plain text is taken as the final report, and one that only announces what it is going to do is sent back to work instead of finishing the task. The JSON protocol stays as the fallback for the providers that do not speak tool calling.
+
 ### The agent does not forget what it has already done
 
 - **Every turn of a code session carries a ledger of the work already done.** The files the agent read, what its searches found, the files it changed and how its commands ended travel with every turn, next to the task. Before, that knowledge lived only in the conversation window, which throws the old messages away: the agent read the same file again and again. On a real task it spent 60 turns reading and changed nothing.

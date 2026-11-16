@@ -56,15 +56,25 @@ MAX_TOOL_RESULT_CHARS = 8000
 KEEP_LAST_MESSAGES = 30
 BUDGET_WARN_RATIO = 0.8
 
-SYSTEM_PROMPT = """\
+AGENT_RULES = """\
 You are a coding agent working in a git worktree of the repository (your
 own branch). Work only on the task you are given.
 
+Paths are relative to the worktree root.
+Refusals come back as {"ok": false, "error": "..."}: adapt, don't retry blindly.
+You cannot commit, push, merge or install anything; a human reviews your work.
+
+Every turn carries a "WHAT YOU HAVE ALREADY DONE" block: the files you read,
+what the searches found, the files you changed and the commands you ran. Do
+not read, search or run anything that is already in it.
+"""
+
+SYSTEM_PROMPT = AGENT_RULES + """
 Reply with EXACTLY ONE JSON object and nothing else:
   {"tool": "<name>", "args": {...}}   to call a tool, or
   {"final": "<short summary of what you changed>"}   when the task is done.
 
-Tools (paths are relative to the worktree root):
+Tools:
   list_dir   {"path": ".", "recursive": false}
   read_file  {"path": "...", "offset": 0}
   search     {"query": "...", "path": ".", "regex": false}
@@ -74,13 +84,127 @@ Tools (paths are relative to the worktree root):
   diff       {"against": "head"}
   run        {"argv": ["pytest", "-q", "tests/test_x.py"]}  only pytest, ruff check,
              ruff format --check, mypy, npm test / npm run lint; sandboxed, no network.
-Refusals come back as {"ok": false, "error": "..."}: adapt, don't retry blindly.
-You cannot commit, push, merge or install anything; a human reviews your work.
-
-Every turn carries a "WHAT YOU HAVE ALREADY DONE" block: the files you read,
-what the searches found, the files you changed and the commands you ran. Do
-not read, search or run anything that is already in it.
 """
+
+NATIVE_SYSTEM_PROMPT = AGENT_RULES + """
+Use the tools you are given. Call as many of them as you need in the same turn
+when they do not depend on each other: several reads or searches at once are
+better than one at a time. When the task is done, answer with a short summary
+of what you changed and which tests you ran, as plain text and with no tool
+call.
+"""
+
+# A model that ends its turn announcing what it is going to do has not done
+# it. It is sent back to work instead of finishing the task.
+_ANNOUNCES = re.compile(
+    r"^\s*(?:ok[,.]?\s*|now[,.]?\s*|next[,.]?\s*|ahora[,.]?\s*)?"
+    r"(?:let me|let's|i'?ll|i will|i'm going to|i am going to|voy a|vamos a|primero voy)\b",
+    re.I)
+
+
+def _whole_tool_turns(messages: list[dict]) -> list[dict]:
+    """The messages, with the turns of the tools whole.
+
+    The model asks for several tools at once: the assistant message carries
+    their calls and each result is a message of its own. When the window is
+    cut in the middle of such a turn, a result is left without its call (or
+    a call without its results) and the provider refuses the whole
+    conversation — the session dies with a 400 before the agent reads
+    anything. A turn that is not whole is dropped.
+    """
+    results: dict[str, list[dict]] = {}
+    for m in messages:
+        if m.get("role") == "tool":
+            results.setdefault(str(m.get("tool_call_id") or ""), []).append(m)
+    out: list[dict] = []
+    for m in messages:
+        role = m.get("role")
+        if role == "tool":
+            continue  # it goes with its assistant message
+        if role == "assistant" and m.get("tool_calls"):
+            ids = [str(c.get("id") or "") for c in (m.get("tool_calls") or [])]
+            if not all(i in results for i in ids):
+                continue  # the turn is not whole: it goes
+            out.append(m)
+            out.extend(msg for i in ids for msg in results[i])
+            continue
+        out.append(m)
+    return out
+
+
+def _native_capable(provider: Any) -> bool:
+    """Whether this provider speaks native tool calling.
+
+    The ones that do not (a local model, a mock) keep the JSON protocol, and
+    the runner falls back to it without noticing.
+    """
+    try:
+        return bool(provider.supports_tools())
+    except Exception:
+        return False
+
+
+def native_tools() -> list[dict]:
+    """The code tools, in the shape the providers' native tool calling takes.
+
+    The same tools the JSON protocol lists, with the arguments spelled out:
+    the model cannot guess that "project" is a name and not an id.
+    """
+    return [
+        {"name": "list_dir",
+         "description": "List the files of a directory of the worktree.",
+         "input_schema": {"type": "object", "properties": {
+             "path": {"type": "string", "description":
+                      "path relative to the worktree root ('.' for the root)"},
+             "recursive": {"type": "boolean", "description": "walk the whole subtree"}},
+             "required": []}},
+        {"name": "read_file",
+         "description": "Read a file of the worktree.",
+         "input_schema": {"type": "object", "properties": {
+             "path": {"type": "string", "description": "path relative to the worktree root"},
+             "offset": {"type": "integer", "description":
+                        "first line to read (0 is the beginning of the file)"}},
+             "required": ["path"]}},
+        {"name": "search",
+         "description": "Search the worktree for a string, or for a regular expression.",
+         "input_schema": {"type": "object", "properties": {
+             "query": {"type": "string", "description": "the text to look for"},
+             "path": {"type": "string", "description": "where to look ('.' is the whole tree)"},
+             "regex": {"type": "boolean", "description": "the query is a regular expression"}},
+             "required": ["query"]}},
+        {"name": "claim",
+         "description": "Reserve the files you are about to write. Do it BEFORE writing.",
+         "input_schema": {"type": "object", "properties": {
+             "patterns": {"type": "array", "items": {"type": "string"},
+                          "description": "the files or globs to reserve"}},
+             "required": ["patterns"]}},
+        {"name": "write_file",
+         "description": "Write a whole file.",
+         "input_schema": {"type": "object", "properties": {
+             "path": {"type": "string"}, "content": {"type": "string"}},
+             "required": ["path", "content"]}},
+        {"name": "edit_file",
+         "description": "Replace a piece of text in a file.",
+         "input_schema": {"type": "object", "properties": {
+             "path": {"type": "string"}, "old": {"type": "string", "description":
+                                                 "the text to replace, exactly as it is in the file"},
+             "new": {"type": "string"},
+             "count": {"type": "integer", "description":
+                       "how many times the old text appears (1 by default)"}},
+             "required": ["path", "old", "new"]}},
+        {"name": "diff",
+         "description": "Show what changed in the worktree.",
+         "input_schema": {"type": "object", "properties": {
+             "against": {"type": "string", "description": "'head' (default) or 'base'"}},
+             "required": []}},
+        {"name": "run",
+         "description": "Run the tests or the linter. Sandboxed, without network.",
+         "input_schema": {"type": "object", "properties": {
+             "argv": {"type": "array", "items": {"type": "string"},
+                      "description": "the command, e.g. [\"pytest\", \"-q\", \"tests/test_x.py\"]"},
+             "cwd": {"type": "string", "description": "where to run it ('.' is the root)"}},
+             "required": ["argv"]}},
+    ]
 
 
 def _repo_is_trusted(repo_path: str | None) -> bool:
@@ -447,7 +571,8 @@ class SessionRunner:
 
         The task always, then what the agent has already done (it is not part
         of the conversation: it is rebuilt every turn, so it never falls out
-        of the window), then the last full messages.
+        of the window), then the last full messages — with the turns of the
+        tools whole (see ``_whole_tool_turns``).
         """
         if not messages:
             return []
@@ -455,7 +580,7 @@ class SessionRunner:
         ledger = self._ledger.render()
         if ledger:
             head.append({"role": "user", "content": ledger})
-        return head + messages[1:][-KEEP_LAST_MESSAGES:]
+        return head + _whole_tool_turns(messages[1:][-KEEP_LAST_MESSAGES:])
 
     def run_task(self, task: dict) -> RunOutcome:
         self._written: set[str] = set()
@@ -477,8 +602,10 @@ class SessionRunner:
                                  if self.store.can_write(self.session_id, p, task_id=tid))
             for p in sorted(self._written):
                 self._ledger.note_change(p, "changed before the pause")
-        system = (SYSTEM_PROMPT + _skills_prompt(s["repo_path"])
-                  + _connector_prompt(s["repo_path"]))
+        skills = _skills_prompt(s["repo_path"])
+        connectors = _connector_prompt(s["repo_path"])
+        system_json = SYSTEM_PROMPT + skills + connectors
+        system_native = NATIVE_SYSTEM_PROMPT + skills + connectors
         hints = json.loads(task.get("paths_hint") or "[]")
         messages: list[dict] = [{"role": "user", "content":
                                  f"Task #{tid}: {task['title']}\n\n{task['prompt']}"
@@ -514,7 +641,8 @@ class SessionRunner:
                 messages.append({"role": "user", "content": "MESSAGES FROM THE USER:\n" + "\n".join(
                     f"- {m['body'][:2000]}" for m in inbox)})
             window = self._window(messages)
-            prompt_text = system + "".join(m["content"] for m in window)
+            system = system_json
+            prompt_text = system + "".join(str(m.get("content") or "") for m in window)
             prompt_tokens = estimate_tokens(prompt_text)
             spent, budget = float(s["cost_cents_est"]), float(s["budget_cost_cents"])
             if spent + self._projected_cents(s, prompt_tokens) > budget:
@@ -523,13 +651,25 @@ class SessionRunner:
                 return self._stop(task, session_status="paused",
                                   reason="budget exhausted (100%)", task_status=None, iterations=n)
             self.store.heartbeat(self.session_id)
+            calls: list[dict] = []
             try:
                 provider = self.provider_factory(s)
                 with providers.provider_slot(s["provider"], self.cancel) as ok:
                     if not ok:
                         continue  # cancelled while waiting for the local model
-                    reply = provider.ask(system, window, max_tokens=self.max_tokens_out,
-                                         temperature=0.2)
+                    if _native_capable(provider):
+                        # The provider speaks native tool calling: the model
+                        # asks for the tools it wants, several at a time, and
+                        # this loop runs them with its own rules.
+                        system = system_native
+                        step = provider.ask_step(system, window, tools=native_tools(),
+                                                 max_tokens=self.max_tokens_out, temperature=0.2)
+                        reply = str(step.get("text") or "")
+                        calls = [c for c in (step.get("tool_calls") or [])
+                                 if isinstance(c, dict)]
+                    else:
+                        reply = provider.ask(system, window, max_tokens=self.max_tokens_out,
+                                             temperature=0.2)
             except providers.ProviderUnavailable as e:
                 self._event("provider.unavailable", {"reason": e.reason}, task_id=tid)
                 return self._stop(task, session_status="waiting_human", reason=str(e)[:300],
@@ -548,9 +688,10 @@ class SessionRunner:
             n += 1
             tin, tout, estimated, source = usage_tokens(getattr(provider, "last_usage", None),
                                                         prompt_tokens, str(reply))
-            obj = parse_reply(reply)
+            obj = parse_reply(reply) if not calls else None
             ev = self._event("llm.turn", {"estimated": estimated, "usage_source": source,
                                           "tool": (obj or {}).get("tool"),
+                                          "tools": [str(c.get("name") or "") for c in calls],
                                           "final": bool(obj and "final" in obj)},
                              task_id=tid, tokens_in=tin, tokens_out=tout, iteration=True)
             ratio = ev["budget_ratio"]
@@ -567,8 +708,33 @@ class SessionRunner:
                                                  "budget_tokens": s["budget_tokens"]}, task_id=tid)
                 return self._stop(task, session_status="paused",
                                   reason="token budget exhausted", task_status=None, iterations=n)
+            if calls:
+                # Native tool calling: every call of this turn is run, with
+                # the reservations, the sandbox and the events of the session,
+                # and every answer goes back to the model at once.
+                messages.append({"role": "assistant", "content": str(reply)[:MAX_TOOL_RESULT_CHARS],
+                                 "tool_calls": calls})
+                for call in calls:
+                    name = str(call.get("name") or "")
+                    args = call.get("args") or {}
+                    result = self._tool(tools, name, args if isinstance(args, dict) else {})
+                    body = json.dumps(result, ensure_ascii=False, default=str)
+                    if len(body) > MAX_TOOL_RESULT_CHARS:
+                        body = body[:MAX_TOOL_RESULT_CHARS] + "… [truncated]"
+                    messages.append({"role": "tool", "tool_call_id": str(call.get("id") or ""),
+                                     "content": body})
+                continue
             messages.append({"role": "assistant", "content": str(reply)[:MAX_TOOL_RESULT_CHARS]})
             if obj is None or not ("tool" in obj or "final" in obj):
+                if _ANNOUNCES.match(str(reply).strip()):
+                    # It announced what it was going to do instead of doing it.
+                    messages.append({"role": "user", "content":
+                                     "Do it now: make the change and run the tests. Do not "
+                                     "announce what you are going to do; do it."})
+                    continue
+                if calls is not None and _native_capable(provider):
+                    # The model answered in plain text: that is its report.
+                    return self._finish(task, tools, str(reply), n)
                 messages.append({"role": "user", "content":
                                  'TOOL_RESULT: {"ok": false, "error": "reply with one JSON object: '
                                  '{\\"tool\\": ..., \\"args\\": {...}} or {\\"final\\": ...}"}'})
