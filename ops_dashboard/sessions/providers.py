@@ -22,6 +22,7 @@ that just failed with auth/balance/rate errors isn't hammered by every session.
 from __future__ import annotations
 
 import inspect
+import os
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -45,6 +46,72 @@ class ProviderUnavailable(RuntimeError):
 def _brain() -> Any:
     from .. import brain
     return brain
+
+
+# A session nobody gave a budget to: enough for a real task on a pay-per-token
+# model, small enough that a runaway loop stops early.
+DEFAULT_BUDGET_CENTS = 500
+
+
+def flat_rate(provider: str | None) -> bool:
+    """True when a call costs nothing per token: a local model, or MiniMax
+    through its Coding Plan (a monthly subscription).
+
+    Those sessions need no price per million tokens: asking for one only
+    stopped them before they started. They are still bounded by their
+    iteration limit. The Coding Plan is recognised by the base URL the chat
+    uses for MiniMax, the one place it is configured.
+    """
+    name = (provider or "").lower()
+    if name in FREE_PROVIDERS:
+        return True
+    if name != "minimax":
+        return False
+    brain = _brain()
+    try:
+        cfg = brain._load_config()
+    except Exception:
+        cfg = {}
+    base = (os.environ.get("MINIMAX_BASE_URL") or cfg.get("minimax_base_url") or "").rstrip("/")
+    return bool(base) and base == getattr(brain, "MINIMAX_CODING_PLAN_URL", "").rstrip("/")
+
+
+def session_defaults() -> dict:
+    """What a new session uses when the person does not say: the provider and
+    the model the chat already uses, with the chat's own key.
+
+    The person set a provider up once, in Credentials; a session asking for a
+    provider, a model and a keychain reference again was the most tedious
+    part of starting one. ``provider`` is None when nothing is set up yet
+    (only the offline mock answers): then there is nothing to default to.
+    """
+    brain = _brain()
+    try:
+        cfg = brain._load_config()
+    except Exception:
+        cfg = {}
+    name = (os.environ.get("BRAIN_PROVIDER") or cfg.get("default_provider") or "").lower()
+    if not name or name == "auto":
+        try:
+            name = str(getattr(brain.resolve_provider(), "name", "") or "").lower()
+        except Exception:
+            name = ""
+    if name in ("", "auto", "mock"):
+        return {"provider": None, "model": None, "flat_rate": False,
+                "budget_cost_cents": DEFAULT_BUDGET_CENTS}
+    model = (cfg.get(f"{name}_model") or getattr(brain, "DEFAULT_MODELS", {}).get(name) or "")
+    return {"provider": name, "model": model or None, "flat_rate": flat_rate(name),
+            "budget_cost_cents": DEFAULT_BUDGET_CENTS}
+
+
+def default_model(provider: str) -> str:
+    """The model a session on ``provider`` uses when none is given."""
+    brain = _brain()
+    try:
+        cfg = brain._load_config()
+    except Exception:
+        cfg = {}
+    return str(cfg.get(f"{provider}_model") or getattr(brain, "DEFAULT_MODELS", {}).get(provider) or "")
 
 
 def resolve_for_session(session: dict) -> Any:

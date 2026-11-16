@@ -24,7 +24,7 @@
     "new_session": "New session",
     "role": "Role",
     "key_ref": "Key reference (key_ref)",
-    "key_ref_hint": "Name of a key saved in the keychain (e.g. byok.openai.work), never the key itself. Required for anthropic, openai, minimax and gateway.",
+    "key_ref_hint": "Empty: the key the chat uses. Otherwise the name of another key saved in the keychain (e.g. byok.openai.work), never the key itself.",
     "repo": "Repository",
     "base": "Base branch",
     "budget_eur": "Budget (EUR)",
@@ -33,7 +33,7 @@
     "inbox": "Messages to you",
     "load_more": "Load more",
     "sessions": "Sessions",
-    "no_sessions": "No sessions yet. Mark a repository, set a price and create one.",
+    "no_sessions": "No sessions yet. Mark a repository and create one.",
     "running_count": "{0} running (max {1})",
     "start": "Start",
     "stop": "Stop",
@@ -132,6 +132,10 @@
     "ts_done": "done",
     "ts_blocked": "blocked",
     "ts_failed": "failed",
-    "ts_cancelled": "cancelled"
+    "ts_cancelled": "cancelled",
+    "advanced": "Advanced: role, model, key, budget",
+    "uses": "Uses {0} · {1} with the key the chat uses.",
+    "uses_flat": "Uses {0} · {1} with the key the chat uses. Flat-rate plan: no price per token needed; the limit is the number of iterations.",
+    "uses_none": "No AI is set up yet: add a key in Connect AI first."
   }
 }

@@ -24,10 +24,14 @@
       price_in: 'In', price_out: 'Out', price_in_ph: 'EUR in / 1M', price_out_ph: 'EUR out / 1M',
       save: 'Save', no_prices: 'No prices yet. Sessions without a price pause before spending.',
       new_session: 'New session', role: 'Role', key_ref: 'Key reference (key_ref)',
-      key_ref_hint: 'Name of a key saved in the keychain (e.g. byok.openai.work), never the key itself. Required for anthropic, openai, minimax and gateway.',
+      key_ref_hint: 'Empty: the key the chat uses. Otherwise the name of another key saved in the keychain (e.g. byok.openai.work), never the key itself.',
+      advanced: 'Advanced: role, model, key, budget',
+      uses: 'Uses {0} · {1} with the key the chat uses.',
+      uses_flat: 'Uses {0} · {1} with the key the chat uses. Flat-rate plan: no price per token needed; the limit is the number of iterations.',
+      uses_none: 'No AI is set up yet: add a key in Connect AI first.',
       repo: 'Repository', base: 'Base branch', budget_eur: 'Budget (EUR)', max_iter: 'Max iterations',
       create: 'Create', inbox: 'Messages to you', load_more: 'Load more', sessions: 'Sessions',
-      no_sessions: 'No sessions yet. Mark a repository, set a price and create one.',
+      no_sessions: 'No sessions yet. Mark a repository and create one.',
       running_count: '{0} running (max {1})',
       start: 'Start', stop: 'Stop', close: 'Close', resume: 'Resume', open: 'Open',
       spent: 'Spent', of: 'of', incl_est: 'includes estimates', real_usage: 'real usage',
@@ -87,7 +91,11 @@
       price_in: 'Entrada', price_out: 'Salida', price_in_ph: 'EUR entrada / 1M', price_out_ph: 'EUR salida / 1M',
       save: 'Guardar', no_prices: 'Sin precios. Las sesiones sin precio se pausan antes de gastar.',
       new_session: 'Nueva sesión', role: 'Rol', key_ref: 'Referencia de clave (key_ref)',
-      key_ref_hint: 'Nombre de una clave guardada en el llavero (p. ej. byok.openai.trabajo), nunca la clave. Obligatoria para anthropic, openai, minimax y gateway.',
+      key_ref_hint: 'Vacío: la clave que usa el chat. Si no, el nombre de otra clave guardada en el llavero (p. ej. byok.openai.trabajo), nunca la clave.',
+      advanced: 'Avanzado: rol, modelo, clave, presupuesto',
+      uses: 'Usa {0} · {1} con la clave que usa el chat.',
+      uses_flat: 'Usa {0} · {1} con la clave que usa el chat. Tarifa plana: no hace falta precio por token; el límite son las iteraciones.',
+      uses_none: 'Todavía no hay ninguna IA configurada: añade antes una clave en Conectar IA.',
       repo: 'Repositorio', base: 'Rama base', budget_eur: 'Presupuesto (EUR)', max_iter: 'Iteraciones máx.',
       create: 'Crear', inbox: 'Mensajes para ti', load_more: 'Cargar más', sessions: 'Sesiones',
       no_sessions: 'Aún no hay sesiones. Marca un repositorio, pon un precio y crea una.',
@@ -351,6 +359,22 @@
   }
 
   // ── prices ───────────────────────────────────────────────────────────────
+  // What a new session uses when nobody says otherwise: the chat's provider,
+  // model and key. The form starts filled in with it, and says so.
+  async function loadDefaults() {
+    var d = await api('GET', '/api/sessions/defaults');
+    var uses = $('s-uses');
+    if (!d || !d.provider) {
+      uses.textContent = t('uses_none');
+      $('s-advanced').open = true;
+      return;
+    }
+    $('s-provider').value = d.provider;
+    $('s-model').value = d.model || '';
+    if (d.budget_cost_cents) $('s-budget').value = (d.budget_cost_cents / 100).toFixed(2);
+    uses.textContent = t(d.flat_rate ? 'uses_flat' : 'uses', d.provider, d.model || '?');
+  }
+
   async function loadPrices() {
     var d = await api('GET', '/api/sessions/prices');
     var tb = $('prices'); clear(tb);
@@ -683,10 +707,13 @@
       await loadPrices();
     }));
     $('session-form').addEventListener('submit', guarded($('session-error'), async function () {
-      var body = {
-        role: $('s-role').value.trim(), provider: $('s-provider').value, model: $('s-model').value.trim(),
-        repo_path: $('s-repo').value, base_ref: $('s-base').value.trim(),
-        budget_cost_cents: Math.round(parseFloat($('s-budget').value) * 100) };
+      // Only the repository and the branch have to be given: an empty field
+      // is left out and the server uses what the chat uses.
+      var body = { repo_path: $('s-repo').value, base_ref: $('s-base').value.trim() };
+      var role = $('s-role').value.trim(); if (role) body.role = role;
+      if ($('s-provider').value) body.provider = $('s-provider').value;
+      var model = $('s-model').value.trim(); if (model) body.model = model;
+      var eur = parseFloat($('s-budget').value); if (isFinite(eur) && eur > 0) body.budget_cost_cents = Math.round(eur * 100);
       var kr = $('s-keyref').value.trim(); if (kr) body.key_ref = kr;
       var it = parseInt($('s-iters').value, 10); if (isFinite(it)) body.max_iterations = it;
       var d = await api('POST', '/api/sessions', body);
@@ -756,7 +783,7 @@
     translatePage();
     wire();
     try { await loadPlatform(); } catch (e) { /* unknown platform: no banner */ }
-    try { await Promise.all([loadRepos(), loadPrices()]); } catch (e) { if (e instanceof ApiFailure) showError($('global-error'), e); }
+    try { await Promise.all([loadRepos(), loadPrices(), loadDefaults()]); } catch (e) { if (e instanceof ApiFailure) showError($('global-error'), e); }
     await refresh(true);
     var m = /[?&]session=(\d+)/.exec(location.search);
     if (m) await select(parseInt(m[1], 10)).catch(function () {});

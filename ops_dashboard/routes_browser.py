@@ -92,9 +92,18 @@ from . import routes_sessions as _rs  # noqa: E402
 @_rs.route("POST", "/api/sessions/browser")
 def create_browser_session(handler: Any) -> tuple[int, dict]:
     from .sessions import browser as sb
+    from .sessions import providers as sp
 
     data = _rs._body(handler)
-    provider = (_rs._str(data, "provider", max_len=40) or "").lower()
+    # Like a code session: the chat's provider, model and key unless the
+    # person picks others.
+    provider = (_rs._str(data, "provider", required=False, max_len=40) or "").lower()
+    if not provider:
+        provider = sp.session_defaults()["provider"] or ""
+    if not provider:
+        raise _rs.ApiError(400, "validation_error",
+                           "provider: no AI provider is set up yet; add a key in Credentials",
+                           field="provider")
     if provider not in _rs.KNOWN_PROVIDERS:
         raise _rs.ApiError(400, "validation_error", "provider: unknown", field="provider")
     mode = _rs._str(data, "browser_mode", required=False, max_len=10) or "read"
@@ -108,10 +117,13 @@ def create_browser_session(handler: Any) -> tuple[int, dict]:
     role = _rs._str(data, "role", required=False, max_len=60) or "browser"
     sid = sb.create_browser_session(
         st, name=_rs._str(data, "name", required=False, max_len=80) or "Browser agent",
-        role=role, provider=provider, model=_rs._str(data, "model", max_len=200) or "",
-        budget_cost_cents=_rs._int(data.get("budget_cost_cents"), "budget_cost_cents", minimum=1),
+        role=role, provider=provider,
+        model=(_rs._str(data, "model", required=False, max_len=200)
+               or sp.default_model(provider)),
+        budget_cost_cents=_rs._int(data.get("budget_cost_cents"), "budget_cost_cents", minimum=1,
+                                   default=sp.DEFAULT_BUDGET_CENTS),
         browser_mode=mode,
-        key_ref=_rs._str(data, "key_ref", required=provider in _rs.KEYED_PROVIDERS, max_len=200),
+        key_ref=_rs._str(data, "key_ref", required=False, max_len=200),
         **kwargs)
     out: dict[str, Any] = {"ok": True}
     prompt = _rs._str(data, "prompt", required=False, max_len=20_000)

@@ -202,8 +202,10 @@ def test_create_session_validations_and_limits(api):
     st, r = call("POST", "/api/sessions", base)
     assert st == 400 and r["field"] == "repo_path"                     # repo not marked
     call("POST", "/api/sessions/repos", {"path": repo})
-    for missing in ("role", "provider", "model", "repo_path", "base_ref", "budget_cost_cents",
-                    "key_ref"):
+    # Only the repository and the base branch have to be given; role, provider,
+    # model, key and budget default to what the chat uses
+    # (tests/test_sessions_use_chat_model.py).
+    for missing in ("repo_path", "base_ref"):
         b = dict(base)
         b.pop(missing)
         st, r = call("POST", "/api/sessions", b)
