@@ -36,12 +36,22 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
-from . import providers, sandbox, worktrees
+from . import limits, providers, sandbox, worktrees
 from .code_tools import CodeTools, ToolDenied, ToolError
 from .paths import PathConflictError
 from .store import SessionStore
 
-MAX_TOKENS_OUT = 1500
+# The output budget of one model turn. It used to be 1500 tokens: less than a
+# reasoning model spends before it writes the first line of code, so the
+# session spent its turns reading and never wrote anything. 32k is what the
+# same model gets through Claude Code, on the same endpoint.
+MAX_TOKENS_OUT = limits.DEFAULT_MAX_TOKENS_OUT
+# What one turn is assumed to cost when the budget is projected. It is
+# deliberately small: the cap is 32k, but a turn rarely uses it, and
+# projecting the worst case would pause every session whose budget is
+# below one full turn. The ratio after every call is what enforces the
+# budget; this only avoids starting a call that clearly crosses it.
+PROJECTED_OUTPUT_TOKENS = 1500
 MAX_TOOL_RESULT_CHARS = 8000
 KEEP_LAST_MESSAGES = 30
 BUDGET_WARN_RATIO = 0.8
@@ -219,6 +229,9 @@ class SessionRunner:
         self.store, self.session_id = store, int(session_id)
         self.provider_factory = provider_factory
         self.cancel = cancel or threading.Event()
+        # How much the model may write in one turn. Resolved once per runner:
+        # the env var wins, else the default.
+        self.max_tokens_out = limits.resolve_max_tokens_out()
         kw = dict(tools_kwargs or {})
         # D2: the runner NEVER runs commands without an OS sandbox.
         kw.pop("allow_unsandboxed", None)
@@ -272,7 +285,7 @@ class SessionRunner:
             return 0.0
         price = self.store.model_price(s["provider"], s["model"]) or {}
         return (prompt_tokens * float(price.get("in_cents_per_mtok", 0))
-                + MAX_TOKENS_OUT * float(price.get("out_cents_per_mtok", 0))) / 1_000_000
+                + PROJECTED_OUTPUT_TOKENS * float(price.get("out_cents_per_mtok", 0))) / 1_000_000
 
     def _tool(self, tools: CodeTools, name: str, args: dict) -> dict:
         # The connector tools live outside the worktree: they reach the user's
@@ -388,7 +401,7 @@ class SessionRunner:
                 with providers.provider_slot(s["provider"], self.cancel) as ok:
                     if not ok:
                         continue  # cancelled while waiting for the local model
-                    reply = provider.ask(system, window, max_tokens=MAX_TOKENS_OUT,
+                    reply = provider.ask(system, window, max_tokens=self.max_tokens_out,
                                          temperature=0.2)
             except providers.ProviderUnavailable as e:
                 self._event("provider.unavailable", {"reason": e.reason}, task_id=tid)

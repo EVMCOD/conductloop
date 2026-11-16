@@ -30,6 +30,7 @@ SKIPPED_ON_WINDOWS: dict[str, str] = {
     "test_chat_code_ui_browser.py": "opens code sessions from the chat; code sessions are turned off on Windows (platform_unsupported)",
     "test_sessions_agent_cli.py": "runs a stand-in claude script (shebang, exec bit) in a code session; code sessions are turned off on Windows",
     "test_sessions_supervisor.py": "needs code sessions and git worktrees, which are turned off on Windows",
+    "test_sessions_runner_budget.py": "needs code sessions and git worktrees, which are turned off on Windows",
     # The macOS keychain backend (the `security` tool); Windows gets its own in PR 10 of the plan.
     "test_secrets_store_keychain.py": "tests the macOS `security` keychain backend; the Windows Credential Manager backend does not exist yet",
     # Real failures, not investigated yet (see the module docstring).

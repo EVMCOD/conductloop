@@ -4,6 +4,10 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### The agent has room to write
+
+- **A model turn may answer with 32,000 tokens instead of 1,500.** The output budget of one turn of a code session was smaller than what a reasoning model spends before it writes a single line of code: the answer ran out of room in the middle of a file, and the session spent its turns reading and searching instead of changing anything. It is now the same budget the same model gets through Claude Code, on the same endpoint, and it can be changed with `CONDUCTLOOP_SESSIONS_MAX_TOKENS_OUT` without touching the code.
+
 ### The agent exam
 
 - **A bench that says whether the built-in runner does the work.** `scripts/agent_exam.py` runs two real tasks on this repository — with a temporary clone, a temporary database and the session's own provider — and reports, for each runner, whether the task was finished, whether the hidden tests passed, how many turns it took and how many tokens it spent. It is the yardstick for the built-in session runner, measured against Claude Code. It spends the Coding Plan quota, so it never runs in CI.
