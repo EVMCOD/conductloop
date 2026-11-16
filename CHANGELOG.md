@@ -2,6 +2,13 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased
+
+### Paste a coding task in the chat, and it runs
+
+- **A request to change code goes to a code session by itself.** Paste the task in the chat, as you would anywhere else: ConductLoop sees it is a change to a repository, opens a code session on your marked repository with the chat's model, and starts it. The chat shows a card that follows it (the files it edits, the commands it runs, its commit) and, when it finishes, its report. Before, the team tried to answer it in words without seeing the repository and the turn ended in "(max tool iterations reached)".
+- **Push the branch and open the pull request with one click.** "See the changes" shows the diff; "Push the branch and open the PR" pushes the session's branch with your own git credentials and gives you the GitHub page to open the pull request. The session itself still never pushes, and nothing is merged.
+
 ## 1.2.30 — 2026-11-16 — A code session from just a repository
 
 ### Start a code session with just a repository

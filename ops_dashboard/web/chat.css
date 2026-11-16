@@ -212,3 +212,22 @@ select { background: var(--panel); border: 1px solid var(--border-strong); borde
   .column { padding: 20px 16px; }
   .agent-out { padding-left: 14px; }
 }
+
+/* A coding task pasted in the chat runs in a code session; this card follows it. */
+.code-card { margin-top: 10px; border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 12px; background: var(--panel); }
+.code-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.code-title { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.code-state { font-size: 12px; color: var(--muted); margin-left: auto; }
+.code-steps { list-style: none; margin: 8px 0 0; padding: 0; font-size: 12px; color: var(--muted); }
+.code-steps li { padding: 2px 0; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.code-report { margin-top: 10px; }
+.code-error { margin-top: 8px; font-size: 12px; color: var(--red, #d33); overflow-wrap: anywhere; }
+.code-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.code-actions button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: transparent; color: inherit; }
+.code-actions .code-publish-btn { background: var(--accent); border-color: transparent; color: #fff; }
+.code-actions button[disabled] { opacity: .6; cursor: default; }
+.code-actions a { font-size: 13px; }
+.code-diff { margin-top: 10px; max-height: 360px; overflow: auto; font-size: 11px; padding: 8px;
+  border-radius: 8px; background: var(--code-bg, rgba(127,127,127,.08)); white-space: pre; }
