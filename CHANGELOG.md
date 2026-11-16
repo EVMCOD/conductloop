@@ -2,7 +2,12 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
-## Unreleased
+## 1.2.30 — 2026-11-16 — A code session from just a repository
+
+### Start a code session with just a repository
+
+- **A new session uses what the chat already uses.** Choose the repository and the branch and press Create: the provider, the model and the key are the ones the chat uses (Connect AI), the budget starts at 5 EUR and the form says in one line what it will use. Role, model, key and budget are under "Advanced" for when you want others. Before, it asked for eight things, most of them already set up once.
+- **No price per token on a flat-rate plan.** With the MiniMax Coding Plan, a monthly subscription, or a local model, a session no longer stops to ask for a price per million tokens: the limit is its number of iterations. A model you pay per token still asks for one, so the budget means something.
 
 ### The scheduled scripts show up in Jobs
 
