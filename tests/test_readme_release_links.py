@@ -28,8 +28,15 @@ VERSION_IN_LINK = re.compile(r"v\d+\.\d+\.\d+")
 
 
 def _markdown_files() -> list[Path]:
-    """The README and every markdown file under docs/."""
-    return [README] + sorted(DOCS.rglob("*.md"))
+    """The README and every markdown file under docs/.
+
+    The eval fixtures under docs/evals/ are left out on purpose: they QUOTE
+    the links they test (the task of the agent exam says, word for word,
+    that the README links to v1.2.23), and a fixture that quotes the bug is
+    not a document with a stale download link.
+    """
+    files = [README] + sorted(DOCS.rglob("*.md"))
+    return [p for p in files if "evals" not in p.relative_to(ROOT).parts[1:2]]
 
 
 def _links(text: str) -> list[str]:

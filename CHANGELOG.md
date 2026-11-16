@@ -2,6 +2,12 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased
+
+### The agent exam
+
+- **A bench that says whether the built-in runner does the work.** `scripts/agent_exam.py` runs two real tasks on this repository — with a temporary clone, a temporary database and the session's own provider — and reports, for each runner, whether the task was finished, whether the hidden tests passed, how many turns it took and how many tokens it spent. It is the yardstick for the built-in session runner, measured against Claude Code. It spends the Coding Plan quota, so it never runs in CI.
+
 ## 1.2.32 — 2026-11-16 — Code sessions run with Claude Code
 
 ### Code sessions run with Claude Code when you have it
