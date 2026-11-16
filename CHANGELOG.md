@@ -4,6 +4,10 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### The agent does not forget what it has already done
+
+- **Every turn of a code session carries a ledger of the work already done.** The files the agent read, what its searches found, the files it changed and how its commands ended travel with every turn, next to the task. Before, that knowledge lived only in the conversation window, which throws the old messages away: the agent read the same file again and again. On a real task it spent 60 turns reading and changed nothing.
+
 ### The agent has room to write
 
 - **A model turn may answer with 32,000 tokens instead of 1,500.** The output budget of one turn of a code session was smaller than what a reasoning model spends before it writes a single line of code: the answer ran out of room in the middle of a file, and the session spent its turns reading and searching instead of changing anything. It is now the same budget the same model gets through Claude Code, on the same endpoint, and it can be changed with `CONDUCTLOOP_SESSIONS_MAX_TOKENS_OUT` without touching the code.

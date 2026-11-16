@@ -76,6 +76,10 @@ Tools (paths are relative to the worktree root):
              ruff format --check, mypy, npm test / npm run lint; sandboxed, no network.
 Refusals come back as {"ok": false, "error": "..."}: adapt, don't retry blindly.
 You cannot commit, push, merge or install anything; a human reviews your work.
+
+Every turn carries a "WHAT YOU HAVE ALREADY DONE" block: the files you read,
+what the searches found, the files you changed and the commands you ran. Do
+not read, search or run anything that is already in it.
 """
 
 
@@ -221,6 +225,100 @@ def parse_reply(text: str) -> dict | None:
     return None
 
 
+# ── what the agent has already done ────────────────────────────────────────
+
+LEDGER_MAX_READS = 40
+LEDGER_MAX_SEARCHES = 25
+LEDGER_MAX_RUNS = 20
+LEDGER_MAX_CHANGES = 40
+
+
+class Ledger:
+    """What the agent already did, in one place.
+
+    The window of the conversation keeps the last messages and throws the old
+    ones away. With it went everything the agent had read, searched and
+    changed, so it read the same file again and again: on 16-nov-2026 it
+    spent 60 turns of a real task reading, and changed nothing.
+
+    This is the part that does not get thrown away: the files it read, what
+    the searches found, the files it changed and the tests it ran. It is sent
+    with every turn, so the model never has to remember what it did.
+    """
+
+    def __init__(self) -> None:
+        self.reads: dict[str, str] = {}        # path -> what it found there
+        self.searches: dict[str, str] = {}     # query -> where it matched
+        self.changes: dict[str, str] = {}      # path -> what it did to it
+        self.runs: list[str] = []              # the commands, and how they ended
+
+    # ── notes ────────────────────────────────────────────────────────────
+    def note_read(self, path: str, result: dict) -> None:
+        rel = str(result.get("path") or path)
+        text = str(result.get("text") or "")
+        lines = len(text.splitlines())
+        self.reads[rel] = f"{lines} lines" if lines else "empty"
+        if len(self.reads) > LEDGER_MAX_READS:
+            for old in list(self.reads)[:-LEDGER_MAX_READS]:
+                del self.reads[old]
+
+    def note_search(self, query: str, result: dict) -> None:
+        matches = result.get("matches") or []
+        where: list[str] = []
+        for m in matches[:8]:
+            path = str(m.get("path") or "")
+            line = m.get("line")
+            where.append(f"{path}:{line}" if line else path)
+        more = f" (+{len(matches) - len(where)} more)" if len(matches) > len(where) else ""
+        self.searches[query] = (", ".join(where) + more) if where else "no match"
+        if len(self.searches) > LEDGER_MAX_SEARCHES:
+            for old in list(self.searches)[:-LEDGER_MAX_SEARCHES]:
+                del self.searches[old]
+
+    def note_change(self, path: str, what: str) -> None:
+        self.changes[path] = what
+        if len(self.changes) > LEDGER_MAX_CHANGES:
+            for old in list(self.changes)[:-LEDGER_MAX_CHANGES]:
+                del self.changes[old]
+
+    def note_run(self, argv: list[str], result: dict) -> None:
+        cmd = " ".join(str(a) for a in argv)[:120]
+        code = result.get("exit_code")
+        if result.get("timed_out"):
+            outcome = "timed out"
+        else:
+            outcome = f"exit {code}"
+        tail = ""
+        out = str(result.get("output") or "")
+        for line in reversed(out.splitlines()):
+            line = line.strip()
+            if line:
+                tail = line[:120]
+                break
+        self.runs.append(f"{cmd} → {outcome}" + (f" — {tail}" if tail else ""))
+        if len(self.runs) > LEDGER_MAX_RUNS:
+            del self.runs[:-LEDGER_MAX_RUNS]
+
+    # ── the block the model reads ────────────────────────────────────────
+    def render(self) -> str:
+        if not (self.reads or self.searches or self.changes or self.runs):
+            return ""
+        lines = ["WHAT YOU HAVE ALREADY DONE. Do not do it again; ask for what "\
+                 "you still need."]
+        if self.reads:
+            lines.append("- read: " + "; ".join(f"{p} ({n})" for p, n in
+                                                list(self.reads.items())[-LEDGER_MAX_READS:]))
+        if self.searches:
+            lines.append("- searched: " + "; ".join(
+                f"{q!r} → {w}" for q, w in list(self.searches.items())[-LEDGER_MAX_SEARCHES:]))
+        if self.changes:
+            lines.append("- changed: " + "; ".join(f"{p} ({w})" for p, w in
+                                                  list(self.changes.items())[-LEDGER_MAX_CHANGES:]))
+        if self.runs:
+            lines.append("- ran: " + "; ".join(self.runs[-LEDGER_MAX_RUNS:]))
+        return "\n".join(lines)
+
+
 class SessionRunner:
     def __init__(self, store: SessionStore, session_id: int, *,
                  provider_factory: providers.ProviderFactory = providers.resolve_for_session,
@@ -229,6 +327,9 @@ class SessionRunner:
         self.store, self.session_id = store, int(session_id)
         self.provider_factory = provider_factory
         self.cancel = cancel or threading.Event()
+        # What the agent has already done. It survives the window: the model
+        # must never have to remember it.
+        self._ledger = Ledger()
         # How much the model may write in one turn. Resolved once per runner:
         # the env var wins, else the default.
         self.max_tokens_out = limits.resolve_max_tokens_out()
@@ -300,21 +401,27 @@ class SessionRunner:
             if name == "list_dir":
                 return tools.list_dir(args.get("path", "."), recursive=bool(args.get("recursive")))
             if name == "read_file":
-                return tools.read_file(args["path"], offset=int(args.get("offset", 0)))
+                r = tools.read_file(args["path"], offset=int(args.get("offset", 0)))
+                self._ledger.note_read(args["path"], r)
+                return r
             if name == "search":
-                return tools.search(args["query"], args.get("path", "."),
-                                    regex=bool(args.get("regex")))
+                r = tools.search(args["query"], args.get("path", "."),
+                                 regex=bool(args.get("regex")))
+                self._ledger.note_search(str(args.get("query") or ""), r)
+                return r
             if name == "claim":
                 return {"claims": [{"pattern": c["pattern"], "mode": c["mode"]}
                                    for c in tools.claim(list(args["patterns"]))]}
             if name == "write_file":
                 r = tools.write_file(args["path"], args["content"])
                 self._written.add(r["path"])
+                self._ledger.note_change(r["path"], "written")
                 return r
             if name == "edit_file":
                 r = tools.edit_file(args["path"], args["old"], args["new"],
                                     count=int(args.get("count", 1)))
                 self._written.add(r["path"])
+                self._ledger.note_change(r["path"], "edited")
                 return r
             if name == "diff":
                 return tools.diff(against=args.get("against", "head"))
@@ -324,6 +431,9 @@ class SessionRunner:
             if name == "run":
                 r = tools.run(list(args["argv"]), cwd=args.get("cwd", "."))
                 self._written.update(r.get("changed_paths") or [])   # e.g. regenerated snapshots
+                self._ledger.note_run(list(args["argv"]), r)
+                for p in r.get("changed_paths") or []:
+                    self._ledger.note_change(str(p), "changed by a command")
                 return r
             return {"ok": False, "error": f"unknown tool {name!r}"}
         except (ToolDenied, ToolError, PathConflictError, sandbox.SandboxUnavailable) as e:
@@ -332,6 +442,21 @@ class SessionRunner:
             return {"ok": False, "error": f"bad arguments for {name}: {e!s}"[:500]}
 
     # ── main loop ───────────────────────────────────────────────────────
+    def _window(self, messages: list[dict]) -> list[dict]:
+        """The messages the model sees this turn.
+
+        The task always, then what the agent has already done (it is not part
+        of the conversation: it is rebuilt every turn, so it never falls out
+        of the window), then the last full messages.
+        """
+        if not messages:
+            return []
+        head = [messages[0]]
+        ledger = self._ledger.render()
+        if ledger:
+            head.append({"role": "user", "content": ledger})
+        return head + messages[1:][-KEEP_LAST_MESSAGES:]
+
     def run_task(self, task: dict) -> RunOutcome:
         self._written: set[str] = set()
         tid = task["id"]
@@ -350,6 +475,8 @@ class SessionRunner:
             # keep the ones this task may write so _finish commits them too.
             self._written.update(p for p in tools._dirty()
                                  if self.store.can_write(self.session_id, p, task_id=tid))
+            for p in sorted(self._written):
+                self._ledger.note_change(p, "changed before the pause")
         system = (SYSTEM_PROMPT + _skills_prompt(s["repo_path"])
                   + _connector_prompt(s["repo_path"]))
         hints = json.loads(task.get("paths_hint") or "[]")
@@ -386,7 +513,7 @@ class SessionRunner:
                 self.store.mark_read(m["id"] for m in inbox)
                 messages.append({"role": "user", "content": "MESSAGES FROM THE USER:\n" + "\n".join(
                     f"- {m['body'][:2000]}" for m in inbox)})
-            window = messages[:1] + messages[1:][-KEEP_LAST_MESSAGES:]
+            window = self._window(messages)
             prompt_text = system + "".join(m["content"] for m in window)
             prompt_tokens = estimate_tokens(prompt_text)
             spent, budget = float(s["cost_cents_est"]), float(s["budget_cost_cents"])
