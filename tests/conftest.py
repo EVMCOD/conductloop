@@ -24,6 +24,11 @@ atexit.register(shutil.rmtree, _SANDBOX, ignore_errors=True)
 
 os.environ["OPS_DATA_DIR"] = str(_SANDBOX / "data")
 os.environ["OPS_CONFIG_PATH"] = str(_SANDBOX / "config.json")
+# Code sessions run with Claude Code when a ``claude`` binary is found
+# (sessions/agent_cli.py). The tests drive sessions with scripted providers, so
+# a ``claude`` installed on the developer's machine must not take over: no
+# binary unless a test points at its own stand-in (test_sessions_agent_cli.py).
+os.environ["CONDUCTLOOP_CLAUDE_BIN"] = str(_SANDBOX / "no-claude-here")
 # Pin the vault/file-secrets dir too: a leftover OPS_SECRETS_DIR from a
 # packaged stranger-run (or any other shell) would point unlock() at a vault
 # encrypted with a different passphrase, leave the session locked, and make

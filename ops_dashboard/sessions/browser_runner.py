@@ -303,4 +303,9 @@ class BrowserRunner(SessionRunner):
 
 def runner_class_for(store: SessionStore, session_id: int) -> type[SessionRunner]:
     s = store.get_session(session_id) or {}
-    return BrowserRunner if str(s.get("browser_mode") or "off") != "off" else SessionRunner
+    if str(s.get("browser_mode") or "off") != "off":
+        return BrowserRunner
+    # A code session runs with Claude Code when the person has it and the
+    # provider speaks Anthropic's API (agent_cli); otherwise the built-in runner.
+    from .agent_cli import AgentCliRunner, should_use
+    return AgentCliRunner if should_use(s) else SessionRunner

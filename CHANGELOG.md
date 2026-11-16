@@ -2,6 +2,13 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased
+
+### Code sessions run with Claude Code when you have it
+
+- **A code session's task is done by Claude Code, with your model.** If the Claude Code CLI (`claude`) is installed and your AI is Anthropic or MiniMax through its Coding Plan, a code session — including one started by pasting a task in the chat — runs its task with Claude Code instead of ConductLoop's own loop, in the session's copy of the repository and with the model and key you already use. On a real task, ConductLoop's loop spent its 60 turns reading and searching and changed nothing; the same model, inside Claude Code, did the whole task with its tests in 15 minutes. The card in the chat follows it the same way, and you still review the changes and push them yourself.
+- **Your key does not reach the commands the agent runs.** It is handed to Claude Code through a key helper in a private folder that is removed when the run ends, not through the environment; the agent may run tests, the linter and read-only git, and may not commit or push. Without Claude Code, with another provider, or with `code_agent: builtin` in the settings, sessions use ConductLoop's own loop as before.
+
 ## 1.2.31 — 2026-11-16 — Paste a coding task in the chat
 
 ### Paste a coding task in the chat, and it runs
