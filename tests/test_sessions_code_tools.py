@@ -129,7 +129,9 @@ def test_internal_symlinks_are_readable_but_never_written_through(env):
     t.claim(["**"])
     (t.root / "alias.py").symlink_to("src/app.py")
     (t.root / "srcalias").symlink_to("src", target_is_directory=True)
-    assert t.read_file("alias.py")["text"] == "x = 1\n"
+    # The lines come with their numbers: the agent needs them to point at a
+    # place in a file, and to build an edit on it.
+    assert t.read_file("alias.py")["text"] == "1: x = 1\n"
     with pytest.raises(ToolDenied, match="symlink"):
         t.write_file("alias.py", "y = 2\n")
     with pytest.raises(ToolDenied, match="symlink"):

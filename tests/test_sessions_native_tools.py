@@ -117,7 +117,7 @@ def _run(env, prov):
 def test_every_code_tool_is_offered_with_its_arguments():
     tools = {t["name"]: t for t in native_tools()}
     assert set(tools) == {"list_dir", "read_file", "search", "claim", "write_file",
-                          "edit_file", "diff", "run"}
+                          "edit_file", "patch", "diff", "run"}
     for name, tool in tools.items():
         assert tool["description"], name
         assert tool["input_schema"]["type"] == "object", name

@@ -76,14 +76,17 @@ Reply with EXACTLY ONE JSON object and nothing else:
 
 Tools:
   list_dir   {"path": ".", "recursive": false}
-  read_file  {"path": "...", "offset": 0}
+  read_file  {"path": "...", "start_line": 1, "end_line": 200}   the lines come numbered
   search     {"query": "...", "path": ".", "regex": false}
   claim      {"patterns": ["src/foo.py", "tests/*.py"]}   reserve files BEFORE writing
   write_file {"path": "...", "content": "..."}
   edit_file  {"path": "...", "old": "...", "new": "...", "count": 1}
+  patch      {"patch": "--- a/f.py\\n+++ b/f.py\\n@@ ..."}   a unified diff, for several
+             places at once
   diff       {"against": "head"}
   run        {"argv": ["pytest", "-q", "tests/test_x.py"]}  only pytest, ruff check,
-             ruff format --check, mypy, npm test / npm run lint; sandboxed, no network.
+             ruff format --check, mypy, npm test / npm run lint, python <file>,
+             python -m <module>, git log/show/blame/diff; sandboxed, no network.
 """
 
 NATIVE_SYSTEM_PROMPT = AGENT_RULES + """
@@ -132,6 +135,16 @@ def _whole_tool_turns(messages: list[dict]) -> list[dict]:
     return out
 
 
+def _opt_int(value: Any) -> int | None:
+    """An optional integer argument of a tool call."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _native_capable(provider: Any) -> bool:
     """Whether this provider speaks native tool calling.
 
@@ -159,11 +172,14 @@ def native_tools() -> list[dict]:
              "recursive": {"type": "boolean", "description": "walk the whole subtree"}},
              "required": []}},
         {"name": "read_file",
-         "description": "Read a file of the worktree.",
+         "description": "Read a file of the worktree. The lines come with their numbers.",
          "input_schema": {"type": "object", "properties": {
              "path": {"type": "string", "description": "path relative to the worktree root"},
+             "start_line": {"type": "integer", "description":
+                            "first line to read (1 is the first line of the file)"},
+             "end_line": {"type": "integer", "description": "last line to read (inclusive)"},
              "offset": {"type": "integer", "description":
-                        "first line to read (0 is the beginning of the file)"}},
+                        "byte offset; rarely needed, the lines are numbered"}},
              "required": ["path"]}},
         {"name": "search",
          "description": "Search the worktree for a string, or for a regular expression.",
@@ -184,7 +200,8 @@ def native_tools() -> list[dict]:
              "path": {"type": "string"}, "content": {"type": "string"}},
              "required": ["path", "content"]}},
         {"name": "edit_file",
-         "description": "Replace a piece of text in a file.",
+         "description": "Replace a piece of text in a file. If the text is not there, the "
+                        "answer says which lines look like it, with their numbers.",
          "input_schema": {"type": "object", "properties": {
              "path": {"type": "string"}, "old": {"type": "string", "description":
                                                  "the text to replace, exactly as it is in the file"},
@@ -192,6 +209,12 @@ def native_tools() -> list[dict]:
              "count": {"type": "integer", "description":
                        "how many times the old text appears (1 by default)"}},
              "required": ["path", "old", "new"]}},
+        {"name": "patch",
+         "description": "Apply a unified diff, for a change that touches several places "
+                        "at once. The paths it touches must be reserved first.",
+         "input_schema": {"type": "object", "properties": {
+             "patch": {"type": "string", "description": "the unified diff"}},
+             "required": ["patch"]}},
         {"name": "diff",
          "description": "Show what changed in the worktree.",
          "input_schema": {"type": "object", "properties": {
@@ -525,7 +548,9 @@ class SessionRunner:
             if name == "list_dir":
                 return tools.list_dir(args.get("path", "."), recursive=bool(args.get("recursive")))
             if name == "read_file":
-                r = tools.read_file(args["path"], offset=int(args.get("offset", 0)))
+                r = tools.read_file(args["path"], offset=int(args.get("offset", 0)),
+                                    start_line=_opt_int(args.get("start_line")),
+                                    end_line=_opt_int(args.get("end_line")))
                 self._ledger.note_read(args["path"], r)
                 return r
             if name == "search":
@@ -546,6 +571,12 @@ class SessionRunner:
                                     count=int(args.get("count", 1)))
                 self._written.add(r["path"])
                 self._ledger.note_change(r["path"], "edited")
+                return r
+            if name == "patch":
+                r = tools.apply_patch(args.get("patch") or args.get("diff") or "")
+                for p in r.get("paths") or []:
+                    self._written.add(str(p))
+                    self._ledger.note_change(str(p), "patched")
                 return r
             if name == "diff":
                 return tools.diff(against=args.get("against", "head"))

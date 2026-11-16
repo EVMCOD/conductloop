@@ -4,6 +4,13 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### Better tools for the agent
+
+- **The lines of a file come with their numbers, and a range can be read.** The agent could not point at a place in a file, nor build an edit on it, because the text came without numbers. Now `read_file` numbers every line and takes a range (`start_line`, `end_line`).
+- **An edit that does not find its text says which lines look like it.** The answer names the lines of the file that resemble what the agent was looking for, with their numbers: it corrects itself in one turn instead of reading the file again.
+- **A change that touches several places is one call.** A new `patch` tool applies a unified diff, so a change in four places costs one turn and not four.
+- **The agent may run python and read the history of the repository.** `run` now allows `python <file>` and `python -m <module>` inside the sandbox (no network, no writes outside the copy, nothing that installs), and the read-only git commands (`log`, `show`, `blame`, `diff`). Nothing that writes and nothing that runs anything else.
+
 ### The agent asks for the tools it needs, several at a time
 
 - **A code session uses the tool calling of the provider, and can call several tools in the same turn.** Until now the model answered with one JSON object written in the text, so a turn was one tool, and every turn paid again for the whole conversation. With Anthropic, MiniMax through its Coding Plan, OpenAI or Ollama the model now asks for the tools it wants itself — three reads in the same turn are three reads in the same turn — and the session runs them with its own rules: the reservations of the session, the sandbox and the events. A model that answers in plain text is taken as the final report, and one that only announces what it is going to do is sent back to work instead of finishing the task. The JSON protocol stays as the fallback for the providers that do not speak tool calling.

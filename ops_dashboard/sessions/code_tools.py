@@ -33,6 +33,7 @@ sandbox), never file contents or command output.
 """
 from __future__ import annotations
 
+import difflib
 import hashlib
 import os
 import re
@@ -106,6 +107,54 @@ def _re(pattern: re.Pattern[str]) -> Callable[[str], bool]:
     return lambda v: pattern.match(v) is not None
 
 
+def _numbered(lines: list[str], first: int) -> str:
+    """The lines of a file, with the number of each one."""
+    return "".join(f"{first + i}: {line}\n" for i, line in enumerate(lines))
+
+
+def _closest_lines(text: str, old: str, limit: int = 5) -> str:
+    """The lines of the file that look the most like the text that was not found.
+
+    The model wrote the old text from memory, or from a version of the file
+    that has changed. Showing it the lines that look like it — with their
+    numbers — is how it fixes its own call.
+    """
+    wanted = [ln.strip() for ln in old.splitlines() if ln.strip()]
+    if not wanted:
+        return ""
+    target = wanted[0]
+    scored: list[tuple[float, int, str]] = []
+    for i, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        ratio = difflib.SequenceMatcher(None, target, stripped).ratio()
+        if ratio >= 0.45:
+            scored.append((ratio, i, line.rstrip()))
+    scored.sort(key=lambda t: (-t[0], t[1]))
+    return "\n".join(f"{i}: {line}" for _, i, line in scored[:limit])
+
+
+def _patch_paths(patch: str) -> list[str]:
+    """The files a unified diff touches, from its headers.
+
+    Both headers: a diff that deletes a file says ``/dev/null`` in the
+    ``+++`` line, and the file it deletes has to be reserved too.
+    """
+    out: list[str] = []
+    for line in patch.splitlines():
+        if line.startswith("+++ ") or line.startswith("--- "):
+            target = line[4:].strip()
+            if target == "/dev/null":
+                continue
+            if target.startswith("a/") or target.startswith("b/"):
+                target = target[2:]
+            target = target.split("\t", 1)[0].strip()
+            if target and target not in out:
+                out.append(target)
+    return out
+
+
 # tool -> (flags without value, flags with value -> validator)
 _SPECS: dict[str, tuple[frozenset[str], dict[str, Callable[[str], bool]]]] = {
     "pytest": (frozenset({"-q", "-qq", "-v", "-vv", "-x", "-s", "-l", "-ra", "-rA", "-rf",
@@ -127,6 +176,34 @@ _SPECS: dict[str, tuple[frozenset[str], dict[str, Callable[[str], bool]]]] = {
               "--python-version": _re(re.compile(r"^3\.[0-9]{1,2}$"))}),
 }
 _NPM_ALLOWED = (("test",), ("run", "test"), ("run", "lint"))
+
+# The git commands an agent may run: the ones that only read the history.
+# Nothing that writes (no commit, no checkout, no stash), nothing that runs
+# anything else (no --ext-diff, no --output, no -c).
+_GIT_READONLY: dict[str, tuple[frozenset[str], dict[str, Callable[[str], bool]]]] = {
+    "log": (frozenset({"--oneline", "--stat", "--patch", "-p", "--name-only", "--name-status",
+                       "--decorate", "--no-color", "--graph", "--all", "--follow", "--reverse",
+                       "--first-parent", "--merges", "--no-merges", "--author"}),
+            {"-n": _re(_INT_RE), "--max-count": _re(_INT_RE),
+             "--since": _re(_EXPR_RE), "--until": _re(_EXPR_RE)}),
+    "show": (frozenset({"--stat", "--name-only", "--name-status", "--no-color", "--patch",
+                         "-p", "--format"}), {}),
+    "blame": (frozenset({"-w", "--line-porcelain", "--show-stats"}), {}),
+    "diff": (frozenset({"--stat", "--name-only", "--name-status", "--no-color"}),
+             {"-U": _re(_INT_RE), "--unified": _re(_INT_RE)}),
+}
+# A revision: what a ref, a range or a path may look like. Read-only, so
+# the worst a wrong one can do is fail.
+_GIT_REV_RE = re.compile(r"^[A-Za-z0-9_./~^@{}\-]+$")
+_PY_MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]*$")
+# The modules that install or build something. The sandbox has no network, so
+# they could not download anything, but "python -m pip install" has no reason
+# to be allowed in a session that may not install anything.
+_PY_BLOCKED_MODULES = frozenset({
+    "pip", "ensurepip", "easy_install", "setuptools", "distutils", "wheel",
+    "conda", "mamba", "poetry", "pipenv", "uv", "hatch", "pdm", "flit",
+    "venv", "virtualenv",
+})
 
 
 class CodeTools:
@@ -169,10 +246,11 @@ class CodeTools:
     def _current_gitdir(self) -> str:
         return worktrees._git(self.root, "rev-parse", "--absolute-git-dir").stdout.strip()
 
-    def _git(self, *args: str, check: bool = True, timeout: int = 60):  # type: ignore[no-untyped-def]
+    def _git(self, *args: str, check: bool = True, timeout: int = 60,
+             stdin: str | None = None):  # type: ignore[no-untyped-def]
         if self._current_gitdir() != self._gitdir:
             raise ToolDenied("the worktree's .git link was tampered with")
-        return worktrees._git(self.root, *args, check=check, timeout=timeout)
+        return worktrees._git(self.root, *args, check=check, timeout=timeout, stdin=stdin)
 
     # ── bookkeeping ─────────────────────────────────────────────────────
     def _event(self, tool: str, ok: bool, **meta: Any) -> None:
@@ -261,20 +339,54 @@ class CodeTools:
             raise ToolDenied(str(e)[:300]) from e
 
     # ── read side ───────────────────────────────────────────────────────
-    def read_file(self, path: str, *, offset: int = 0, limit: int = MAX_READ_BYTES) -> dict:
+    def read_file(self, path: str, *, offset: int = 0, limit: int = MAX_READ_BYTES,
+                  start_line: int | None = None, end_line: int | None = None) -> dict:
+        """Read a file, with its line numbers.
+
+        The numbers are what the model needs to talk about a place in the
+        file ("the limit is at line 19") and to build an edit. A range
+        (``start_line``/``end_line``, 1-based and inclusive) reads only that
+        part; ``offset`` stays a byte offset for the rare case that needs it.
+        """
         def go() -> dict:
             rel, real = self.resolve(path)
             if not real.is_file():
                 raise ToolError(f"not a file: {rel or '.'}")
             size = real.stat().st_size
+            if start_line is not None or end_line is not None:
+                first = max(1, int(start_line or 1))
+                last = int(end_line) if end_line is not None else first + 199
+                if last < first:
+                    raise ToolError("end_line is before start_line")
+                data = real.read_bytes()
+                if b"\0" in data[:8192]:
+                    return {"path": rel, "size": size, "binary": True, "text": None,
+                            "start_line": first, "end_line": last, "total_lines": None,
+                            "truncated": False, "_meta": {"bytes": len(data)}}
+                lines = data.decode("utf-8", "replace").splitlines()
+                chosen = lines[first - 1:last]
+                return {"path": rel, "size": size, "binary": False,
+                        "start_line": first, "end_line": first + len(chosen) - 1,
+                        "total_lines": len(lines),
+                        "text": _numbered(chosen, first),
+                        "truncated": last < len(lines),
+                        "_meta": {"lines": len(chosen)}}
             n = max(0, min(int(limit), MAX_READ_BYTES))
+            start = max(0, int(offset))
             with open(real, "rb") as f:
-                f.seek(max(0, int(offset)))
+                prefix = f.read(start) if start else b""
                 data = f.read(n)
             binary = b"\0" in data[:8192]
-            return {"path": rel, "size": size, "offset": offset, "binary": binary,
-                    "truncated": max(0, int(offset)) + len(data) < size,
-                    "text": None if binary else data.decode("utf-8", "replace"),
+            if binary:
+                return {"path": rel, "size": size, "offset": offset, "binary": True,
+                        "truncated": start + len(data) < size, "text": None,
+                        "_meta": {"bytes": len(data)}}
+            text = data.decode("utf-8", "replace")
+            first_line = prefix.count(b"\n") + 1
+            return {"path": rel, "size": size, "offset": offset, "binary": False,
+                    "start_line": first_line, "total_lines": None,
+                    "truncated": start + len(data) < size,
+                    "text": _numbered(text.splitlines(), first_line),
                     "_meta": {"bytes": len(data)}}
         return self._guard("read", go, path=path)
 
@@ -411,6 +523,12 @@ class CodeTools:
         return self._guard("write", go, path=path)
 
     def edit_file(self, path: str, old: str, new: str, *, count: int = 1) -> dict:
+        """Replace a piece of text.
+
+        When the text is not there, the error says which lines of the file
+        look like it, with their numbers: the model can correct itself in
+        one more turn instead of reading the file again.
+        """
         def go() -> dict:
             if not isinstance(old, str) or not old or not isinstance(new, str):
                 raise ToolDenied("old must be non-empty text and new must be text")
@@ -423,7 +541,9 @@ class CodeTools:
             text = real.read_text(encoding="utf-8")
             found = text.count(old)
             if found != count:
-                raise ToolError(f"expected {count} occurrence(s) of the old text, found {found}")
+                hints = _closest_lines(text, old)
+                raise ToolError(f"expected {count} occurrence(s) of the old text, found {found}"
+                                + (f". The lines that look like it:\n{hints}" if hints else ""))
             data = text.replace(old, new).encode("utf-8")
             if len(data) > MAX_WRITE_BYTES:
                 raise ToolDenied(f"result exceeds {MAX_WRITE_BYTES} bytes")
@@ -431,6 +551,37 @@ class CodeTools:
             return {"path": rel, "replacements": found, "bytes": len(data),
                     "_meta": {"bytes": len(data), "replacements": found}}
         return self._guard("edit", go, path=path)
+
+    # ── patch (several changes at once) ─────────────────────────────────
+    def apply_patch(self, patch: str) -> dict:
+        """Apply a unified diff.
+
+        One edit per turn is one edit per turn. A change that touches four
+        places needs four turns, and the model loses the thread. A unified
+        diff does them all at once.
+        """
+        def go() -> dict:
+            if not isinstance(patch, str) or not patch.strip():
+                raise ToolDenied("patch must be a unified diff")
+            if len(patch.encode("utf-8")) > MAX_WRITE_BYTES:
+                raise ToolDenied(f"patch exceeds {MAX_WRITE_BYTES} bytes")
+            paths = _patch_paths(patch)
+            if not paths:
+                raise ToolError("the patch does not touch any file")
+            for p in paths:
+                rel, _ = self.resolve(p, for_write=True)
+                self.check_write(rel)
+            before = self._dirty()
+            try:
+                self._git("apply", "--whitespace=nowarn", "-", stdin=patch, timeout=60)
+            except worktrees.WorktreeError as e:
+                raise ToolError(f"the patch did not apply: {e}"[:300]) from e
+            after = self._dirty()
+            changed = sorted(p for p in set(before) | set(after)
+                             if before.get(p, "<clean>") != after.get(p, "<clean>"))
+            return {"paths": changed, "files": len(changed),
+                    "_meta": {"files": len(changed)}}
+        return self._guard("patch", go)
 
     # ── run ─────────────────────────────────────────────────────────────
     def python(self) -> str:
@@ -490,8 +641,8 @@ class CodeTools:
         py = self.python()
         py_dirs = [str(Path(py).parent)]
         tool, rest = argv[0], argv[1:]
-        if tool in ("python", "python3") and rest[:1] == ["-m"] and len(rest) >= 2:
-            tool, rest = rest[1], rest[2:]
+        if tool in ("python", "python3"):
+            return self._build_python(rest, py, py_dirs)
         if tool == "pytest":
             return ([py, "-m", "pytest", "-p", "no:cacheprovider", "--rootdir", str(self.root),
                      *self._parse("pytest", rest, nodeids=True)], py_dirs)
@@ -512,7 +663,82 @@ class CodeTools:
             if not npm:
                 raise ToolError("npm not found")
             return ([npm, *rest], [str(Path(npm).parent), *py_dirs])
-        raise ToolDenied(f"{tool!r} is not in the allowed commands (pytest, ruff, mypy, npm)")
+        if tool == "git":
+            return self._build_git(rest, py_dirs)
+        raise ToolDenied(f"{tool!r} is not in the allowed commands "
+                         "(pytest, ruff, mypy, npm, python, git)")
+
+    def _build_python(self, rest: list[str], py: str,
+                      py_dirs: list[str]) -> tuple[list[str], list[str]]:
+        """``python <file>`` and ``python -m <module>``.
+
+        The sandbox already cuts the network and the writes outside the
+        copy, so a script of the repository may run: the agent needs it to
+        check something the tests do not cover.
+        """
+        if not rest:
+            raise ToolDenied("python needs a file or a module")
+        if rest[0] == "-m":
+            if len(rest) < 2:
+                raise ToolDenied("python -m needs a module")
+            module, tail = rest[1], rest[2:]
+            if module in ("pytest", "ruff", "mypy"):
+                return self.build_command([module, *tail])
+            if not _PY_MODULE_RE.match(module):
+                raise ToolDenied("invalid module name")
+            if module.split(".")[0] in _PY_BLOCKED_MODULES:
+                raise ToolDenied(f"python -m {module} is not allowed: "
+                                 "a session may not install anything")
+            return ([py, "-m", module, *tail], py_dirs)
+        if rest[0].startswith("-"):
+            raise ToolDenied("only 'python <file>' and 'python -m <module>' are allowed")
+        script, tail = rest[0], rest[1:]
+        paths = self._validate_paths([script], nodeids=False)
+        return ([py, *paths, *tail], py_dirs)
+
+    def _build_git(self, rest: list[str], py_dirs: list[str]) -> tuple[list[str], list[str]]:
+        """The git commands that only read: log, show, blame, diff."""
+        git = shutil.which("git")
+        if not git:
+            raise ToolError("git not found")
+        if not rest:
+            raise ToolDenied("git needs a subcommand")
+        sub, tail = rest[0], rest[1:]
+        if sub not in _GIT_READONLY:
+            raise ToolDenied("only 'git log', 'git show', 'git blame' and 'git diff' are allowed")
+        noarg, valued = _GIT_READONLY[sub]
+        flags: list[str] = []
+        revs: list[str] = []
+        paths: list[str] = []
+        i = 0
+        while i < len(tail):
+            a = tail[i]
+            if a == "--":
+                paths = self._validate_paths(tail[i + 1:], nodeids=False)
+                break
+            if a in noarg:
+                flags.append(a)
+            elif a.startswith("-"):
+                name, eq, val = a.partition("=")
+                if name not in valued:
+                    raise ToolDenied(f"option {name!r} is not allowed for git {sub}")
+                if not eq:
+                    i += 1
+                    if i >= len(tail):
+                        raise ToolDenied(f"option {name} needs a value")
+                    val = tail[i]
+                if not valued[name](val):
+                    raise ToolDenied(f"invalid value for {name}")
+                flags += [name, val]
+            else:
+                if not _GIT_REV_RE.match(a):
+                    raise ToolDenied(f"invalid argument for git {sub}: {a!r}")
+                revs.append(a)
+            i += 1
+        argv = worktrees.git_argv(sub, *flags, *revs)
+        if paths:
+            argv += ["--", *paths]
+        return (argv, [str(Path(git).parent), *py_dirs])
 
     # ── what a command changed (the sandbox lets it write the whole worktree) ──
     def _file_state(self, rel: str) -> str | None:
