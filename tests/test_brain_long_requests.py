@@ -81,7 +81,12 @@ def test_a_long_request_is_sent_streaming():
     assert len(client.streams) == 1
     # The same request, only streamed.
     assert client.streams[0]["max_tokens"] == 32000
-    assert client.streams[0]["messages"] == [{"role": "user", "content": "the task"}]
+    sent = client.streams[0]["messages"][0]
+    assert sent["role"] == "user"
+    # The text is the same, marked or not for the cache.
+    content = sent["content"]
+    text = content if isinstance(content, str) else content[0]["text"]
+    assert text == "the task"
 
 
 def test_a_short_request_is_not_streamed():
