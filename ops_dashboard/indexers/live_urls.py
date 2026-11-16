@@ -24,6 +24,11 @@ from .. import db
 # the live_urls table via the UI). See _configured_urls().
 KNOWN_URLS: list[dict] = []
 
+# How many consecutive failed checks make a URL "down". The watch runs every
+# five minutes, so the second failure is five minutes after the first: one
+# timeout is a timeout, two in a row is a website that stopped answering.
+FAILURES_TO_CONFIRM = 2
+
 
 def _configured_urls() -> list[dict]:
     """Return the URLs to monitor. Empty by default.
@@ -246,16 +251,46 @@ def latest() -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def recent_unhealthy(hours: int = 24) -> list[dict]:
-    """URLs that have had at least one failed check in the last N hours."""
+def recent_unhealthy(hours: int = 24, failures: int = FAILURES_TO_CONFIRM) -> list[dict]:
+    """The URLs that are down: their last checks all failed.
+
+    A URL counts as down only when its last `failures` checks failed (two by
+    default). One timeout is a timeout, not a website that fell: the watch
+    runs every five minutes, and a single 10-second timeout was announced as
+    "the site is down" — at high severity, in the digest of the morning —
+    while the next check, five minutes later, answered 200.
+
+    The second check comes from the history (`live_url_checks`, one row per
+    check). The `live_urls` table only keeps the last check of each URL, so it
+    cannot tell a timeout from an outage.
+
+    Only the checks of the last N hours count: an outage that ended days ago
+    is not news. The row returned is the last check of the URL, and its
+    status code is what says whether the site answered with an error (HTTP
+    500) or did not answer at all (no status code).
+    """
+    ensure_schema()
     cutoff = int(time.time()) - hours * 3600
     with db.db() as conn:
         rows = conn.execute(
-            """SELECT DISTINCT name, project, url, status_code
-               FROM live_urls
-               WHERE checked_at >= ? AND (ok = 0 OR status_code IS NULL OR status_code = 0)
-               ORDER BY name""",
-            (cutoff,),
+            """
+            WITH ranked AS (
+                SELECT name, url, project, status_code, ok, checked_at,
+                       ROW_NUMBER() OVER (PARTITION BY name ORDER BY checked_at DESC, id DESC) AS rn
+                FROM live_url_checks
+                WHERE checked_at >= ?
+            ),
+            recent AS (
+                SELECT name, COUNT(*) AS checks, SUM(ok) AS oks
+                FROM ranked WHERE rn <= ? GROUP BY name
+            )
+            SELECT a.name, a.project, a.url, a.status_code
+            FROM ranked a
+            JOIN recent r ON r.name = a.name
+            WHERE a.rn = 1 AND r.checks >= ? AND r.oks = 0
+            ORDER BY a.name
+            """,
+            (cutoff, failures, failures),
         ).fetchall()
         return [dict(r) for r in rows]
 
