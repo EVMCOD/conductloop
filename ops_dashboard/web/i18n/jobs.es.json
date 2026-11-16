@@ -33,6 +33,7 @@
     "job_obsidian_export": "Exportación a la bóveda",
     "job_analytics_poll": "Consulta de analítica",
     "job_library_index": "Índice de la biblioteca",
-    "job_daily_note": "Nota diaria"
+    "job_daily_note": "Nota diaria",
+    "run_external": "por un script programado (launchd)"
   }
 }

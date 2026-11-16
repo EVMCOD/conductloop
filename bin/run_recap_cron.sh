@@ -17,30 +17,45 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "$OPS_REPO_ROOT"
 ops_check_code
+# Who this job is and when launchd runs it, so its runs show up in the panel
+# (Jobs) next to the app's own: failed, or late when it stopped running. The
+# plist can say otherwise with OPS_JOB_SCHEDULE.
+export OPS_JOB_NAME=recap
+export OPS_JOB_SCHEDULE="${OPS_JOB_SCHEDULE:-0 8 * * *}"
 
 "$OPS_PYTHON" - <<'PY'
 import time
 from ops_dashboard import boardroom as br
 from ops_dashboard import discord_bridge as dc
+from ops_dashboard import external_jobs
 
-# 1) Force cache miss + regenerate synthesis
-syn = br.recap_synthesis(br._recap_payload(), force=True)
-src = syn.get("source", "?")
-provider = syn.get("provider") or "(static fallback)"
-text = (syn.get("text") or "(no synthesis)").strip()
-title = f"☀️ Daily Boardroom Recap ({src}, {provider}) — {time.strftime('%Y-%m-%d')}"
-print(f"[cron] synthesis: source={src} provider={provider} chars={len(text)}")
 
-# 2) Discord outbound
-try:
-    if dc.is_configured():
-        out = dc.send_message(f"**{title}**\n\n{text}")
-        print(f"[cron] discord: ok={out.get('ok')}")
-    else:
-        print("[cron] discord: DISCORD_WEBHOOK_URL not set, skipping")
-except Exception as e:
-    print(f"[cron] discord error: {e!r}")
+def recap() -> dict:
+    done = {}
+    # 1) Force cache miss + regenerate synthesis
+    syn = br.recap_synthesis(br._recap_payload(), force=True)
+    src = syn.get("source", "?")
+    provider = syn.get("provider") or "(static fallback)"
+    text = (syn.get("text") or "(no synthesis)").strip()
+    title = f"☀️ Daily Boardroom Recap ({src}, {provider}) — {time.strftime('%Y-%m-%d')}"
+    print(f"[cron] synthesis: source={src} provider={provider} chars={len(text)}")
+    done["synthesis"] = {"source": src, "chars": len(text)}
 
+    # 2) Discord outbound
+    try:
+        if dc.is_configured():
+            out = dc.send_message(f"**{title}**\n\n{text}")
+            print(f"[cron] discord: ok={out.get('ok')}")
+            done["discord"] = {"ok": bool(out.get("ok")), "error": out.get("error")}
+        else:
+            print("[cron] discord: DISCORD_WEBHOOK_URL not set, skipping")
+    except Exception as e:
+        print(f"[cron] discord error: {e!r}")
+        done["discord"] = {"ok": False, "error": repr(e)}
+    return done
+
+
+external_jobs.track("recap", recap)
 PY
 
 echo "[cron] done at $(date '+%Y-%m-%d %H:%M:%S')"

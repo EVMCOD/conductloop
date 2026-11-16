@@ -2,6 +2,21 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased
+
+### The scheduled scripts show up in Jobs
+
+- **The scripts launchd runs are in the Jobs panel now, next to the app's own jobs.** The daily Google Analytics and Search Console polls, the revenue poll, the digest, the URL watch and the boardroom recap say there how their last run went, and the panel marks one **failed** when it fails and **late** when it stops running. For weeks those polls ran the code of an old release, failed in every site and printed "✓ 7 sites, 0 fetched": nothing wrote it down, so everything looked fine. A failure inside the result counts, not only a crash.
+
+### The digest says what is measured
+
+- **No revenue source connected now reads "not measured", not "€0.00".** The digest and its AI summary used to report zero revenue every day, and the summary told you to look into it.
+- **The AI summary stays in your language.** A model that drifts into another script mid-sentence is asked again; if it drifts again, the stray characters are removed.
+
+### Fewer promises than facts
+
+- **The pairing page and the tour no longer say your data never leaves the device.** Pairing goes straight between your own devices, and a question goes to the AI provider you chose, with your key.
+
 ## 1.2.29 — 2026-11-15 — The agents panel, walked with the keyboard
 
 ### The agents panel, walked with the keyboard
