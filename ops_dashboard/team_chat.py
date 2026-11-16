@@ -17,6 +17,8 @@ Events (one dict each, sent as SSE by routes_chat):
   agent_start  {agent}            agent_delta {agent, content}
   agent_done   {agent, ms}        agent_error {agent, message}
   synthesis    {}                 (the CEO starts the final answer)
+  code_session {session_id, task_id, repo_name, branch, base_ref, provider, model, flat_rate}
+               (a request to change code went to a code session; see code_delegate)
   delta        {content}          (the answer the user reads)
   error        {message, code}
   done         {thread_id}
@@ -292,6 +294,51 @@ def _thread_agent(thread_id: int) -> str | None:
     return row[0] if row else None
 
 
+# What the chat says when a message goes to a code session, in the language of
+# the person.
+_CODE_WORDS: dict[str, dict[str, str]] = {
+    "en": {
+        "started": ("This is a change to the code, so I've opened a code session on **{repo}** "
+                    "(branch `{branch}`, {model}). It works in its own copy of the repository "
+                    "and commits there; the card below follows it. When it finishes you'll see "
+                    "its report here, and you decide whether to push the branch and open the "
+                    "pull request."),
+        "refused": "This is a change to the code, but I could not open a code session: {reason}",
+        "refused_no_repo": ("This is a change to the code, but no repository is marked for code "
+                            "sessions yet. Mark it once in Sessions → Repositories and send the "
+                            "message again."),
+        "refused_no_provider": ("This is a change to the code, but no AI is set up yet: add a key "
+                                "in Connect AI first."),
+        "refused_platform_unsupported": ("This is a change to the code, and code sessions are not "
+                                         "available on Windows yet."),
+    },
+    "es": {
+        "started": ("Esto es un cambio en el código, así que he abierto una sesión de código en "
+                    "**{repo}** (rama `{branch}`, {model}). Trabaja en su propia copia del "
+                    "repositorio y hace los commits ahí; la tarjeta de abajo la sigue en directo. "
+                    "Cuando termine verás aquí su informe, y tú decides si subir la rama y abrir "
+                    "la PR."),
+        "refused": "Esto es un cambio en el código, pero no he podido abrir la sesión de código: {reason}",
+        "refused_no_repo": ("Esto es un cambio en el código, pero todavía no hay ningún repositorio "
+                            "marcado para las sesiones de código. Márcalo una vez en Sesiones → "
+                            "Repositorios y vuelve a enviar el mensaje."),
+        "refused_no_provider": ("Esto es un cambio en el código, pero todavía no hay ninguna IA "
+                                "configurada: añade antes una clave en Conectar IA."),
+        "refused_platform_unsupported": ("Esto es un cambio en el código, y en Windows todavía no "
+                                         "hay sesiones de código."),
+    },
+}
+
+
+def _code_words() -> dict[str, str]:
+    from . import i18n
+
+    try:
+        return _CODE_WORDS[i18n.current_locale()]
+    except Exception:
+        return _CODE_WORDS["en"]
+
+
 def _save(thread_id: int, role: str, content: str, provider: str | None = None,
           citations: list[dict] | None = None) -> None:
     # The citations are saved with the message that owns them, so that a click
@@ -525,6 +572,25 @@ class ChatTurn:
         self.mode = "team" if team and self.agent.get("lead") else "direct"
         self.provider = brain.resolve_provider(self.provider_name)   # may raise ProviderUnavailableError
 
+    def _code_task(self) -> Iterator[dict]:
+        """Open a code session for the message and say so; the page follows it."""
+        from . import code_delegate
+
+        words = _code_words()
+        result = code_delegate.start(self.message)
+        if result.get("ok"):
+            card = {k: result.get(k) for k in ("session_id", "task_id", "repo_name", "branch",
+                                               "base_ref", "provider", "model", "flat_rate")}
+            _save(self.thread_id, "code_session", json.dumps(card, ensure_ascii=False))
+            yield {"type": "code_session", **card}
+            text = words["started"].format(repo=card["repo_name"], branch=card["branch"],
+                                           model=card["model"] or card["provider"])
+        else:
+            reason = words.get(f"refused_{result.get('error')}")
+            text = reason or words["refused"].format(reason=result.get("message") or result.get("error"))
+        yield {"type": "delta", "content": text}
+        _save(self.thread_id, "assistant", text, self.provider.name)
+
     def _new_provider(self):
         return brain.resolve_provider(self.provider_name) if self.provider_name else brain.resolve_provider()
 
@@ -535,6 +601,14 @@ class ChatTurn:
         _save(self.thread_id, "user", self.message)
         yield {"type": "start", "thread_id": self.thread_id, "agent": self.agent["key"], "mode": self.mode,
                "provider": self.provider.name, "model": getattr(self.provider, "model", None)}
+        # A request to change code in a repository goes to a code session: the
+        # team cannot see the repository, and answering it in words is how a
+        # pasted task ended in "(max tool iterations reached)".
+        from . import code_delegate
+        if code_delegate.is_code_task(self.provider, self.message):
+            yield from self._code_task()
+            yield {"type": "done", "thread_id": self.thread_id}
+            return
         context, citations, web_rules = _context(self.message)
         yield {"type": "context", "citations": citations}
         if self.mode == "team":

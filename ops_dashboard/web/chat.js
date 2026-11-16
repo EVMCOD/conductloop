@@ -342,6 +342,138 @@
       cards.appendChild(node);
     });
   }
+  // ---------- code sessions (a coding task pasted in the chat) ----------
+  // The server sent the request to a code session (code_delegate.py). The card
+  // follows it: what it is doing, its report when it stops, and the one step
+  // that is the person's: look at the changes, push the branch, open the PR.
+  var CODE_POLL_MS = 3000;
+  // How a finished task reads. The keys are written out: a key built by
+  // concatenation is a key nobody checks (tests/test_locale.py).
+  var CODE_TASK_DONE = {
+    needs_review: 'chat.code_state_needs_review', done: 'chat.code_state_done',
+    failed: 'chat.code_state_failed', blocked: 'chat.code_state_blocked',
+    cancelled: 'chat.code_state_cancelled'
+  };
+  var CODE_SESSION_STOPPED = { waiting_human: 1, paused: 1, stalled: 1, closed: 1, failed: 1 };
+  function csrfToken() {
+    var m = /(?:^|;\s*)ops_csrf=([^;]+)/.exec(document.cookie || '');
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+  async function sessionsApi(method, path) {
+    var opt = { method: method, credentials: 'same-origin', headers: {} };
+    if (method !== 'GET') {
+      opt.headers['Content-Type'] = 'application/json';
+      opt.body = '{}';
+      var c = csrfToken(); if (c) opt.headers['X-CSRF-Token'] = c;
+    }
+    var r = await fetch(path, opt);
+    var d = null;
+    try { d = await r.json(); } catch (e) { /* not JSON */ }
+    if (!r.ok || (d && d.ok === false)) throw new Error((d && (d.message || d.error)) || ('HTTP ' + r.status));
+    return d;
+  }
+  function codeStep(e) {
+    var p = e.payload;
+    if (typeof p === 'string') { try { p = JSON.parse(p); } catch (x) { p = {}; } }
+    p = p || {};
+    switch (e.kind) {
+      case 'tool.write': case 'tool.edit': return t('chat.code_step_edit', { path: n(p.path) });
+      case 'tool.read': return t('chat.code_step_read', { path: n(p.path) });
+      case 'tool.search': return t('chat.code_step_search');
+      case 'tool.run': return t('chat.code_step_run', { cmd: (p.argv || []).join(' '), code: n(p.exit_code) });
+      case 'integration.dry_merge': return t('chat.code_step_commit', { sha: n(p.commit).slice(0, 7) });
+      default: return null;
+    }
+  }
+  function showCodeSession(block, info) {
+    if (!info || !info.session_id) return;
+    var node = el('<div class="code-card"><div class="code-head"><span class="code-title"></span>' +
+      '<span class="code-state"></span></div><ul class="code-steps"></ul>' +
+      '<div class="code-report md" hidden></div><div class="code-error" hidden></div>' +
+      '<div class="code-actions" hidden><button type="button" class="code-diff-btn"></button>' +
+      '<button type="button" class="code-publish-btn"></button>' +
+      '<a class="code-pr" hidden target="_blank" rel="noopener noreferrer"></a>' +
+      '<a class="code-open" href="/sessions"></a></div><pre class="code-diff" hidden></pre></div>');
+    node.querySelector('.code-title').textContent = t('chat.code_title',
+      { id: info.session_id, repo: n(info.repo_name), branch: n(info.branch) });
+    node.querySelector('.code-diff-btn').textContent = t('chat.code_view_changes');
+    node.querySelector('.code-publish-btn').textContent = t('chat.code_publish');
+    node.querySelector('.code-open').textContent = t('chat.code_open_sessions');
+    block.node.querySelector('.msg-body').appendChild(node);
+    wireCodeCard(node, info);
+    followCodeSession(node, info);
+  }
+  function codeError(node, msg) {
+    var e = node.querySelector('.code-error');
+    e.textContent = '⚠ ' + msg; e.hidden = false;
+  }
+  function wireCodeCard(node, info) {
+    var sid = info.session_id;
+    var diffBtn = node.querySelector('.code-diff-btn');
+    var pre = node.querySelector('.code-diff');
+    diffBtn.addEventListener('click', async function () {
+      if (!pre.hidden) { pre.hidden = true; diffBtn.textContent = t('chat.code_view_changes'); return; }
+      try {
+        var d = await sessionsApi('GET', '/api/sessions/' + sid + '/diff');
+        pre.textContent = (d.stat || '') + '\n' + (d.diff || '') + (d.truncated ? '\n…' : '');
+        pre.hidden = false; diffBtn.textContent = t('chat.code_hide_changes');
+      } catch (e) { codeError(node, e.message); }
+    });
+    var pub = node.querySelector('.code-publish-btn');
+    pub.addEventListener('click', async function () {
+      pub.disabled = true; pub.textContent = t('chat.code_publishing');
+      try {
+        var d = await sessionsApi('POST', '/api/sessions/' + sid + '/publish');
+        pub.textContent = t('chat.code_pushed', { n: d.commits, branch: d.branch });
+        if (d.compare_url) {
+          var a = node.querySelector('.code-pr');
+          a.href = d.compare_url; a.textContent = t('chat.code_open_pr'); a.hidden = false;
+        }
+      } catch (e) {
+        pub.disabled = false; pub.textContent = t('chat.code_publish'); codeError(node, e.message);
+      }
+    });
+  }
+  function followCodeSession(node, info) {
+    var sid = info.session_id, after = 0, steps = [];
+    var stateEl = node.querySelector('.code-state'), list = node.querySelector('.code-steps');
+    async function tick() {
+      if (!document.body.contains(node)) return;     // another conversation is open
+      try {
+        var d = await sessionsApi('GET', '/api/sessions/' + sid);
+        var s = d.session || {};
+        var tl = await sessionsApi('GET', '/api/sessions/tasks?session_id=' + sid);
+        var task = (tl.items || []).filter(function (x) { return x.id === info.task_id; })[0] || d.task || {};
+        var ev = await sessionsApi('GET', '/api/sessions/' + sid + '/events?after_id=' + after + '&limit=200');
+        after = ev.next_after_id || after;
+        (ev.items || []).forEach(function (e) { var line = codeStep(e); if (line) steps.push(line); });
+        list.textContent = '';
+        steps.slice(-6).forEach(function (line) { var li = document.createElement('li'); li.textContent = line; list.appendChild(li); });
+        var done = CODE_TASK_DONE[task.status];
+        if (done) {
+          stateEl.textContent = t(done);
+          var rep = node.querySelector('.code-report');
+          renderer(rep).set(task.result_summary || t('chat.code_no_report'));
+          rep.hidden = false;
+          if (task.status === 'needs_review' || task.status === 'done') node.querySelector('.code-actions').hidden = false;
+          return;
+        }
+        if (CODE_SESSION_STOPPED[s.status]) {
+          stateEl.textContent = t('chat.code_stopped');
+          if (s.last_error) codeError(node, s.last_error);
+          node.querySelector('.code-actions').hidden = false;
+          node.querySelector('.code-publish-btn').hidden = true;
+          return;
+        }
+        stateEl.textContent = t('chat.code_working', { n: n(s.iterations), max: n(s.max_iterations) });
+      } catch (e) {
+        stateEl.textContent = t('chat.code_unreachable');
+      }
+      setTimeout(tick, CODE_POLL_MS);
+    }
+    stateEl.textContent = t('chat.code_starting');
+    tick();
+  }
   function collapseCards(block) {
     Object.keys(block.cards).forEach(function (k) {
       var c = block.cards[k];
@@ -408,6 +540,7 @@
         break;
       case 'context': block.citations = evt.citations; break;
       case 'plan': showPlan(block, evt); break;
+      case 'code_session': showCodeSession(block, evt); break;
       case 'agent_start':
         c = block.cards[evt.agent];
         if (c) { setStatus(c, 'working', t('chat.thinking')); c.node.classList.add('open', 'streaming'); }
@@ -512,6 +645,8 @@
       if (!block) block = agentBlock(state.current);
       if (m.role === 'plan') {
         try { showPlan(block, JSON.parse(m.content)); } catch (e) { /* old row */ }
+      } else if (m.role === 'code_session') {
+        try { showCodeSession(block, JSON.parse(m.content)); } catch (e) { /* bad row */ }
       } else if (m.role.indexOf('agent:') === 0) {
         var c = block.cards[m.role.slice(6)];
         if (c) { c.out.set(m.content); c.done = true; setStatus(c, 'done', t('chat.done')); c.node.classList.add('collapsed'); }

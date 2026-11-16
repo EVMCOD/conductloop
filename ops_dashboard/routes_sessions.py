@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import subprocess
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -385,11 +387,27 @@ def create_session(handler):
     scope = data.get("scope_globs") or []
     if not isinstance(scope, list) or not all(isinstance(x, str) for x in scope):
         raise ApiError(400, "validation_error", "scope_globs: list of strings", field="scope_globs")
-    st = _store()
-    sid = st.create_session(name=_str(data, "name", required=False, max_len=80) or role,
+    sid = open_code_session(name=_str(data, "name", required=False, max_len=80) or role,
                             role=role, provider=provider, model=model, repo_path=repo,
                             base_ref=base_ref, budget_cost_cents=budget, key_ref=key_ref,
                             scope_globs=scope, **kwargs)
+    return 201, {"ok": True, "session": _public_session(_store().get_session(sid) or {})}
+
+
+def open_code_session(*, name: str, role: str, provider: str, model: str, repo_path: str,
+                      base_ref: str, budget_cost_cents: int, key_ref: str | None = None,
+                      scope_globs: list[str] | None = None, **kwargs: Any) -> int:
+    """Create a code session and its worktree; returns its id.
+
+    The API and the chat (``code_delegate``) both open sessions through here,
+    so a session started from a chat message is the same as one started from
+    the form: same checks, same worktree, same branch.
+    """
+    st = _store()
+    sid = st.create_session(name=name, role=role, provider=provider, model=model,
+                            repo_path=repo_path, base_ref=base_ref,
+                            budget_cost_cents=budget_cost_cents, key_ref=key_ref,
+                            scope_globs=scope_globs or [], **kwargs)
     try:
         info = worktrees.create(st.get_session(sid)["repo_path"], base_ref,  # type: ignore[index]
                                 session_id=sid, role=role)
@@ -399,7 +417,7 @@ def create_session(handler):
     st.set_session_worktree(sid, info.path, info.branch)
     st.record_event(sid, "session.created", {"provider": provider, "model": model,
                                              "branch": info.branch})
-    return 201, {"ok": True, "session": _public_session(st.get_session(sid) or {})}
+    return sid
 
 
 @route("GET", "/api/sessions/inbox")
@@ -635,6 +653,68 @@ def session_diff(handler, sid):
     return 200, {"ok": True, "base_ref": base, "branch": branch, "stat": stat,
                  "diff": raw[:MAX_DIFF_BYTES].decode("utf-8", "replace"),
                  "truncated": len(raw) > MAX_DIFF_BYTES, "uncommitted": uncommitted}
+
+
+# ── publish: the one step the person takes (chat → code session) ────────────
+
+_GITHUB_REMOTE = re.compile(r"^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
+                            r"([\w.-]+)/([\w.-]+?)(?:\.git)?/?$")
+
+
+def compare_url(remote_url: str, base_ref: str, branch: str) -> str | None:
+    """The GitHub page that opens a pull request from ``branch`` into
+    ``base_ref``; None for a remote that is not on GitHub."""
+    m = _GITHUB_REMOTE.match((remote_url or "").strip())
+    if not m:
+        return None
+    return f"https://github.com/{m.group(1)}/{m.group(2)}/compare/{base_ref}...{branch}?expand=1"
+
+
+@route("POST", "/api/sessions/<sid>/publish")
+def publish_session(handler, sid):
+    """POST /api/sessions/<sid>/publish — push the session's branch to the
+    repository's ``origin`` and say where to open the pull request.
+
+    A session never talks to a remote: its git runs through an allow-list
+    with no credentials (``worktrees``). Pushing is the person's step, so it
+    happens here, on their click, with their own git credentials, and only
+    for a session's own ``cl/…`` branch once it has stopped working and has
+    committed something. Nothing is merged.
+    """
+    s = _session_or_404(sid)
+    branch, base, repo = s.get("branch") or "", s.get("base_ref") or "", s.get("repo_path") or ""
+    if not branch.startswith(worktrees.BRANCH_PREFIX) or not s.get("worktree_path"):
+        raise ApiError(409, "invalid_state", "this session has no branch of its own to publish")
+    if s["status"] == "running":
+        raise ApiError(409, "still_running", "the session is still working; wait until it stops")
+    try:
+        info = worktrees.inspect(repo, s["worktree_path"], base)
+    except worktrees.WorktreeError as e:
+        raise ApiError(409, "invalid_state", f"worktree: {e}") from None
+    if info.dirty:
+        raise ApiError(409, "uncommitted", "the session left changes it did not commit",
+                       files=info.changed[:20])
+    if not info.ahead:
+        raise ApiError(409, "nothing_to_publish", "the session has not committed anything")
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    try:
+        remote = subprocess.run(["git", "-C", repo, "remote", "get-url", "origin"], env=env,
+                                capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise ApiError(502, "push_failed", f"git: {e}") from None
+    if remote.returncode != 0:
+        raise ApiError(409, "no_remote", "the repository has no remote called origin")
+    try:
+        push = subprocess.run(["git", "-C", repo, "push", "origin",
+                               f"refs/heads/{branch}:refs/heads/{branch}"],
+                              env=env, capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise ApiError(502, "push_failed", f"git push: {e}") from None
+    if push.returncode != 0:
+        raise ApiError(502, "push_failed", (push.stderr or push.stdout or "git push failed")[-600:])
+    url = compare_url(remote.stdout.strip(), base, branch)
+    _store().record_event(s["id"], "session.published", {"branch": branch, "commits": info.ahead})
+    return 200, {"ok": True, "branch": branch, "commits": info.ahead, "compare_url": url}
 
 
 # ── page (multi-agent PR 8) ─────────────────────────────────────────────────
