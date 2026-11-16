@@ -237,14 +237,18 @@ class SessionRunner:
 
     def _stop(self, task: dict, *, session_status: str, reason: str, task_status: str | None,
               iterations: int, summary: str | None = None, **extra: Any) -> RunOutcome:
-        if task_status is not None:
-            self.store.set_task_status(task["id"], self.session_id, task_status,
-                                       result_summary=summary or reason)
+        # The session stops BEFORE the task is announced as finished. Whoever
+        # reads the task in its last state — the chat, the person who
+        # publishes the branch — must not find the session still working:
+        # publishing a finished task used to answer "it is still working".
         if self._session()["status"] == "stalled":
             session_status = "stalled"  # the supervisor flagged it; keep it visible
         else:
             self.store.set_session_status(self.session_id, session_status,
                                           last_error=None if session_status == "idle" else reason)
+        if task_status is not None:
+            self.store.set_task_status(task["id"], self.session_id, task_status,
+                                       result_summary=summary or reason)
         self._event("session." + session_status, {"reason": reason, "task_status": task_status},
                     task_id=task["id"])
         return RunOutcome(task_status, session_status, reason, iterations, **extra)

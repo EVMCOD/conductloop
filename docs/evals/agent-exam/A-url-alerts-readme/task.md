@@ -7,7 +7,7 @@ tags: [conductloop, prompt, dogfooding]
 ---
 
 > Primera tarea que ConductLoop hace sobre su propio código. Se lanza desde una **sesión de código** de ConductLoop sobre el repo `EVMCOD/conductloop` (base `main`), con MiniMax-M3 por BYOK.
-> Objetivo doble: arreglar dos fallos reales y probar el ciclo entero: el agente edita, prueba y hace commit en su rama `cl/…`; Claude o Enrique la suben, abren la PR, esperan el CI y fusionan.
+> Objetivo doble: arreglar dos fallos reales y probar el ciclo entero: el agente edita, prueba y hace commit en su rama `cl/…`; Claude o quien lo pidió la suben, abren la PR, esperan el CI y fusionan.
 > Lo que moleste al usarlo va a [[projects/conductloop/friccion|friccion]]. Contexto: [[projects/conductloop/mejoras-2026-11-15|mejoras]] · [[daily/2026-11-16]].
 
 ---
@@ -24,7 +24,7 @@ Hay dos puntos, en este orden.
 
 ## P2 · Un solo timeout no es una web caída
 - Qué pasa: `ops_dashboard/indexers/anomalies.py:280-299` crea una alerta `url_health` por cada fila que devuelve `live_urls.recent_unhealthy()` (`ops_dashboard/indexers/live_urls.py:249`). Esa función lee `live_urls`, que guarda **solo la última comprobación** de cada URL. Si esa única comprobación falla (timeout de 10 s en `_check`, línea 101), la alerta sale con gravedad **alta** («URL … no responde»).
-- Lo que pasó el 16-nov: el digest de las 08:00 dijo que traincurve.com y www.rentcla.com «no respondieron», y la comprobación siguiente, 5 minutos después, salió bien. En el log de la vigilancia hay 2 pasadas con errores entre 636.
+- Lo que pasó el 16-nov: el digest de las 08:00 dijo que mosaic.example y tidepool.example «no respondieron», y la comprobación siguiente, 5 minutos después, salió bien. En el log de la vigilancia hay 2 pasadas con errores entre 636.
 - Arreglo: una URL solo cuenta como caída cuando **sus 2 últimas comprobaciones** fallan. El historial está en `live_url_checks` (lo escribe `live_urls.py`, alrededor de la línea 159). Mantén la gravedad que hay ahora: alta sin respuesta, media con un código HTTP de error. Corrige el docstring de `recent_unhealthy`: dice «at least one failed check in the last N hours» y no es lo que hace.
 - Tests, con URLs y proyectos inventados (`mosaic.example`, `tidepool.example`):
   - una comprobación fallida seguida de una buena → sin alerta;

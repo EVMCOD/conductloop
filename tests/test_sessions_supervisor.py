@@ -397,6 +397,33 @@ def test_dry_merge_conflict_blocks_the_task(env):
     assert store.get_session(sid)["status"] == "idle"        # free for the next task
 
 
+def test_the_session_stops_before_the_task_is_announced_as_finished(env):
+    """Whoever sees the task finished must not find the session working.
+
+    The chat and the person who publishes the branch read the task, not the
+    session: publishing a task that is already in its last state used to
+    answer "the session is still working".
+    """
+    store = env["store"]
+    prov = Scripted([J("write_file", path="src/feature.py", content="x = 1\n"),
+                     J(final="done")])
+    sid = env["session"]("a", prov=prov)
+    tid = env["task"](sid)
+
+    seen: list[str] = []
+    original = store.set_task_status
+
+    def spy(task_id, session_id, status, **kw):
+        if status == "needs_review":
+            seen.append(store.get_session(session_id)["status"])
+        return original(task_id, session_id, status, **kw)
+
+    store.set_task_status = spy
+    env["sup"].start(sid)
+    until(lambda: store.get_task(tid)["status"] == "needs_review")
+    assert seen == ["idle"], seen
+
+
 # ── providers ──────────────────────────────────────────────────────────────
 
 class Boom:
