@@ -422,6 +422,40 @@ def _openai_tools(tools: list[dict]) -> list[dict]:
     return out
 
 
+# ── the prompt cache (Anthropic and the endpoints that speak its API) ──────
+
+def _cached_system(system: str) -> list[dict]:
+    """The system prompt, marked for the cache.
+
+    It is the same in every turn of a conversation: the provider keeps it,
+    and the input tokens of the later turns are only the part that is new.
+    """
+    return [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+
+
+def _mark_cache(messages: list[dict]) -> list[dict]:
+    """The first user message, marked for the cache.
+
+    Only the first one: it is the task, and it does not change. What comes
+    after it does (the ledger of what the agent has already done), and a
+    marker there would be invalidated on every turn.
+    """
+    out: list[dict] = []
+    done = False
+    for m in messages:
+        content = m.get("content")
+        if not done and m.get("role") == "user" and content:
+            blocks = ([{"type": "text", "text": content}] if isinstance(content, str)
+                      else [dict(b) for b in content])
+            if blocks and blocks[-1].get("type") == "text":
+                blocks[-1]["cache_control"] = {"type": "ephemeral"}
+            out.append({"role": m["role"], "content": blocks})
+            done = True
+            continue
+        out.append(m)
+    return out
+
+
 def _num(v) -> int | None:
     try:
         return None if v is None or isinstance(v, bool) else int(v)
@@ -450,7 +484,15 @@ def extract_usage(raw) -> dict | None:
                       ("prompt_eval_count", "eval_count", "ollama_eval_count")):
         i, o = get(a), get(b)
         if i is not None or o is not None:
-            return {"input_tokens": i or 0, "output_tokens": o or 0, "source": src}
+            out = {"input_tokens": i or 0, "output_tokens": o or 0, "source": src}
+            # The prompt cache: the tokens read from the cache and the ones
+            # written into it are not the ones of this turn.
+            read = get("cache_read_input_tokens")
+            write = get("cache_creation_input_tokens")
+            if read or write:
+                out["cache_read_input_tokens"] = read or 0
+                out["cache_creation_input_tokens"] = write or 0
+            return out
     t = get("total_tokens")
     if t is not None:
         return {"input_tokens": 0, "output_tokens": t, "source": "total_only",
@@ -804,23 +846,39 @@ class AnthropicProvider(Provider):
     @_retry_transient
     def ask(self, system: str, messages: list[dict], **kwargs) -> str:
         client = self._client()
-        out = []
-        for m in messages:
-            out.append({"role": m["role"], "content": m["content"]})
+        out = [{"role": m["role"], "content": m["content"]} for m in messages]
         self.last_usage = None
-        msg = self._send(
-            client,
-            model=self.model,
-            system=system,
-            messages=out,
-            max_tokens=kwargs.get("max_tokens", 1500),
-        )
+        msg = self._create(client, system, out, max_tokens=kwargs.get("max_tokens", 1500))
         self.last_usage = _resp_usage(msg)
         parts = []
         for block in msg.content:
             if getattr(block, "type", None) == "text":
                 parts.append(block.text)
         return "\n".join(parts).strip() or "(empty response)"
+
+    def _create(self, client, system: str, messages: list[dict], *, tools: list[dict] | None = None,
+                max_tokens: int = 1500):
+        """One request, with the prompt cache marked.
+
+        An endpoint that does not know the markers refuses the request: it
+        is asked again without them, so a provider that speaks the API but
+        not the cache still works.
+        """
+        kwargs: dict = {"model": self.model, "system": _cached_system(system),
+                                  "messages": _mark_cache(messages), "max_tokens": max_tokens}
+        if tools:
+            kwargs["tools"] = tools
+        try:
+            return self._send(client, **kwargs)
+        except Exception as e:
+            if "cache_control" not in str(e):
+                raise
+            plain = {"model": self.model, "system": system,
+                     "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
+                     "max_tokens": max_tokens}
+            if tools:
+                plain["tools"] = tools
+            return self._send(client, **plain)
 
     def stream(self, system: str, messages: list[dict], **kwargs):
         client = self._client()
@@ -844,13 +902,9 @@ class AnthropicProvider(Provider):
         """One turn, with the tool calls of the model."""
         client = self._client()
         self.last_usage = None
-        msg = client.messages.create(
-            model=self.model,
-            system=system,
-            messages=_anthropic_messages(messages),
-            tools=anthropic_tools(tools),
-            max_tokens=kwargs.get("max_tokens", 1500),
-        )
+        msg = self._create(client, system, _anthropic_messages(messages),
+                           tools=anthropic_tools(tools),
+                           max_tokens=kwargs.get("max_tokens", 1500))
         self.last_usage = _resp_usage(msg)
         text: list[str] = []
         calls: list[dict] = []

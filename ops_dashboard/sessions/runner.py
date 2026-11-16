@@ -751,9 +751,13 @@ class SessionRunner:
             tin, tout, estimated, source = usage_tokens(getattr(provider, "last_usage", None),
                                                         prompt_tokens, str(reply))
             obj = parse_reply(reply) if not calls else None
+            usage = getattr(provider, "last_usage", None) or {}
             ev = self._event("llm.turn", {"estimated": estimated, "usage_source": source,
                                           "tool": (obj or {}).get("tool"),
                                           "tools": [str(c.get("name") or "") for c in calls],
+                                          "cache_read": int(usage.get("cache_read_input_tokens") or 0),
+                                          "cache_write": int(
+                                              usage.get("cache_creation_input_tokens") or 0),
                                           "final": bool(obj and "final" in obj)},
                              task_id=tid, tokens_in=tin, tokens_out=tout, iteration=True)
             ratio = ev["budget_ratio"]

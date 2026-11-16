@@ -4,6 +4,11 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### The prompt is cached
+
+- **The system prompt and the task of a session are kept by the provider.** With Anthropic, and with MiniMax through its Anthropic-compatible endpoint, the beginning of the conversation is marked for the prompt cache: it does not change from one turn to the next, so the later turns only pay for the part that is new. The card in the chat and the exam say how many tokens came from the cache.
+
+
 ### The loop has discipline
 
 - **The agent writes a plan before it touches anything, and the card shows it.** The first turn of a task asks for a short plan — the files it is going to change and the tests it is going to run — and keeps it as an event, so the card in the chat shows what the agent is about to do instead of only what it did.
