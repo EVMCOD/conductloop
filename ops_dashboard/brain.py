@@ -683,6 +683,25 @@ class AnthropicProvider(Provider):
             return anthropic.Anthropic(api_key=self.api_key, base_url=self.base_url, **_sdk_retry_kwargs())
         return anthropic.Anthropic(api_key=self.api_key, **_sdk_retry_kwargs())
 
+    # The SDK computes the timeout of a non-streaming request from
+    # ``max_tokens``, and refuses one that may run for more than ten minutes.
+    # This is the message it raises.
+    _LONG_REQUEST = "Streaming is required"
+
+    def _send(self, client, **kwargs):
+        """One request to the endpoint.
+
+        A request that may take long is sent streaming: the streaming
+        timeout is an hour, and the answer is the same message.
+        """
+        try:
+            return client.messages.create(**kwargs)
+        except ValueError as e:
+            if self._LONG_REQUEST not in str(e):
+                raise
+            with client.messages.stream(**kwargs) as stream:
+                return stream.get_final_message()
+
     @_retry_transient
     def ask(self, system: str, messages: list[dict], **kwargs) -> str:
         client = self._client()
@@ -690,7 +709,8 @@ class AnthropicProvider(Provider):
         for m in messages:
             out.append({"role": m["role"], "content": m["content"]})
         self.last_usage = None
-        msg = client.messages.create(
+        msg = self._send(
+            client,
             model=self.model,
             system=system,
             messages=out,
@@ -730,7 +750,8 @@ class AnthropicProvider(Provider):
             out.append({"role": m["role"], "content": m["content"]})
         # Loop until the model stops calling tools
         for _ in range(6):  # max iterations
-            msg = client.messages.create(
+            msg = self._send(
+                client,
                 model=self.model,
                 system=system,
                 messages=out,

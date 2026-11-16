@@ -7,6 +7,7 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 ### The agent has room to write
 
 - **A model turn may answer with 32,000 tokens instead of 1,500.** The output budget of one turn of a code session was smaller than what a reasoning model spends before it writes a single line of code: the answer ran out of room in the middle of a file, and the session spent its turns reading and searching instead of changing anything. It is now the same budget the same model gets through Claude Code, on the same endpoint, and it can be changed with `CONDUCTLOOP_SESSIONS_MAX_TOKENS_OUT` without touching the code.
+- **A turn that may take long is sent streaming.** The Anthropic SDK refuses, before the request leaves the Mac, a non-streaming call whose worst case runs for more than ten minutes — and a turn that may answer with 32,000 tokens is exactly such a call. Those requests now go out streaming, where the limit is an hour, and the answer is the same message.
 
 ### The agent exam
 
