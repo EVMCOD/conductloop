@@ -4,6 +4,14 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### The loop has discipline
+
+- **The agent writes a plan before it touches anything, and the card shows it.** The first turn of a task asks for a short plan — the files it is going to change and the tests it is going to run — and keeps it as an event, so the card in the chat shows what the agent is about to do instead of only what it did.
+- **The agent is told when it is going round in circles.** Reading the same file, or making the same search, three times is a loop: the model is told what it already knows, with the numbers of the lines it read, instead of reading it a fourth time.
+- **A code session gets 120 turns, not 60.** A real task needs more than one turn per change, and a session that runs out of turns leaves the work half done. The limit lives in the code, so raising it needs no migration.
+- **The card counts the steps of the runner that is running.** It said "step 12 of 60" whatever the runner was. With the built-in runner it says the real cap; with Claude Code it says only the step, because its turns are not the iterations of the session.
+
+
 ### Better tools for the agent
 
 - **The lines of a file come with their numbers, and a range can be read.** The agent could not point at a place in a file, nor build an edit on it, because the text came without numbers. Now `read_file` numbers every line and takes a range (`start_line`, `end_line`).

@@ -377,6 +377,7 @@
     if (typeof p === 'string') { try { p = JSON.parse(p); } catch (x) { p = {}; } }
     p = p || {};
     switch (e.kind) {
+      case 'agent.plan': return t('chat.code_step_plan', { plan: String(p.plan || '') });
       case 'tool.write': case 'tool.edit': return t('chat.code_step_edit', { path: n(p.path) });
       case 'tool.read': return t('chat.code_step_read', { path: n(p.path) });
       case 'tool.search': return t('chat.code_step_search');
@@ -465,7 +466,9 @@
           node.querySelector('.code-publish-btn').hidden = true;
           return;
         }
-        stateEl.textContent = t('chat.code_working', { n: n(s.iterations), max: n(s.max_iterations) });
+        stateEl.textContent = s.runner === 'claude-code'
+          ? t('chat.code_working_steps', { n: n(s.iterations) })
+          : t('chat.code_working', { n: n(s.iterations), max: n(s.max_iterations) });
       } catch (e) {
         stateEl.textContent = t('chat.code_unreachable');
       }

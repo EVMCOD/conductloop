@@ -241,12 +241,25 @@ def _public_session(s: dict) -> dict:
     out["running"] = s["id"] in supervisor().running()
     out["budget_eur"] = round(s["budget_cost_cents"] / 100, 2)
     out["spent_eur_est"] = round(float(s["cost_cents_est"]) / 100, 4)
+    # Which runner takes the turns of this session: the card shows the count
+    # of steps of the built-in one, and only the steps of Claude Code (its
+    # turns are not the iterations of the session).
+    out["runner"] = _runner_of(s)
     for k in ("scope_globs",):
         try:
             out[k] = json.loads(out.get(k) or "[]")
         except ValueError:
             pass
     return out
+
+
+def _runner_of(s: dict) -> str:
+    """The runner that takes the turns of a session: ours or Claude Code."""
+    try:
+        from .sessions.agent_cli import should_use
+        return "claude-code" if should_use(s) else "builtin"
+    except Exception:  # noqa: BLE001 - the card must not break on a session row
+        return "builtin"
 
 
 def _public_task(t: dict) -> dict:

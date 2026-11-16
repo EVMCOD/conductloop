@@ -191,12 +191,15 @@ def test_parse_reply_tolerates_fences_and_prose():
 
 def test_invalid_replies_are_fed_back_not_fatal(env):
     store = env["store"]
-    prov = Scripted(["I think I will…", J(final="done")])
+    # The first plain text is the plan of the task; the second one is not a
+    # reply the runner understands, and has to be fed back.
+    prov = Scripted(["I will read the file and change the limit.", "I think I will…",
+                     J(final="done")])
     sid = env["session"]("a", prov=prov)
     tid = env["task"](sid)
     out = SessionRunner(store, sid, provider_factory=env["factory"]).run_task(store.claim_task(sid))
     assert out.task_status == "needs_review"
-    assert "reply with one JSON object" in prov.calls[1][-1]["content"]
+    assert "reply with one JSON object" in prov.calls[2][-1]["content"]
     assert store.get_task(tid)["status"] == "needs_review"
 
 

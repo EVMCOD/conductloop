@@ -34,6 +34,7 @@ SKIPPED_ON_WINDOWS: dict[str, str] = {
     "test_sessions_runner_memory.py": "needs code sessions and git worktrees, which are turned off on Windows",
     "test_sessions_native_tools.py": "needs code sessions and git worktrees, which are turned off on Windows",
     "test_sessions_tools_quality.py": "needs code sessions and git worktrees, which are turned off on Windows",
+    "test_sessions_loop_discipline.py": "needs code sessions and git worktrees, which are turned off on Windows",
     # The macOS keychain backend (the `security` tool); Windows gets its own in PR 10 of the plan.
     "test_secrets_store_keychain.py": "tests the macOS `security` keychain backend; the Windows Credential Manager backend does not exist yet",
     # Real failures, not investigated yet (see the module docstring).

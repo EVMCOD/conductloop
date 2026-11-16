@@ -104,6 +104,14 @@ _ANNOUNCES = re.compile(
     r"(?:let me|let's|i'?ll|i will|i'm going to|i am going to|voy a|vamos a|primero voy)\b",
     re.I)
 
+# The first turn of a task: a plan, before anything is touched.
+PLAN_INSTRUCTION = (
+    "\n\nBefore you touch anything, write a short plan: the files you are going to "
+    "change and the tests you are going to run. Three lines at most. Do not call "
+    "any tool yet.")
+PLAN_GO = ("Plan noted. Now do it: make the changes, run the tests and the linter, "
+           "and end with a short report. Do not wait for my answer.")
+
 
 def _whole_tool_turns(messages: list[dict]) -> list[dict]:
     """The messages, with the turns of the tools whole.
@@ -378,6 +386,9 @@ LEDGER_MAX_READS = 40
 LEDGER_MAX_SEARCHES = 25
 LEDGER_MAX_RUNS = 20
 LEDGER_MAX_CHANGES = 40
+# How many times the same file may be read, or the same search made, before
+# the model is told that it is going round in circles.
+LOOP_THRESHOLD = 3
 
 
 class Ledger:
@@ -398,16 +409,24 @@ class Ledger:
         self.searches: dict[str, str] = {}     # query -> where it matched
         self.changes: dict[str, str] = {}      # path -> what it did to it
         self.runs: list[str] = []              # the commands, and how they ended
+        self.read_counts: dict[str, int] = {}  # path -> how many times it was read
+        self.search_counts: dict[str, int] = {}
+        self.loops: list[str] = []             # what it is repeating
 
     # ── notes ────────────────────────────────────────────────────────────
     def note_read(self, path: str, result: dict) -> None:
         rel = str(result.get("path") or path)
         text = str(result.get("text") or "")
         lines = len(text.splitlines())
-        self.reads[rel] = f"{lines} lines" if lines else "empty"
+        note = f"{lines} lines" if lines else "empty"
+        self.reads[rel] = note
         if len(self.reads) > LEDGER_MAX_READS:
             for old in list(self.reads)[:-LEDGER_MAX_READS]:
                 del self.reads[old]
+        self.read_counts[rel] = self.read_counts.get(rel, 0) + 1
+        if self.read_counts[rel] == LOOP_THRESHOLD:
+            self.loops.append(f"you have read {rel} {LOOP_THRESHOLD} times "
+                               f"(it has {note}); you already know what it says")
 
     def note_search(self, query: str, result: dict) -> None:
         matches = result.get("matches") or []
@@ -417,10 +436,15 @@ class Ledger:
             line = m.get("line")
             where.append(f"{path}:{line}" if line else path)
         more = f" (+{len(matches) - len(where)} more)" if len(matches) > len(where) else ""
-        self.searches[query] = (", ".join(where) + more) if where else "no match"
+        found = (", ".join(where) + more) if where else "no match"
+        self.searches[query] = found
         if len(self.searches) > LEDGER_MAX_SEARCHES:
             for old in list(self.searches)[:-LEDGER_MAX_SEARCHES]:
                 del self.searches[old]
+        self.search_counts[query] = self.search_counts.get(query, 0) + 1
+        if self.search_counts[query] == LOOP_THRESHOLD:
+            self.loops.append(f"you have searched for {query!r} {LOOP_THRESHOLD} times "
+                               f"(it matched {found}); use what you have")
 
     def note_change(self, path: str, what: str) -> None:
         self.changes[path] = what
@@ -448,10 +472,12 @@ class Ledger:
 
     # ── the block the model reads ────────────────────────────────────────
     def render(self) -> str:
-        if not (self.reads or self.searches or self.changes or self.runs):
+        if not (self.reads or self.searches or self.changes or self.runs or self.loops):
             return ""
         lines = ["WHAT YOU HAVE ALREADY DONE. Do not do it again; ask for what "\
                  "you still need."]
+        if self.loops:
+            lines.append("- YOU ARE GOING ROUND IN CIRCLES: " + "; ".join(self.loops))
         if self.reads:
             lines.append("- read: " + "; ".join(f"{p} ({n})" for p, n in
                                                 list(self.reads.items())[-LEDGER_MAX_READS:]))
@@ -638,11 +664,16 @@ class SessionRunner:
         system_json = SYSTEM_PROMPT + skills + connectors
         system_native = NATIVE_SYSTEM_PROMPT + skills + connectors
         hints = json.loads(task.get("paths_hint") or "[]")
+        task_text = (f"Task #{tid}: {task['title']}\n\n{task['prompt']}"
+                     + (f"\n\nExpected paths: {', '.join(hints)}" if hints else "")
+                     + ("\n\n(Resumed after a pause: earlier work is already in the "
+                        "worktree; start with diff.)" if resumed else ""))
+        # The first turn of a task asks for a plan: the files it is going to
+        # change and the tests it is going to run. A plan is kept as an event,
+        # so the card in the chat shows it, and the agent does not wander.
+        planned = resumed
         messages: list[dict] = [{"role": "user", "content":
-                                 f"Task #{tid}: {task['title']}\n\n{task['prompt']}"
-                                 + (f"\n\nExpected paths: {', '.join(hints)}" if hints else "")
-                                 + ("\n\n(Resumed after a pause: earlier work is already in the "
-                                    "worktree; start with diff.)" if resumed else "")}]
+                                 task_text + ("" if planned else PLAN_INSTRUCTION)}]
         n = 0
         while True:
             if self.cancel.is_set():
@@ -739,6 +770,23 @@ class SessionRunner:
                                                  "budget_tokens": s["budget_tokens"]}, task_id=tid)
                 return self._stop(task, session_status="paused",
                                   reason="token budget exhausted", task_status=None, iterations=n)
+            if not planned:
+                planned = True
+                obj = parse_reply(reply)
+                if obj and "final" in obj:
+                    # It answered with the report: the task is done.
+                    return self._finish(task, tools, str(obj.get("final") or ""), n)
+                if not calls and obj is None:
+                    # Plain text: that is the plan of the task. It is kept as
+                    # an event, so the card in the chat shows it, and the
+                    # model gets the go-ahead.
+                    plan = str(reply).strip()
+                    if plan:
+                        self._event("agent.plan", {"plan": plan[:2000]}, task_id=tid)
+                        messages[0]["content"] = task_text
+                        messages.append({"role": "assistant", "content": plan})
+                        messages.append({"role": "user", "content": PLAN_GO})
+                        continue
             if calls:
                 # Native tool calling: every call of this turn is run, with
                 # the reservations, the sandbox and the events of the session,

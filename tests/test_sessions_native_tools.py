@@ -178,14 +178,15 @@ def test_a_provider_without_native_tools_keeps_the_json_protocol(env):
 
 def test_a_model_that_announces_instead_of_acting_is_sent_back(env):
     prov = Native([
+        {"text": "I will read src/app.py and change the limit", "tool_calls": []},
         {"text": "Now let me read the file", "tool_calls": []},
         {"text": "I read it; there is nothing to change", "tool_calls": []},
     ])
     out = _run(env, prov)
     # The announcement did not finish the task: it was sent back to work.
-    assert len(prov.calls) == 2
+    assert len(prov.calls) == 3
     assert any("Do it now" in str(m.get("content"))
-               for m in prov.calls[1]["messages"])
+               for m in prov.calls[2]["messages"])
     assert out.task_status == "needs_review"
 
 
