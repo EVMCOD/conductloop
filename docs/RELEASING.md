@@ -97,21 +97,31 @@ osascript -e 'tell application "ConductLoop" to quit'
 The smoke test uses a throwaway data folder, so the real library is never
 touched; but the installed app has to be closed for the port.
 
-### The notes `release-desktop.sh` publishes are not the changelog's
+### The release notes come from the changelog
 
-`release-desktop.sh` creates the release with a **fixed text** in the script, not
-with the section of `CHANGELOG.md`. Rewrite the notes right after it publishes,
-before `release-platforms.sh` runs (that script rewrites them again, so the
-release only ends up wrong if the platform step fails):
+`release-desktop.sh` builds the notes with `scripts/release_notes.py` out of the
+`## <VERSION>` section of `CHANGELOG.md`, **before** it builds anything: a
+changelog that says nothing about the version stops the release in the first
+seconds, not after the notarization. (Up to 1.2.29 the script published a fixed
+text instead, which still promised that nothing ever left the Mac.)
+
+The Linux and Windows rows of those notes point at files that
+`release-platforms.sh` uploads next, so run it right after; it rewrites the
+notes again with the real download URLs.
+
+### Then move the scheduled jobs to the new code
+
+The launchd jobs on the maintainer's Mac (GA and Search Console polls, revenue,
+digest, boardroom recap, URL watch, log rotation) run the checkout in
+`~/ops-dashboard-live`, not the installed app. That checkout does not update by
+itself: until it is pulled, the jobs keep running the previous release's code.
 
 ```bash
-python3 scripts/release_notes.py 1.2.29 --out /tmp/notes.md
-gh release edit v1.2.29 --repo EVMCOD/conductloop-releases --notes-file /tmp/notes.md
+git -C ~/ops-dashboard-live pull --ff-only
 ```
 
-The fixed text in the script also claims that nothing ever leaves the machine,
-which the app stopped promising in 1.2.29 — publishing it would put a claim the
-product no longer makes on the release page.
+It is installed in editable mode, so the pull is all it takes; the next run of
+each job picks the new code up.
 
 ## The website carries the version too
 

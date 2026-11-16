@@ -2,7 +2,7 @@
   "pair": {
     "doc_title": "Empareja un móvil — ConductLoop",
     "title": "Empareja un móvil",
-    "intro": "Genera un código de un solo uso y escríbelo con la app de ConductLoop para iOS. El móvil se conecta entonces a este equipo por tu red. Tus datos nunca salen de este dispositivo.",
+    "intro": "Genera un código de un solo uso y escríbelo con la app de ConductLoop para iOS. El móvil se conecta entonces directamente a este equipo, por tu red o por tu propio Tailscale: nada pasa por un servidor de ConductLoop.",
     "device_name": "Nombre del dispositivo",
     "generate_qr": "Generar QR",
     "qr_alt": "QR de emparejamiento",

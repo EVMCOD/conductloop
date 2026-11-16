@@ -68,6 +68,20 @@ python3 "$KEY_CHECK" --config "$TAURI_DIR/tauri.conf.json" \
   --expected-file "$TAURI_DIR/../UPDATER_KEY_ID"
 echo ""
 
+# ── 0b. Release notes (before building/signing anything) ────────────────────
+# The notes come from the ``## <version>`` section of CHANGELOG.md, through
+# the same script release-platforms.sh uses. They used to be a fixed text
+# written here, which went stale: it still promised that nothing ever left the
+# Mac after the welcome page stopped saying so. Built now, so a changelog that
+# says nothing about this version stops the release before an hour of build,
+# signing and notarization. The rows for the other platforms point at files
+# that release-platforms.sh uploads next (it rewrites these notes when it does).
+echo "▸ Building the release notes from CHANGELOG.md"
+NOTES_FILE="$(mktemp -t conductloop-notes)"
+trap 'rm -f "$NOTES_FILE"' EXIT
+python3 "$(cd "$(dirname "$0")" && pwd)/release_notes.py" "$VERSION" --out "$NOTES_FILE"
+echo ""
+
 # ── 1. Update version ────────────────────────────────────────────────────────
 echo "▸ Updating version to $VERSION"
 sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
@@ -342,28 +356,14 @@ cp "ConductLoop-${VERSION}.dmg" "ConductLoop-macos-aarch64.dmg"
 if ! gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
   gh release create "$TAG" -R "$REPO" \
     --title "ConductLoop $VERSION" \
-    --notes "ConductLoop for macOS (Apple Silicon). Signed + notarized.
-
-**What's in this build:**
-- Native Tauri 2 bundle (Python server runs as a local sidecar at localhost:7777)
-- Local-first: your second brain and AI agents never leave your Mac
-- Free edition: every feature unlocked, no subscription
-
-**Install:**
-1. Download \`ConductLoop-${VERSION}.dmg\`
-2. Open the DMG, drag \`ConductLoop\` to \`/Applications\`
-3. Launch — your browser will open to the dashboard automatically
-4. That's it — ConductLoop is free
-
-**Requirements:**
-- macOS 13 (Ventura) or later (the built-in browser needs macOS 14 Sonoma or later)
-- Apple Silicon (M1/M2/M3/M4)" \
+    --notes-file "$NOTES_FILE" \
     "ConductLoop-${VERSION}.dmg" \
     "ConductLoop-macos-aarch64.dmg" \
     "ConductLoop-${VERSION}.app.tar.gz" \
     "ConductLoop-${VERSION}.app.tar.gz.sig" \
     "update-macos-aarch64.json" 2>&1 | tail -3
 else
+  gh release edit "$TAG" -R "$REPO" --notes-file "$NOTES_FILE" >/dev/null
   gh release upload "$TAG" -R "$REPO" --clobber \
     "ConductLoop-${VERSION}.dmg" \
     "ConductLoop-macos-aarch64.dmg" \

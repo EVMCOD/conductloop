@@ -27,7 +27,9 @@ falls back to Tailscale automatically when off your home network.
 ## Privacy
 - Traffic is end‑to‑end encrypted by Tailscale (WireGuard). It does **not** pass
   through ConductLoop servers — there are none.
-- Your data never leaves your computer except to your own paired devices.
+- Pairing and the phone's traffic go straight between your own devices; no
+  ConductLoop server sees them. Questions to the AI still go to the provider
+  you chose, with your own key.
 
 ## Notes
 - If `_tailscale_ips()` returns nothing, Tailscale isn't installed/running, or

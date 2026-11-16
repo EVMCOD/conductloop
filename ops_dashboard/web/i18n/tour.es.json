@@ -15,7 +15,7 @@
     "step3_title": "Mantén tus notas en local",
     "step3_desc": "Las notas son archivos Markdown en tu disco. Tus agentes pueden leerlas como contexto y tú puedes usar las acciones de IA de la barra lateral en cualquier nota.",
     "step3_cta": "Abre tus notas →",
-    "step3_done": "✓ Hecho — tus notas no salen de este equipo salvo que las envíes",
+    "step3_done": "✓ Hecho — tus notas se quedan en este equipo; al preguntar, la pregunta y las notas que necesita van al proveedor de IA que elegiste",
     "step4_title": "Conecta tus herramientas",
     "step4_desc": "Los conectores permiten que tus agentes lean de los servicios que elijas y actúen sobre ellos, como feeds RSS o cualquier servidor MCP. Nada se conecta hasta que lo actives, y las acciones que cambian algo te preguntan primero.",
     "step4_cta": "Ver los conectores →",

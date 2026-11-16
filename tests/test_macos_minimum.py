@@ -82,10 +82,15 @@ def test_no_doc_or_comment_mentions_a_stale_minimum():
         assert "10.15" not in text, f"{path.relative_to(ROOT)} still mentions 10.15"
 
 
-def test_release_script_notes_template_names_both_versions():
+def test_release_notes_name_both_versions():
+    """The release notes come from scripts/release_notes.py (release-desktop.sh
+    used to carry its own fixed text, with the Requirements block)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("release_notes", ROOT / "scripts/release_notes.py")
+    notes_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(notes_mod)
+    table = notes_mod._downloads_table("9.9.9", notes_mod.RELEASE_REPO)
+    assert f"macOS {_app_minimum()}+ (Apple Silicon)" in table
+    assert f"macOS {_browser_minimum()} (Sonoma)" in table
     script = (ROOT / "scripts/release-desktop.sh").read_text()
-    m = re.search(r"\*\*Requirements:\*\*\n(.*?)\" \\\n", script, re.S)
-    assert m, "release notes 'Requirements' block not found in release-desktop.sh"
-    block = m.group(1)
-    assert f"macOS {_app_minimum()} (Ventura) or later" in block
-    assert f"macOS {_browser_minimum()} Sonoma" in block
+    assert "release_notes.py" in script and "--notes-file" in script

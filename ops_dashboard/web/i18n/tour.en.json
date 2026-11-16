@@ -15,7 +15,7 @@
     "step3_title": "Keep your notes local",
     "step3_desc": "Notes are plain Markdown files on your disk. Your agents can read them for context, and you can use the AI actions in the sidebar on any note.",
     "step3_cta": "Open your notes →",
-    "step3_done": "✓ Done — your notes never leave this machine unless you send them",
+    "step3_done": "✓ Done — your notes stay on this machine; when you ask, the question and the notes it needs go to the AI provider you chose",
     "step4_title": "Connect your tools",
     "step4_desc": "Connectors let your agents read from and act on the services you choose, such as RSS feeds or any MCP server. Nothing is connected until you turn it on, and actions that change something ask you first.",
     "step4_cta": "Browse connectors →",
