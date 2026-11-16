@@ -2,7 +2,7 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
-## Unreleased
+## 1.2.32 — 2026-11-16 — Code sessions run with Claude Code
 
 ### Code sessions run with Claude Code when you have it
 

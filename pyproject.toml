@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conductloop"
-version = "1.2.31"
+version = "1.2.32"
 description = "ConductLoop — local-first AI-native second brain + ops cockpit"
 readme = "README.md"
 license = "MIT"
