@@ -50,6 +50,10 @@ SIDECAR_DEST="$TAURI_DIR/binaries/conductloop-server-aarch64-apple-darwin"
 # Public half of UPDATER_KEY. Only this .pub is read by the key check below.
 UPDATER_PUBKEY_FILE="${UPDATER_PUBKEY_FILE:-$UPDATER_KEY.pub}"
 KEY_CHECK="$(cd "$(dirname "$0")" && pwd)/check_updater_pubkey.py"
+# Resolved here, before the script changes directory: run as ./scripts/…,
+# "$(dirname "$0")" is relative and stops existing after `cd "$TAURI_DIR"`
+# (the 1.2.30 release stopped on it).
+NOTES_SCRIPT="$(cd "$(dirname "$0")" && pwd)/release_notes.py"
 
 cd "$TAURI_DIR"
 
@@ -79,7 +83,7 @@ echo ""
 echo "▸ Building the release notes from CHANGELOG.md"
 NOTES_FILE="$(mktemp -t conductloop-notes)"
 trap 'rm -f "$NOTES_FILE"' EXIT
-python3 "$(cd "$(dirname "$0")" && pwd)/release_notes.py" "$VERSION" --out "$NOTES_FILE"
+python3 "$NOTES_SCRIPT" "$VERSION" --out "$NOTES_FILE"
 echo ""
 
 # ── 1. Update version ────────────────────────────────────────────────────────
