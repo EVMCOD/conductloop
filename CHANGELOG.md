@@ -2,7 +2,7 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
-## Unreleased
+## 1.2.31 — 2026-11-16 — Paste a coding task in the chat
 
 ### Paste a coding task in the chat, and it runs
 
