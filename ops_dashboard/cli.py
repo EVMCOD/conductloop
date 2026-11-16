@@ -97,7 +97,8 @@ def index(
     if source is None or source == "repo":
         repos.run()
     if source is None or source == "urls":
-        live_urls.run()
+        from . import external_jobs
+        external_jobs.track("urls", live_urls.run)
     if source is None or source == "playbook":
         playbook.run()
     if source is None or source == "backlinks":
@@ -307,7 +308,8 @@ def revenue(
                       r.get("last_poll_status") or "—")
         console.print(t)
     elif action == "poll":
-        result = rev.run(source_name=source)
+        from . import external_jobs
+        result = external_jobs.track("revenue", lambda: rev.run(source_name=source))
         console.print(f"[green]✓[/green] {result['sources']} sources, {result['fetched']} fetched, {result['inserted']} inserted, {result['duplicates']} duplicates")
     elif action == "seed-mock":
         # Create one mock source per known project
@@ -392,7 +394,8 @@ def ga(
                       f"{eng:.0f}%", r.get("top_country") or "—")
         console.print(t)
     elif action == "poll":
-        result = ga_idx.run(site_id=site, days=days)
+        from . import external_jobs
+        result = external_jobs.track("ga", lambda: ga_idx.run(site_id=site, days=days))
         console.print(f"[green]✓[/green] {result['sites']} sites, {result['fetched']} fetched, {result['upserted']} upserted")
     elif action == "seed-mock":
         from . import projects as proj_mod
@@ -459,7 +462,9 @@ def gsc(
                       r.get("last_poll_status") or "—")
         console.print(t)
     elif action == "poll":
-        results = gsc_idx.poll_all(days=days, project_key=project, site_id=site)
+        from . import external_jobs
+        results = external_jobs.track(
+            "gsc", lambda: gsc_idx.poll_all(days=days, project_key=project, site_id=site))
         fetched = sum(r.get("fetched", 0) for r in results)
         upserted = sum(r.get("upserted", 0) for r in results)
         errors = [r for r in results if not r.get("ok")]
@@ -534,28 +539,40 @@ def digest(
         console.print()
         console.print(result.get("markdown", ""))
         return
-    md = digest_mod.build_markdown(target)
-    path = digest_mod.save_digest(target)
-    ai_result = None
-    if ai:
-        try:
-            ai_result = ai_mod.run(target_date=target)
-        except Exception as e:
-            console.print(f"[yellow]AI summary failed: {e}[/yellow]")
-    if send:
-        send_result = digest_mod.send_digest(md, target_date=target)
-        channels = ", ".join(k for k, v in send_result.items() if v.get("ok")) if isinstance(send_result, dict) else str(send_result)
-        console.print(f"[green]✓[/green] digest saved: {path}")
-        console.print(f"  Sent to: {channels or '(no webhook configured)'}")
-    else:
-        console.print(f"[green]✓[/green] digest saved (not sent): {path}")
-    if ai_result and not ai_result.get("error"):
-        console.print(f"[green]✓[/green] AI summary saved: {ai_result.get('path')} (model: {ai_result.get('model')})")
-        console.print()
-        console.print(ai_result.get("markdown", ""))
-    else:
-        console.print()
-        console.print(md)
+    from . import external_jobs
+
+    def _digest() -> dict:
+        md = digest_mod.build_markdown(target)
+        path = digest_mod.save_digest(target)
+        done: dict = {"saved": str(path)}
+        ai_result = None
+        if ai:
+            try:
+                ai_result = ai_mod.run(target_date=target)
+            except Exception as e:
+                console.print(f"[yellow]AI summary failed: {e}[/yellow]")
+                done["ai_summary"] = {"ok": False, "error": str(e) or e.__class__.__name__}
+            else:
+                if ai_result and ai_result.get("model") == "error":
+                    done["ai_summary"] = {"ok": False, "error": "the AI summary could not be written"}
+        if send:
+            send_result = digest_mod.send_digest(md, target_date=target)
+            done["send"] = send_result
+            channels = ", ".join(k for k, v in send_result.items() if v.get("ok")) if isinstance(send_result, dict) else str(send_result)
+            console.print(f"[green]✓[/green] digest saved: {path}")
+            console.print(f"  Sent to: {channels or '(no webhook configured)'}")
+        else:
+            console.print(f"[green]✓[/green] digest saved (not sent): {path}")
+        if ai_result and not ai_result.get("error"):
+            console.print(f"[green]✓[/green] AI summary saved: {ai_result.get('path')} (model: {ai_result.get('model')})")
+            console.print()
+            console.print(ai_result.get("markdown", ""))
+        else:
+            console.print()
+            console.print(md)
+        return done
+
+    external_jobs.track("digest", _digest)
 
 
 @app.command()

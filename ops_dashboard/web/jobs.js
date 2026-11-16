@@ -65,7 +65,8 @@
   var KIND_KEYS = {
     scheduled: 'jobs.run_scheduled',
     catchup: 'jobs.run_catchup',
-    manual: 'jobs.run_manual'
+    manual: 'jobs.run_manual',
+    external: 'jobs.run_external'
   };
 
   function kindLabel(kind) {
@@ -132,11 +133,12 @@
       // server's, in the language of the person.
       var did = j.did ? '<div class="job-did">' + esc(j.did) + '</div>' : '';
       return '<div class="job"><div>' +
-        '<div class="job-name">' + esc(labelFor(j.name)) + '</div>' +
+        '<div class="job-name">' + esc(j.external ? (j.label || j.name) : labelFor(j.name)) + '</div>' +
         '<div class="job-meta">' + meta + '</div>' + did + err +
         '</div><div class="job-side">' +
         '<span class="badge ' + esc(j.state) + '">' + esc(stateLabel(j.state)) + '</span>' +
-        '<button data-run="' + esc(j.name) + '">' + esc(t('jobs.run_now')) + '</button>' +
+        // A scheduled script is run by launchd, not by the app: no button.
+        (j.external ? '' : '<button data-run="' + esc(j.name) + '">' + esc(t('jobs.run_now')) + '</button>') +
         '</div></div>';
     }).join('');
   }

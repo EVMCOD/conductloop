@@ -33,6 +33,7 @@
     "job_obsidian_export": "Vault export",
     "job_analytics_poll": "Analytics poll",
     "job_library_index": "Library index",
-    "job_daily_note": "Daily note"
+    "job_daily_note": "Daily note",
+    "run_external": "by a scheduled script (launchd)"
   }
 }

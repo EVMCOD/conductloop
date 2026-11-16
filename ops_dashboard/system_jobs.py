@@ -26,6 +26,16 @@ import time
 # person, like the words of the anomaly alerts.
 _WORDS: dict[str, dict[str, str]] = {
     "en": {
+        # The scheduled scripts (launchd/cron), named by their job and the
+        # command they ran: "script.analytics_poll.gsc".
+        "script_ga_poll": "Daily Analytics poll (script)",
+        "script_analytics_poll": "Morning analytics poll (script)",
+        "script_revenue_poll": "Revenue poll (script)",
+        "script_digest": "Daily digest (script)",
+        "script_url_watch": "URL watch (script)",
+        "script_recap": "Boardroom recap (script)",
+        "script_cmd_ga": "Google Analytics",
+        "script_cmd_gsc": "Search Console",
         "backup": "Backup",
         "learning_maintenance": "Learning maintenance",
         "briefing": "Morning briefing",
@@ -70,6 +80,14 @@ _WORDS: dict[str, dict[str, str]] = {
         "sum_structure": "structure",
     },
     "es": {
+        "script_ga_poll": "Consulta diaria de Analytics (script)",
+        "script_analytics_poll": "Consulta de analítica de la mañana (script)",
+        "script_revenue_poll": "Consulta de ingresos (script)",
+        "script_digest": "Digest diario (script)",
+        "script_url_watch": "Vigilancia de URLs (script)",
+        "script_recap": "Resumen del consejo (script)",
+        "script_cmd_ga": "Google Analytics",
+        "script_cmd_gsc": "Search Console",
         "backup": "Copia de seguridad",
         "learning_maintenance": "Mantenimiento del aprendizaje",
         "briefing": "Briefing de la mañana",
@@ -132,6 +150,15 @@ def _words() -> dict[str, str]:
 def name_of(job: str) -> str:
     """The name of a job, in the language of the person."""
     words = _words()
+    from .external_jobs import PREFIX
+
+    if job.startswith(PREFIX):
+        # "script.analytics_poll.gsc" reads "Morning analytics poll (script) ·
+        # Search Console"; the command is left out when it is the job itself.
+        script, _, command = job[len(PREFIX):].partition(".")
+        label = words.get(f"script_{script}") or script.replace("_", " ").capitalize()
+        part = words.get(f"script_cmd_{command}")
+        return f"{label} · {part}" if part else label
     return words.get(job) or job.replace("_", " ").capitalize()
 
 
@@ -156,14 +183,19 @@ def _slot_missed(spec: str, last_run_at: int, now: int) -> bool:
     return scheduler.slot_missed(spec, last_run_at, now)
 
 
-def _state_of(last: dict | None, spec: str, now: int) -> str:
+def _state_of(last: dict | None, spec: str, now: int, *, external: bool = False) -> str:
     if not last:
         return "never"
     if last.get("status") != "ok":
         return "error"
-    if _slot_missed(spec, int(last.get("ran_at") or 0), now):
-        return "overdue"
-    return "ok"
+    ran_at = int(last.get("ran_at") or 0)
+    if external:
+        from .external_jobs import late
+
+        missed = late(spec, ran_at, now)
+    else:
+        missed = _slot_missed(spec, ran_at, now)
+    return "overdue" if missed else "ok"
 
 
 def summary_text(raw: str | None) -> str:
@@ -243,13 +275,18 @@ def overview(*, now: int | None = None) -> dict:
     """
     from . import scheduler
     from .db_jobs import last_system_job_runs, system_job_failure_count
+    from .external_jobs import scheduled as scheduled_scripts
 
     now = int(now if now is not None else time.time())
     lasts = last_system_job_runs()
     jobs = []
-    for name, spec in scheduler.system_job_specs():
+    # The app's own jobs, then the scheduled scripts that run outside it
+    # (launchd/cron): they write their runs to the same table.
+    specs = [(n, s, False) for n, s in scheduler.system_job_specs()]
+    specs += [(n, s, True) for n, s in scheduled_scripts()]
+    for name, spec, external in specs:
         last = lasts.get(name)
-        state = _state_of(last, spec, now)
+        state = _state_of(last, spec, now, external=external)
         job = {
             "name": name,
             "label": name_of(name),
@@ -258,6 +295,9 @@ def overview(*, now: int | None = None) -> dict:
             "last": _last_view(last),
             "failures_7d": system_job_failure_count(name),
         }
+        if external:
+            # Run by launchd, not by the app: the panel has no button for it.
+            job["external"] = True
         if state in ("error", "overdue"):
             job["message"] = message_of(name, state, (last or {}).get("error"))
         did = summary_text((last or {}).get("summary"))
