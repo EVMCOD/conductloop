@@ -24,7 +24,7 @@
     "new_session": "Nueva sesión",
     "role": "Rol",
     "key_ref": "Referencia de clave (key_ref)",
-    "key_ref_hint": "Nombre de una clave guardada en el llavero (p. ej. byok.openai.trabajo), nunca la clave. Obligatoria para anthropic, openai, minimax y gateway.",
+    "key_ref_hint": "Vacío: la clave que usa el chat. Si no, el nombre de otra clave guardada en el llavero (p. ej. byok.openai.trabajo), nunca la clave.",
     "repo": "Repositorio",
     "base": "Rama base",
     "budget_eur": "Presupuesto (EUR)",
@@ -33,7 +33,7 @@
     "inbox": "Mensajes para ti",
     "load_more": "Cargar más",
     "sessions": "Sesiones",
-    "no_sessions": "Aún no hay sesiones. Marca un repositorio, pon un precio y crea una.",
+    "no_sessions": "Aún no hay sesiones. Marca un repositorio y crea una.",
     "running_count": "{0} en marcha (máx. {1})",
     "start": "Arrancar",
     "stop": "Parar",
@@ -132,6 +132,10 @@
     "ts_done": "hecha",
     "ts_blocked": "bloqueada",
     "ts_failed": "fallida",
-    "ts_cancelled": "cancelada"
+    "ts_cancelled": "cancelada",
+    "advanced": "Avanzado: rol, modelo, clave, presupuesto",
+    "uses": "Usa {0} · {1} con la clave que usa el chat.",
+    "uses_flat": "Usa {0} · {1} con la clave que usa el chat. Tarifa plana: no hace falta precio por token; el límite son las iteraciones.",
+    "uses_none": "Todavía no hay ninguna IA configurada: añade antes una clave en Conectar IA."
   }
 }

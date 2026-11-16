@@ -394,7 +394,13 @@ def test_api_create_and_mode(store):
         h = _H({"provider": "ollama", "model": "x", "budget_cost_cents": 100, "browser_mode": "act"})
         routes_browser.create_browser_session(h)
         assert h.sent[0] == 201 and h.sent[1]["session"]["browser_mode"] == "act"  # PR 9
+        # No key_ref: the session uses the key the chat uses (Credentials).
         h = _H({"provider": "openai", "model": "x", "budget_cost_cents": 100})
+        routes_browser.create_browser_session(h)
+        assert h.sent[0] == 201 and h.sent[1]["session"]["key_ref"] is None
+        # A key value pasted where a reference goes is still refused.
+        h = _H({"provider": "openai", "model": "x", "budget_cost_cents": 100,
+                "key_ref": "sk-" + "a" * 40})
         routes_browser.create_browser_session(h)
         assert h.sent[0] == 400 and h.sent[1]["field"] == "key_ref"
         h = _H({"browser_mode": "read"})

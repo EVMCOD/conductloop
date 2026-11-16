@@ -683,7 +683,9 @@ class SessionStore:
                 raise SessionValidationError("session_id", "no such session")
             price = c.execute("SELECT in_cents_per_mtok, out_cents_per_mtok FROM model_prices "
                               "WHERE provider = ? AND model = ?", (s["provider"], s["model"])).fetchone()
-            missing = price is None and (tin or tout) > 0 and s["provider"] != "ollama"
+            # A local model or a flat-rate plan has no price per token to miss.
+            from .providers import flat_rate
+            missing = price is None and (tin or tout) > 0 and not flat_rate(s["provider"])
             cost = 0.0 if price is None else (tin * price[0] + tout * price[1]) / 1_000_000
             cur = c.execute(
                 "INSERT INTO session_events (session_id, task_id, kind, payload, tokens_in, "

@@ -250,7 +250,7 @@ class SessionRunner:
         return RunOutcome(task_status, session_status, reason, iterations, **extra)
 
     def _price_ok(self, s: dict, task: dict) -> bool:
-        if s["provider"].lower() in providers.FREE_PROVIDERS:
+        if providers.flat_rate(s["provider"]):
             return True
         if self.store.model_price(s["provider"], s["model"]) is not None:
             return True
@@ -264,7 +264,7 @@ class SessionRunner:
         return False
 
     def _projected_cents(self, s: dict, prompt_tokens: int) -> float:
-        if s["provider"].lower() in providers.FREE_PROVIDERS:
+        if providers.flat_rate(s["provider"]):
             return 0.0
         price = self.store.model_price(s["provider"], s["model"]) or {}
         return (prompt_tokens * float(price.get("in_cents_per_mtok", 0))

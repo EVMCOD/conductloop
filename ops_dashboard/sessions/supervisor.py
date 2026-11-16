@@ -114,7 +114,7 @@ class Supervisor:
         if s["status"] == "stalled" and not confirm_stalled:
             raise ResumeBlocked("confirm_required",
                                 "stalled sessions only resume with an explicit confirmation")
-        if s["provider"].lower() not in providers.FREE_PROVIDERS \
+        if not providers.flat_rate(s["provider"]) \
                 and self.store.model_price(s["provider"], s["model"]) is None:
             raise ResumeBlocked("price_missing", "set a price for this model first")
         if s["cost_cents_est"] >= s["budget_cost_cents"]:

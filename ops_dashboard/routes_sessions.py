@@ -38,7 +38,7 @@ from .sessions.store import SessionStore
 from .sessions.supervisor import ResumeBlocked, Supervisor, SupervisorError
 
 KNOWN_PROVIDERS = ("anthropic", "openai", "minimax", "gateway", "ollama", "mock")
-KEYED_PROVIDERS = ("anthropic", "openai", "minimax", "gateway")   # key_ref required
+KEYED_PROVIDERS = ("anthropic", "openai", "minimax", "gateway")   # take a key (key_ref optional)
 MAX_BODY = 1024 * 1024
 MAX_DIFF_BYTES = 256 * 1024
 
@@ -313,6 +313,14 @@ def unmark_repo(handler):
 
 # ── prices ──────────────────────────────────────────────────────────────────
 
+@route("GET", "/api/sessions/defaults")
+def session_defaults(handler):
+    """GET /api/sessions/defaults — what a new session uses when the person
+    does not say: the chat's provider and model, with the chat's key, and a
+    budget. The form starts filled in with it."""
+    return 200, {"ok": True, **providers.session_defaults()}
+
+
 @route("GET", "/api/sessions/prices")
 def list_prices(handler):
     return 200, {"ok": True, "items": _store().list_model_prices(), "currency": "EUR"}
@@ -349,17 +357,28 @@ def list_sessions(handler):
 def create_session(handler):
     platform_caps.require_code_sessions()  # Windows: refuse before anything is created
     data = _body(handler)
-    role = _str(data, "role", max_len=60) or ""
-    provider = (_str(data, "provider", max_len=40) or "").lower()
+    # Only the repository and the base branch have to be given: the rest is
+    # what the chat already uses (provider, model, its key) and a budget.
+    role = _str(data, "role", required=False, max_len=60) or "engineer"
+    provider = (_str(data, "provider", required=False, max_len=40) or "").lower()
+    if not provider:
+        provider = providers.session_defaults()["provider"] or ""
+    if not provider:
+        raise ApiError(400, "validation_error",
+                       "provider: no AI provider is set up yet; add a key in Credentials",
+                       field="provider")
     if provider not in KNOWN_PROVIDERS:
         raise ApiError(400, "validation_error", "provider: unknown", field="provider")
-    model = _str(data, "model", max_len=200) or ""
+    model = _str(data, "model", required=False, max_len=200) or providers.default_model(provider)
     repo = _str(data, "repo_path", max_len=4096) or ""
     base_ref = _str(data, "base_ref", max_len=200) or ""
     if base_ref.startswith("-"):
         raise ApiError(400, "validation_error", "base_ref: invalid", field="base_ref")
-    key_ref = _str(data, "key_ref", required=provider in KEYED_PROVIDERS, max_len=200)
-    budget = _int(data.get("budget_cost_cents"), "budget_cost_cents", minimum=1)
+    # No key_ref: the session uses the key the chat uses (Credentials). A
+    # key_ref only picks another saved key for this one session.
+    key_ref = _str(data, "key_ref", required=False, max_len=200)
+    budget = _int(data.get("budget_cost_cents"), "budget_cost_cents", minimum=1,
+                  default=providers.DEFAULT_BUDGET_CENTS)
     kwargs: dict[str, Any] = {}
     if data.get("max_iterations") is not None:
         kwargs["max_iterations"] = _int(data["max_iterations"], "max_iterations")

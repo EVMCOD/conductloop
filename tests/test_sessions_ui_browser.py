@@ -188,11 +188,13 @@ def test_sessions_ui_full_flow(env, locale):
         page.click("#price-form button")
         wait_js(page, "document.querySelector('#prices').textContent.includes('100')")
 
-        # create session: validation error first (missing key_ref for openai)
+        # create session: validation error first (a key pasted where its reference goes)
+        page.evaluate("document.getElementById('s-advanced').open = true")  # role, model, key, budget
         page.fill("#s-role", "backend-" + tag)
         page.select_option("#s-provider", "openai")
         page.fill("#s-model", "m")
         page.fill("#s-budget", "5")
+        page.fill("#s-keyref", "sk-" + "a" * 40)
         page.click("#session-form button[type=submit]")
         page.wait_for_selector("#session-error[data-error-code='validation_error']")
         page.fill("#s-keyref", "byok.openai.work")
@@ -245,6 +247,7 @@ def test_sessions_ui_full_flow(env, locale):
                                ".some(e => e.textContent.startsWith('user says <img'))")
 
         # budget pause + resume with a higher budget
+        page.evaluate("document.getElementById('s-advanced').open = true")  # role, model, key, budget
         page.fill("#s-role", "budget-" + tag)
         page.fill("#s-keyref", "byok.openai.work")
         page.fill("#s-budget", "0.5")
@@ -288,6 +291,7 @@ def test_sessions_ui_full_flow(env, locale):
                                ".dataset.status !== 'stalled'")
 
         # provider_unavailable: same rendering as provider-errors.js
+        page.evaluate("document.getElementById('s-advanced').open = true")  # role, model, key, budget
         page.fill("#s-role", "down-" + tag)
         page.select_option("#s-provider", "anthropic")
         page.fill("#s-keyref", "byok.anthropic.main")
