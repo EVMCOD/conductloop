@@ -25,6 +25,7 @@ SKIPPED_ON_WINDOWS: dict[str, str] = {
     "test_browser_agent.py": "uses AF_UNIX sockets for the agent bridge; Windows has no bridge (docs/PORTABILITY.md 3.3)",
     # Code sessions are switched off on Windows (platform_caps): the API refuses.
     "test_sessions_api.py": "code sessions are turned off on Windows (platform_unsupported), so the API refuses to start them",
+    "test_sessions_use_chat_model.py": "creates code sessions through the API, which are turned off on Windows (platform_unsupported)",
     "test_sessions_supervisor.py": "needs code sessions and git worktrees, which are turned off on Windows",
     # The macOS keychain backend (the `security` tool); Windows gets its own in PR 10 of the plan.
     "test_secrets_store_keychain.py": "tests the macOS `security` keychain backend; the Windows Credential Manager backend does not exist yet",
