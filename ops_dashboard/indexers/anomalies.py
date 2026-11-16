@@ -280,7 +280,9 @@ def detect_recent_anomalies() -> dict:
     # 3) Live URL health — check for recent status flips
     try:
         from . import live_urls
-        # The live_urls table has recent checks; look for status_code=0 or != 200 in last 24h
+        # A URL is down when its last two checks failed (recent_unhealthy reads
+        # the history of the checks, not the current state of each URL): one
+        # timeout is a timeout, not a website that fell.
         rows = live_urls.recent_unhealthy(hours=24)
         w = _words()
         for r in rows:

@@ -13,8 +13,8 @@ It never writes into your notes folder: its own notes (daily briefing, agent not
 | System | Download | Notes |
 |---|---|---|
 | macOS 13 or later, Apple Silicon | [ConductLoop.dmg](https://github.com/EVMCOD/conductloop-releases/releases/latest/download/ConductLoop-macos-aarch64.dmg) | Signed and notarized. Updates itself (ConductLoop → Check for Updates…). The in-app browser needs macOS 14 or later. |
-| **Linux** x86_64 (Ubuntu 22.04+) | [.deb](https://github.com/EVMCOD/conductloop-releases/releases/download/v1.2.23/ConductLoop_1.2.23_amd64.deb) · [AppImage](https://github.com/EVMCOD/conductloop-releases/releases/download/v1.2.23/ConductLoop_1.2.23_amd64.AppImage) | On Ubuntu 24.04 use the .deb (the AppImage can open a blank window there). Connected apps need a system keyring (GNOME Keyring, KWallet or KeePassXC). No in-app browser; no automatic updates yet. |
-| **Windows** 10/11 x64 | [setup.exe](https://github.com/EVMCOD/conductloop-releases/releases/download/v1.2.23/ConductLoop_1.2.23_x64-setup.exe) | Not code-signed, so SmartScreen says "Windows protected your PC": click **More info**, then **Run anyway**. No connected apps, code sessions or in-app browser yet; no automatic updates yet. |
+| **Linux** x86_64 (Ubuntu 22.04+) | [.deb and AppImage](https://github.com/EVMCOD/conductloop-releases/releases/latest) | The file names carry the version, so this link goes to the latest release page, which always offers the current ones. On Ubuntu 24.04 use the .deb (the AppImage can open a blank window there). Connected apps need a system keyring (GNOME Keyring, KWallet or KeePassXC). No in-app browser; no automatic updates yet. |
+| **Windows** 10/11 x64 | [setup.exe and .msi](https://github.com/EVMCOD/conductloop-releases/releases/latest) | The latest release page, for the same reason. Not code-signed, so SmartScreen says "Windows protected your PC": click **More info**, then **Run anyway**. No connected apps, code sessions or in-app browser yet; no automatic updates yet. |
 
 All releases, with checksums: [conductloop-releases](https://github.com/EVMCOD/conductloop-releases/releases).
 

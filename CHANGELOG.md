@@ -2,6 +2,16 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased
+
+### A single timeout is not a website that fell
+
+- **A site is announced as down only when its last two checks failed.** The URL watch checks every URL every five minutes, and a lone 10-second timeout used to be reported as "the site does not answer", at high severity, in the digest of the morning — while the check five minutes later answered 200. Now the next check has to fail as well before the site becomes an alert; a site that answers with an HTTP error keeps its medium severity, and one that does not answer at all keeps the high one.
+
+### The README no longer points at an old release
+
+- **The Linux and Windows downloads follow the latest release.** Their file names carry the version, so the README could not link to them the way it links to the Mac app; the two rows pointed at the binaries of one old release. They now point at the latest release page, which always carries the current files.
+
 ## 1.2.31 — 2026-11-16 — Paste a coding task in the chat
 
 ### Paste a coding task in the chat, and it runs
