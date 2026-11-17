@@ -519,7 +519,12 @@ def _sdk_retry_kwargs() -> dict:
 
 
 def is_transient_error(e: BaseException) -> bool:
-    """Connection-level / 5xx failures worth one retry (never 401/402/429)."""
+    """Connection-level / 5xx failures worth one retry (never 401/402/429).
+
+    "Overloaded" (HTTP 529) is on the list: it is the provider saying it is
+    busy, not that the request was wrong, and it is what killed a whole
+    session the first time a mini batch of turns hit it.
+    """
     name = type(e).__name__.lower()
     raw = str(e).lower()
     return (
@@ -527,7 +532,8 @@ def is_transient_error(e: BaseException) -> bool:
         or "connection" in name or "connect" in raw
         or "reset" in raw
         or "server_error" in name or "internal server" in raw
-        or "502" in raw or "503" in raw or "504" in raw
+        or "overloaded" in name or "overloaded" in raw
+        or "502" in raw or "503" in raw or "504" in raw or "529" in raw
     )
 
 
