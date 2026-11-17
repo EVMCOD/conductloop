@@ -2,6 +2,16 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
+## Unreleased
+
+### The agent exam
+
+- **A bench that says whether the built-in runner does the work.** `scripts/agent_exam.py` runs two real tasks on this repository — with a temporary clone, a temporary database and the session's own provider — and reports, for each runner, whether the task was finished, whether the hidden tests passed, how many turns it took and how many tokens it spent. It is the yardstick for the built-in session runner, measured against Claude Code. It spends the Coding Plan quota, so it never runs in CI.
+
+### A finished task can be published at once
+
+- **The session stops before the task is announced as finished.** The task changed to "ready for review" a moment before the session stopped working, so publishing its branch in that instant answered "the session is still working" and the branch could not be pushed. The session now stops first: what the chat says is what the app does.
+
 ## 1.2.32 — 2026-11-16 — Code sessions run with Claude Code
 
 ### Code sessions run with Claude Code when you have it
