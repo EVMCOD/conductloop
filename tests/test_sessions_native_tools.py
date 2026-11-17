@@ -362,7 +362,13 @@ def test_a_provider_that_blinks_does_not_cost_the_session(env, monkeypatch):
 
 
 def test_a_provider_that_always_fails_stops_the_session(env, monkeypatch):
-    """Retrying is not forever: the session says what happened and waits."""
+    """Retrying is not forever: the session says what happened and waits.
+
+    The person is told what happened, not the name of an SDK exception: a
+    MiniMax Coding Plan answers 529 'overloaded_error' when the 5-hour
+    window of the model is spent, and 'provider error: OverloadedError' reads
+    like a glitch of the service.
+    """
     monkeypatch.setattr(runner_mod, "time", _NoSleep)
     prov = Blinking([OverloadedError("overloaded_error")] * 99)
 
@@ -370,9 +376,28 @@ def test_a_provider_that_always_fails_stops_the_session(env, monkeypatch):
 
     assert out.task_status is None
     assert out.session_status == "waiting_human"
-    assert "OverloadedError" in out.reason
+    assert "OverloadedError" not in out.reason
+    assert "overloaded" in out.reason.lower()
+    assert "window" in out.reason.lower() or "quota" in out.reason.lower()
     # PROVIDER_RETRIES attempts after the first one.
     assert len(prov.calls) == runner_mod.PROVIDER_RETRIES + 1
+
+
+def test_an_overloaded_provider_is_classified():
+    """The chat shows the same thing: the window, not the exception."""
+    err = brain._classify_provider_error(_Overloaded529(), "minimax")
+    assert err.code == "provider_overloaded"
+    assert "529" in err.message
+    assert "minimax" in err.message
+    # A rate limit is still a rate limit.
+    assert brain._classify_provider_error(
+        Exception("429 rate_limit_error"), "minimax").code == "rate_limited"
+
+
+class _Overloaded529(Exception):
+    """What the SDK raises when the endpoint answers 529."""
+
+    status_code = 529
 
 
 def prov_sid(env, prov):

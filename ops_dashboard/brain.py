@@ -181,6 +181,21 @@ def _classify_provider_error(e: Exception, provider_name: str) -> ProviderError:
             f"The provider '{provider_name}' is rate-limited. Wait a few seconds and try again.",
             429,
         )
+    if s == 529 or s == 2056 or "overloaded_error" in raw.lower() \
+            or "usage limit exceeded" in raw.lower():
+        # A plan with a usage window (MiniMax's Coding Plan has a 5-hour
+        # window per model) answers like this when the window is spent: the
+        # same 529 a saturated service answers with. The person has to know
+        # that the wait is the window, not a glitch.
+        return ProviderError(
+            "provider_overloaded",
+            f"The provider '{provider_name}' is overloaded and is not answering (HTTP 529). "
+            "If you are on a plan with a usage window (MiniMax's Coding Plan has a 5-hour "
+            "window per model), the window is probably spent and it resets on its own; "
+            "otherwise the service is saturated. Try again in a few minutes, or use "
+            "another provider.",
+            529,
+        )
     if s in (500, 502, 503, 504) or "internal server" in raw.lower():
         return ProviderError(
             "provider_down",

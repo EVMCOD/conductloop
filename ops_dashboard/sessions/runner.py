@@ -763,11 +763,12 @@ class SessionRunner:
                                   task_status=None, iterations=n)
             except Exception as e:  # provider SDK errors: classified, never retried here
                 code = getattr(e, "code", type(e).__name__)
+                perr = brain._classify_provider_error(e, str(s.get("provider") or "provider"))
                 secs = providers.mark_failure(s, str(code))
-                self._event("provider.error", {"code": str(code), "cooldown_s": secs},
-                            task_id=tid)
+                self._event("provider.error", {"code": str(code), "cooldown_s": secs,
+                                              "classified": perr.code}, task_id=tid)
                 return self._stop(task, session_status="waiting_human",
-                                  reason=f"provider error: {code}", task_status=None, iterations=n)
+                                  reason=perr.message[:300], task_status=None, iterations=n)
             if self.cancel.is_set():
                 # Cancelled while the provider was answering: never act on it.
                 return self._stop(task, session_status="idle", reason="cancelled",
