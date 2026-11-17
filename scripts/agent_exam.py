@@ -292,6 +292,13 @@ def run_exam(task: ExamTask, runner_name: str, args: argparse.Namespace) -> dict
                 row["turns"] += 1
                 row["tokens_in"] += int(ev["tokens_in"] or 0)
                 row["tokens_out"] += int(ev["tokens_out"] or 0)
+                payload = ev.get("payload") or "{}"
+                try:
+                    data = json.loads(payload) if isinstance(payload, str) else {}
+                except ValueError:
+                    data = {}
+                row["cache_read"] = row.get("cache_read", 0) + int(data.get("cache_read") or 0)
+                row["cache_write"] = row.get("cache_write", 0) + int(data.get("cache_write") or 0)
 
         # What the agent actually changed — before the hidden tests land on top.
         changed = _git("status", "--porcelain=v1", "--untracked-files=all", cwd=worktree)
@@ -316,7 +323,7 @@ def run_exam(task: ExamTask, runner_name: str, args: argparse.Namespace) -> dict
 
 def print_table(rows: list[dict]) -> None:
     head = ["runner", "task", "finished", "hidden tests", "turns", "tokens in",
-            "tokens out", "min"]
+            "cache read", "tokens out", "min"]
     print()
     print("| " + " | ".join(head) + " |")
     print("|" + "|".join("---" for _ in head) + "|")
@@ -326,6 +333,7 @@ def print_table(rows: list[dict]) -> None:
             "yes" if r.get("finished") else "no",
             "yes" if r.get("hidden_tests") else "no",
             str(r.get("turns", 0)), f"{r.get('tokens_in', 0):,}",
+            f"{r.get('cache_read', 0):,}",
             f"{r.get('tokens_out', 0):,}", f"{r.get('minutes', 0)}",
         ]) + " |")
     print()

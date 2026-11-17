@@ -31,7 +31,6 @@ from .browser import BrowserBridge, BrowserDenied, BrowserTools, BrowserUnavaila
 from .runner import (
     BUDGET_WARN_RATIO,
     KEEP_LAST_MESSAGES,
-    MAX_TOKENS_OUT,
     MAX_TOOL_RESULT_CHARS,
     RunOutcome,
     SessionRunner,
@@ -230,7 +229,8 @@ class BrowserRunner(SessionRunner):
                 with providers.provider_slot(s["provider"], self.cancel) as ok:
                     if not ok:
                         continue
-                    reply = provider.ask(system, window, max_tokens=MAX_TOKENS_OUT, temperature=0.2)
+                    reply = provider.ask(system, window, max_tokens=self.max_tokens_out,
+                                         temperature=0.2)
             except providers.ProviderUnavailable as e:
                 self._event("provider.unavailable", {"reason": e.reason}, task_id=tid)
                 return self._stop(task, session_status="waiting_human", reason=str(e)[:300],

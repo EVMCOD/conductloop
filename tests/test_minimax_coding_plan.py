@@ -64,7 +64,10 @@ def test_coding_plan_url_uses_the_anthropic_api(fake_anthropic):
     client, call = fake_anthropic.created
     assert client == {"api_key": "k", "base_url": "https://api.minimax.io/anthropic"}
     req = call["request"]
-    assert req["model"] == "MiniMax-M3" and req["system"] == "sys"
+    assert req["model"] == "MiniMax-M3"
+    # The system prompt goes out marked for the prompt cache.
+    assert req["system"] == [{"type": "text", "text": "sys",
+                              "cache_control": {"type": "ephemeral"}}]
     assert req["max_tokens"] == brain.CODING_PLAN_MAX_TOKENS                  # room for M3's reasoning
 
 

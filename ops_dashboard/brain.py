@@ -181,6 +181,21 @@ def _classify_provider_error(e: Exception, provider_name: str) -> ProviderError:
             f"The provider '{provider_name}' is rate-limited. Wait a few seconds and try again.",
             429,
         )
+    if s == 529 or s == 2056 or "overloaded_error" in raw.lower() \
+            or "usage limit exceeded" in raw.lower():
+        # A plan with a usage window (MiniMax's Coding Plan has a 5-hour
+        # window per model) answers like this when the window is spent: the
+        # same 529 a saturated service answers with. The person has to know
+        # that the wait is the window, not a glitch.
+        return ProviderError(
+            "provider_overloaded",
+            f"The provider '{provider_name}' is overloaded and is not answering (HTTP 529). "
+            "If you are on a plan with a usage window (MiniMax's Coding Plan has a 5-hour "
+            "window per model), the window is probably spent and it resets on its own; "
+            "otherwise the service is saturated. Try again in a few minutes, or use "
+            "another provider.",
+            529,
+        )
     if s in (500, 502, 503, 504) or "internal server" in raw.lower():
         return ProviderError(
             "provider_down",
@@ -322,6 +337,139 @@ class Provider:
         """
         return self.ask(system, messages, **kwargs)
 
+    def ask_step(self, system: str, messages: list[dict], tools: list[dict], **kwargs) -> dict:
+        """ONE turn of a tool-using conversation.
+
+        Returns ``{"text": str, "tool_calls": [{"id", "name", "args"}]}``: what
+        the model wrote and the tools it wants called. The caller runs the
+        tools and comes back with the next turn — the loop is the caller's,
+        because only the caller knows the rules the tools have to keep (the
+        reservations of a session, the sandbox, the events).
+
+        The default asks for plain text: a provider that does not speak native
+        tool calling answers in the protocol its caller uses (JSON), and this
+        returns no tool calls.
+        """
+        return {"text": self.ask(system, messages, **kwargs), "tool_calls": []}
+
+
+# ── one turn of a tool-using conversation, in each API's dialect ───────────
+
+def _anthropic_messages(messages: list[dict]) -> list[dict]:
+    """The conversation, in the shape the Anthropic Messages API takes.
+
+    The neutral shape is: an assistant message with ``tool_calls`` and every
+    result as its own ``{"role": "tool"}`` message. Anthropic wants the
+    tool_use blocks inside the assistant message, and every result of one
+    turn together in ONE user message.
+    """
+    out: list[dict] = []
+    pending: list[dict] = []
+
+    def flush() -> None:
+        if pending:
+            out.append({"role": "user", "content": list(pending)})
+            pending.clear()
+
+    for m in messages:
+        role = m.get("role")
+        if role == "tool":
+            pending.append({"type": "tool_result",
+                            "tool_use_id": str(m.get("tool_call_id") or ""),
+                            "content": str(m.get("content") or "")})
+            continue
+        flush()
+        calls = m.get("tool_calls") or []
+        if role == "assistant" and calls:
+            content: list[dict] = []
+            if m.get("content"):
+                content.append({"type": "text", "text": str(m["content"])})
+            for tc in calls:
+                content.append({"type": "tool_use", "id": str(tc.get("id") or ""),
+                                "name": str(tc.get("name") or ""),
+                                "input": tc.get("args") or {}})
+            out.append({"role": "assistant", "content": content})
+        else:
+            out.append({"role": role, "content": m.get("content")})
+    flush()
+    return out
+
+
+def _openai_messages(messages: list[dict]) -> list[dict]:
+    """The conversation, in the shape the OpenAI API takes."""
+    out: list[dict] = []
+    for m in messages:
+        calls = m.get("tool_calls") or []
+        if m.get("role") == "assistant" and calls:
+            out.append({
+                "role": "assistant",
+                "content": m.get("content") or None,
+                "tool_calls": [
+                    {"id": str(tc.get("id") or ""), "type": "function",
+                     "function": {"name": str(tc.get("name") or ""),
+                                  "arguments": json.dumps(tc.get("args") or {},
+                                                          ensure_ascii=False)}}
+                    for tc in calls],
+            })
+        elif m.get("role") == "tool":
+            out.append({"role": "tool", "tool_call_id": str(m.get("tool_call_id") or ""),
+                        "content": str(m.get("content") or "")})
+        else:
+            out.append({"role": m.get("role"), "content": m.get("content")})
+    return out
+
+
+def _openai_tools(tools: list[dict]) -> list[dict]:
+    """The tools, in the shape the OpenAI API takes."""
+    out: list[dict] = []
+    for t in tools or []:
+        if not isinstance(t, dict):
+            continue
+        fn = t.get("function")
+        if t.get("type") == "function" and isinstance(fn, dict):
+            out.append(t)
+        else:
+            out.append({"type": "function", "function": {
+                "name": str(t.get("name") or ""),
+                "description": str(t.get("description") or ""),
+                "parameters": t.get("input_schema") or {"type": "object", "properties": {}},
+            }})
+    return out
+
+
+# ── the prompt cache (Anthropic and the endpoints that speak its API) ──────
+
+def _cached_system(system: str) -> list[dict]:
+    """The system prompt, marked for the cache.
+
+    It is the same in every turn of a conversation: the provider keeps it,
+    and the input tokens of the later turns are only the part that is new.
+    """
+    return [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+
+
+def _mark_cache(messages: list[dict]) -> list[dict]:
+    """The first user message, marked for the cache.
+
+    Only the first one: it is the task, and it does not change. What comes
+    after it does (the ledger of what the agent has already done), and a
+    marker there would be invalidated on every turn.
+    """
+    out: list[dict] = []
+    done = False
+    for m in messages:
+        content = m.get("content")
+        if not done and m.get("role") == "user" and content:
+            blocks = ([{"type": "text", "text": content}] if isinstance(content, str)
+                      else [dict(b) for b in content])
+            if blocks and blocks[-1].get("type") == "text":
+                blocks[-1]["cache_control"] = {"type": "ephemeral"}
+            out.append({"role": m["role"], "content": blocks})
+            done = True
+            continue
+        out.append(m)
+    return out
+
 
 def _num(v) -> int | None:
     try:
@@ -351,7 +499,15 @@ def extract_usage(raw) -> dict | None:
                       ("prompt_eval_count", "eval_count", "ollama_eval_count")):
         i, o = get(a), get(b)
         if i is not None or o is not None:
-            return {"input_tokens": i or 0, "output_tokens": o or 0, "source": src}
+            out = {"input_tokens": i or 0, "output_tokens": o or 0, "source": src}
+            # The prompt cache: the tokens read from the cache and the ones
+            # written into it are not the ones of this turn.
+            read = get("cache_read_input_tokens")
+            write = get("cache_creation_input_tokens")
+            if read or write:
+                out["cache_read_input_tokens"] = read or 0
+                out["cache_creation_input_tokens"] = write or 0
+            return out
     t = get("total_tokens")
     if t is not None:
         return {"input_tokens": 0, "output_tokens": t, "source": "total_only",
@@ -378,7 +534,12 @@ def _sdk_retry_kwargs() -> dict:
 
 
 def is_transient_error(e: BaseException) -> bool:
-    """Connection-level / 5xx failures worth one retry (never 401/402/429)."""
+    """Connection-level / 5xx failures worth one retry (never 401/402/429).
+
+    "Overloaded" (HTTP 529) is on the list: it is the provider saying it is
+    busy, not that the request was wrong, and it is what killed a whole
+    session the first time a mini batch of turns hit it.
+    """
     name = type(e).__name__.lower()
     raw = str(e).lower()
     return (
@@ -386,7 +547,8 @@ def is_transient_error(e: BaseException) -> bool:
         or "connection" in name or "connect" in raw
         or "reset" in raw
         or "server_error" in name or "internal server" in raw
-        or "502" in raw or "503" in raw or "504" in raw
+        or "overloaded" in name or "overloaded" in raw
+        or "502" in raw or "503" in raw or "504" in raw or "529" in raw
     )
 
 
@@ -683,25 +845,61 @@ class AnthropicProvider(Provider):
             return anthropic.Anthropic(api_key=self.api_key, base_url=self.base_url, **_sdk_retry_kwargs())
         return anthropic.Anthropic(api_key=self.api_key, **_sdk_retry_kwargs())
 
+    # The SDK computes the timeout of a non-streaming request from
+    # ``max_tokens``, and refuses one that may run for more than ten minutes.
+    # This is the message it raises.
+    _LONG_REQUEST = "Streaming is required"
+
+    def _send(self, client, **kwargs):
+        """One request to the endpoint.
+
+        A request that may take long is sent streaming: the streaming
+        timeout is an hour, and the answer is the same message.
+        """
+        try:
+            return client.messages.create(**kwargs)
+        except ValueError as e:
+            if self._LONG_REQUEST not in str(e):
+                raise
+            with client.messages.stream(**kwargs) as stream:
+                return stream.get_final_message()
+
     @_retry_transient
     def ask(self, system: str, messages: list[dict], **kwargs) -> str:
         client = self._client()
-        out = []
-        for m in messages:
-            out.append({"role": m["role"], "content": m["content"]})
+        out = [{"role": m["role"], "content": m["content"]} for m in messages]
         self.last_usage = None
-        msg = client.messages.create(
-            model=self.model,
-            system=system,
-            messages=out,
-            max_tokens=kwargs.get("max_tokens", 1500),
-        )
+        msg = self._create(client, system, out, max_tokens=kwargs.get("max_tokens", 1500))
         self.last_usage = _resp_usage(msg)
         parts = []
         for block in msg.content:
             if getattr(block, "type", None) == "text":
                 parts.append(block.text)
         return "\n".join(parts).strip() or "(empty response)"
+
+    def _create(self, client, system: str, messages: list[dict], *, tools: list[dict] | None = None,
+                max_tokens: int = 1500):
+        """One request, with the prompt cache marked.
+
+        An endpoint that does not know the markers refuses the request: it
+        is asked again without them, so a provider that speaks the API but
+        not the cache still works.
+        """
+        kwargs: dict = {"model": self.model, "system": _cached_system(system),
+                                  "messages": _mark_cache(messages), "max_tokens": max_tokens}
+        if tools:
+            kwargs["tools"] = tools
+        try:
+            return self._send(client, **kwargs)
+        except Exception as e:
+            if "cache_control" not in str(e):
+                raise
+            plain = {"model": self.model, "system": system,
+                     "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
+                     "max_tokens": max_tokens}
+            if tools:
+                plain["tools"] = tools
+            return self._send(client, **plain)
 
     def stream(self, system: str, messages: list[dict], **kwargs):
         client = self._client()
@@ -721,6 +919,25 @@ class AnthropicProvider(Provider):
     def supports_tools(self) -> bool:
         return True
 
+    def ask_step(self, system: str, messages: list[dict], tools: list[dict], **kwargs) -> dict:
+        """One turn, with the tool calls of the model."""
+        client = self._client()
+        self.last_usage = None
+        msg = self._create(client, system, _anthropic_messages(messages),
+                           tools=anthropic_tools(tools),
+                           max_tokens=kwargs.get("max_tokens", 1500))
+        self.last_usage = _resp_usage(msg)
+        text: list[str] = []
+        calls: list[dict] = []
+        for block in msg.content:
+            kind = getattr(block, "type", None)
+            if kind == "text":
+                text.append(block.text)
+            elif kind == "tool_use":
+                args = block.input if isinstance(block.input, dict) else {}
+                calls.append({"id": block.id, "name": block.name, "args": args})
+        return {"text": "\n".join(text).strip(), "tool_calls": calls}
+
     def ask_with_tools(self, system: str, messages: list[dict], tools: list[dict], on_tool_call=None, **kwargs) -> str:
         from . import tools as brain_tools
         client = self._client()
@@ -730,7 +947,8 @@ class AnthropicProvider(Provider):
             out.append({"role": m["role"], "content": m["content"]})
         # Loop until the model stops calling tools
         for _ in range(6):  # max iterations
-            msg = client.messages.create(
+            msg = self._send(
+                client,
                 model=self.model,
                 system=system,
                 messages=out,
@@ -862,6 +1080,33 @@ class OpenAIProvider(Provider):
     def supports_tools(self) -> bool:
         return True
 
+    def ask_step(self, system: str, messages: list[dict], tools: list[dict], **kwargs) -> dict:
+        """One turn, with the tool calls of the model."""
+        client = self._client()
+        self.last_usage = None
+        msgs = [{"role": "system", "content": system}] + _openai_messages(messages)
+        resp = client.chat.completions.create(
+            model=self.model,
+            messages=msgs,
+            tools=_openai_tools(tools),
+            max_tokens=kwargs.get("max_tokens", 1500),
+            temperature=kwargs.get("temperature", 0.3),
+        )
+        self.last_usage = _resp_usage(resp)
+        msg = resp.choices[0].message
+        calls: list[dict] = []
+        for tc in (getattr(msg, "tool_calls", None) or []):
+            fn = tc.function
+            args = fn.arguments
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    args = {}
+            calls.append({"id": tc.id, "name": fn.name,
+                          "args": args if isinstance(args, dict) else {}})
+        return {"text": (getattr(msg, "content", "") or "").strip(), "tool_calls": calls}
+
     def ask_with_tools(self, system: str, messages: list[dict], tools: list[dict],
                        on_tool_call=None, **kwargs) -> str:
         """Agents need tool calling, so every OpenAI-compatible server gets it.
@@ -982,6 +1227,45 @@ class MiniMaxProvider(Provider):
 
     def supports_tools(self) -> bool:
         return True
+
+    def ask_step(self, system: str, messages: list[dict], tools: list[dict], **kwargs) -> dict:
+        """One turn, in the dialect of the endpoint this provider talks to.
+
+        The Coding Plan is served on MiniMax's Anthropic-compatible API, so
+        the tool calls come back as ``tool_use`` blocks there, and as
+        ``tool_calls`` on the pay-as-you-go one.
+        """
+        if (a := self._anthropic()) is not None:
+            kwargs.setdefault("max_tokens", CODING_PLAN_MAX_TOKENS)
+            step = a.ask_step(system, messages, tools, **kwargs)
+            # The tokens of this turn belong to this provider: without them
+            # the runner budgets on estimates and the cache looks empty.
+            self.last_usage = a.last_usage
+            return step
+        client = self._client()
+        self.last_usage = None
+        msgs = [{"role": "system", "content": system}] + _openai_messages(messages)
+        resp = client.chat.completions.create(
+            model=self.model,
+            messages=msgs,
+            tools=_openai_tools(tools),
+            max_tokens=kwargs.get("max_tokens", 1500),
+            temperature=kwargs.get("temperature", 0.3),
+        )
+        self.last_usage = _resp_usage(resp)
+        msg = resp.choices[0].message
+        calls: list[dict] = []
+        for tc in (getattr(msg, "tool_calls", None) or []):
+            fn = tc.function
+            args = fn.arguments
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    args = {}
+            calls.append({"id": tc.id, "name": fn.name,
+                          "args": args if isinstance(args, dict) else {}})
+        return {"text": (getattr(msg, "content", "") or "").strip(), "tool_calls": calls}
 
     def ask_with_tools(self, system: str, messages: list[dict], tools: list[dict], on_tool_call=None, **kwargs) -> str:
         if (a := self._anthropic()) is not None:
@@ -1138,6 +1422,32 @@ class OllamaProvider(Provider):
 
     def supports_tools(self) -> bool:
         return True  # modern Ollama supports it
+
+    def ask_step(self, system: str, messages: list[dict], tools: list[dict], **kwargs) -> dict:
+        """One turn, with the tool calls of the model."""
+        import httpx
+
+        msgs = [{"role": "system", "content": system}] + _openai_messages(messages)
+        payload = {"model": self.model, "messages": msgs, "tools": _openai_tools(tools),
+                   "stream": False}
+        self.last_usage = None
+        r = httpx.post(f"{self.base_url}/api/chat", json=payload, timeout=120.0)
+        r.raise_for_status()
+        data = r.json()
+        self.last_usage = extract_usage(data) if isinstance(data, dict) else None
+        msg = data.get("message", {}) if isinstance(data, dict) else {}
+        calls: list[dict] = []
+        for tc in (msg.get("tool_calls") or []):
+            fn = tc.get("function") or {}
+            args = fn.get("arguments") or {}
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    args = {}
+            calls.append({"id": str(tc.get("id") or ""), "name": str(fn.get("name") or ""),
+                          "args": args if isinstance(args, dict) else {}})
+        return {"text": (msg.get("content") or "").strip(), "tool_calls": calls}
 
     def ask_with_tools(self, system: str, messages: list[dict], tools: list[dict], on_tool_call=None, **kwargs) -> str:
         import httpx

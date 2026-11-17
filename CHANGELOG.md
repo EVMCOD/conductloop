@@ -4,6 +4,39 @@ User-facing changes to ConductLoop (the desktop app and its local server), newes
 
 ## Unreleased
 
+### The prompt is cached
+
+- **The system prompt and the task of a session are kept by the provider.** With Anthropic, and with MiniMax through its Anthropic-compatible endpoint, the beginning of the conversation is marked for the prompt cache: it does not change from one turn to the next, so the later turns only pay for the part that is new. The card in the chat and the exam say how many tokens came from the cache.
+
+
+### The loop has discipline
+
+- **The agent writes a plan before it touches anything, and the card shows it.** The first turn of a task asks for a short plan — the files it is going to change and the tests it is going to run — and keeps it as an event, so the card in the chat shows what the agent is about to do instead of only what it did.
+- **The agent is told when it is going round in circles.** Reading the same file, or making the same search, three times is a loop: the model is told what it already knows, with the numbers of the lines it read, instead of reading it a fourth time.
+- **A code session gets 120 turns, not 60.** A real task needs more than one turn per change, and a session that runs out of turns leaves the work half done. The limit lives in the code, so raising it needs no migration.
+- **The card counts the steps of the runner that is running.** It said "step 12 of 60" whatever the runner was. With the built-in runner it says the real cap; with Claude Code it says only the step, because its turns are not the iterations of the session.
+
+
+### Better tools for the agent
+
+- **The lines of a file come with their numbers, and a range can be read.** The agent could not point at a place in a file, nor build an edit on it, because the text came without numbers. Now `read_file` numbers every line and takes a range (`start_line`, `end_line`).
+- **An edit that does not find its text says which lines look like it.** The answer names the lines of the file that resemble what the agent was looking for, with their numbers: it corrects itself in one turn instead of reading the file again.
+- **A change that touches several places is one call.** A new `patch` tool applies a unified diff, so a change in four places costs one turn and not four.
+- **The agent may run python and read the history of the repository.** `run` now allows `python <file>` and `python -m <module>` inside the sandbox (no network, no writes outside the copy, nothing that installs), and the read-only git commands (`log`, `show`, `blame`, `diff`). Nothing that writes and nothing that runs anything else.
+
+### The agent asks for the tools it needs, several at a time
+
+- **A code session uses the tool calling of the provider, and can call several tools in the same turn.** Until now the model answered with one JSON object written in the text, so a turn was one tool, and every turn paid again for the whole conversation. With Anthropic, MiniMax through its Coding Plan, OpenAI or Ollama the model now asks for the tools it wants itself — three reads in the same turn are three reads in the same turn — and the session runs them with its own rules: the reservations of the session, the sandbox and the events. A model that answers in plain text is taken as the final report, and one that only announces what it is going to do is sent back to work instead of finishing the task. The JSON protocol stays as the fallback for the providers that do not speak tool calling.
+
+### The agent does not forget what it has already done
+
+- **Every turn of a code session carries a ledger of the work already done.** The files the agent read, what its searches found, the files it changed and how its commands ended travel with every turn, next to the task. Before, that knowledge lived only in the conversation window, which throws the old messages away: the agent read the same file again and again. On a real task it spent 60 turns reading and changed nothing.
+
+### The agent has room to write
+
+- **A model turn may answer with 32,000 tokens instead of 1,500.** The output budget of one turn of a code session was smaller than what a reasoning model spends before it writes a single line of code: the answer ran out of room in the middle of a file, and the session spent its turns reading and searching instead of changing anything. It is now the same budget the same model gets through Claude Code, on the same endpoint, and it can be changed with `CONDUCTLOOP_SESSIONS_MAX_TOKENS_OUT` without touching the code.
+- **A turn that may take long is sent streaming.** The Anthropic SDK refuses, before the request leaves the Mac, a non-streaming call whose worst case runs for more than ten minutes — and a turn that may answer with 32,000 tokens is exactly such a call. Those requests now go out streaming, where the limit is an hour, and the answer is the same message.
+
 ### The agent exam
 
 - **A bench that says whether the built-in runner does the work.** `scripts/agent_exam.py` runs two real tasks on this repository — with a temporary clone, a temporary database and the session's own provider — and reports, for each runner, whether the task was finished, whether the hidden tests passed, how many turns it took and how many tokens it spent. It is the yardstick for the built-in session runner, measured against Claude Code. It spends the Coding Plan quota, so it never runs in CI.

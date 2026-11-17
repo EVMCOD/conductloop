@@ -49,11 +49,13 @@ def _session(store, repo, **kw):
 
 # ── limits ──────────────────────────────────────────────────────────────────
 
-def test_defaults_three_sessions_and_sixty_iterations(env):
+def test_defaults_three_sessions_and_the_iteration_cap(env):
     store, repo, *_ = env
     ids = [_session(store, repo, name=f"s{i}") for i in range(3)]
     s = store.get_session(ids[0])
-    assert s["max_iterations"] == 60 and s["budget_currency"] == "EUR"
+    # 120 turns, not 60: a real task needs more than one turn per change,
+    # and a session that runs out of turns leaves the work half done.
+    assert s["max_iterations"] == 120 and s["budget_currency"] == "EUR"
     assert s["status"] == "created" and s["key_ref"] is None
     with pytest.raises(SessionLimitError):
         _session(store, repo, name="s4")
@@ -79,7 +81,7 @@ def test_configurable_up_to_hard_max_eight(env):
     ({"budget_cost_cents": True}, "budget_cost_cents"),
     ({"budget_currency": "USD"}, "budget_currency"),
     ({"budget_tokens": 0}, "budget_tokens"),
-    ({"max_iterations": 61}, "max_iterations"),
+    ({"max_iterations": 121}, "max_iterations"),   # above the cap
     ({"max_iterations": 0}, "max_iterations"),
     ({"model": ""}, "model"),
     ({"provider": " "}, "provider"),
@@ -95,8 +97,8 @@ def test_session_validation(env, kw, field):
 
 def test_iteration_limit_is_configurable_without_migration(env, monkeypatch):
     store, repo, *_ = env
-    with pytest.raises(SessionValidationError, match="between 1 and 60"):
-        _session(store, repo, max_iterations=61)          # default limit = 60
+    with pytest.raises(SessionValidationError, match="between 1 and 120"):
+        _session(store, repo, max_iterations=121)         # default limit = 120
     raised = SessionStore(clock=store._clock, max_iterations_limit=200)
     s = _session(raised, repo, name="long", max_iterations=200)
     assert raised.get_session(s)["max_iterations"] == 200
@@ -390,7 +392,7 @@ def test_events_accumulate_usage_with_user_prices_only(env):
     assert r["cost_cents_est"] == pytest.approx(1040) and r["price_missing"] is False
     s = store.get_session(a)
     assert s["tokens_in"] == 1_001_000 and s["iterations"] == 2
-    assert r["budget_ratio"] == pytest.approx(10.4) and r["iterations_left"] == 58
+    assert r["budget_ratio"] == pytest.approx(10.4) and r["iterations_left"] == 118
     assert [e["kind"] for e in store.list_events(a)] == ["llm_call", "llm_call"]
     with pytest.raises(SessionValidationError):
         store.set_model_price("openai", "gpt-x", in_cents_per_mtok=-1, out_cents_per_mtok=0)

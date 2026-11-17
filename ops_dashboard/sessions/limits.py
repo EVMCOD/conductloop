@@ -6,11 +6,20 @@ import re
 
 DEFAULT_MAX_ACTIVE_SESSIONS = 3   # D4: 3 concurrent sessions by default…
 HARD_MAX_ACTIVE_SESSIONS = 8      # …configurable up to a hard maximum of 8.
-DEFAULT_MAX_ITERATIONS = 60       # D4: 60 iterations per session by default…
+DEFAULT_MAX_ITERATIONS = 120      # D4: iterations per session by default…
 # …and, unless configured, also the largest value a session may ask for. The
 # limit lives in code (not in the schema CHECK) so raising it needs no
 # migration: pass ``max_iterations_limit`` to SessionStore or set the env var.
 MAX_ITERATIONS_ENV = "CONDUCTLOOP_SESSIONS_MAX_ITERATIONS"
+# The output budget of ONE model turn of a session. It used to be 1500
+# tokens, which is less than a reasoning model spends before it writes a
+# single line of code: the model ran out of room mid-answer and the session
+# spent its turns reading instead of writing. 32k is what the same model gets
+# through Claude Code, on the same endpoint.
+DEFAULT_MAX_TOKENS_OUT = 32000
+MIN_MAX_TOKENS_OUT = 2000
+HARD_MAX_TOKENS_OUT = 64000
+MAX_TOKENS_OUT_ENV = "CONDUCTLOOP_SESSIONS_MAX_TOKENS_OUT"
 BUDGET_CURRENCY = "EUR"           # D4: budget is mandatory and in EUR.
 
 SESSION_STATUSES = ("created", "provisioning", "idle", "running", "waiting_human",
@@ -115,6 +124,30 @@ def validate_iterations(max_iterations: object, limit: int | None = None) -> int
             or not 1 <= max_iterations <= cap:
         raise SessionValidationError("max_iterations", f"must be between 1 and {cap}")
     return max_iterations
+
+
+def resolve_max_tokens_out(value: int | None = None) -> int:
+    """The output budget of one model turn of a session.
+
+    An explicit value, else the env var, else the default. The model that
+    writes the code needs room to write it: 1500 tokens is less than a
+    reasoning model spends before the first line, and the session then spends
+    its turns reading instead of writing.
+    """
+    if value is None:
+        raw = os.environ.get(MAX_TOKENS_OUT_ENV, "").strip()
+        if not raw:
+            return DEFAULT_MAX_TOKENS_OUT
+        try:
+            value = int(raw)
+        except ValueError:
+            raise SessionValidationError(MAX_TOKENS_OUT_ENV, "must be an integer") from None
+    if not isinstance(value, int) or isinstance(value, bool) \
+            or not MIN_MAX_TOKENS_OUT <= value <= HARD_MAX_TOKENS_OUT:
+        raise SessionValidationError(
+            "max_tokens_out",
+            f"must be between {MIN_MAX_TOKENS_OUT} and {HARD_MAX_TOKENS_OUT}")
+    return value
 
 
 def redact(text: str) -> str:

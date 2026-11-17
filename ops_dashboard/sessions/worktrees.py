@@ -38,7 +38,8 @@ MIN_MERGE_TREE_GIT = (2, 38)
 # pull, remote, clone, submodule, config, gc…) is refused before exec.
 _ALLOWED_GIT = frozenset({"rev-parse", "worktree", "status", "rev-list", "diff",
                           "merge-tree", "branch", "check-ref-format", "version",
-                          "show-ref", "symbolic-ref", "ls-files", "grep",
+                          "show-ref", "symbolic-ref", "ls-files", "grep", "log", "show",
+                          "blame", "apply",
                           "update-ref"})  # only prune(): compare-and-delete of a cl/ branch
 # Only commit_paths() may stage/commit, and only on a session's cl/ branch.
 _COMMIT_GIT = frozenset({"add", "commit"})
@@ -88,18 +89,28 @@ def _env() -> dict[str, str]:
     return env
 
 
+def git_argv(*args: str) -> list[str]:
+    """A git command with the flags a session may never do without.
+
+    No hooks (a repository could carry one that runs anything), no
+    credential helper, no network protocol, no external diff driver: the
+    agent may read the history of the repository, and nothing else.
+    """
+    _EMPTY_HOOKS.mkdir(exist_ok=True)
+    return ["git", "-c", f"core.hooksPath={_EMPTY_HOOKS}", "-c", "credential.helper=",
+            "-c", "protocol.allow=never", "-c", "core.fsmonitor=false",
+            "-c", "diff.external=", *args]
+
+
 def _git(cwd: str | Path, *args: str, check: bool = True, timeout: int = 60,
          config: tuple[str, ...] = (),
-         _commit: bool = False) -> subprocess.CompletedProcess[str]:
+         _commit: bool = False, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
     allowed = _ALLOWED_GIT | _COMMIT_GIT if _commit else _ALLOWED_GIT
     if not args or args[0] not in allowed:
         raise WorktreeError(f"git {args[0] if args else ''} is not allowed for sessions")
-    _EMPTY_HOOKS.mkdir(exist_ok=True)
-    cmd = ["git", "-c", f"core.hooksPath={_EMPTY_HOOKS}", "-c", "credential.helper=",
-           "-c", "protocol.allow=never", "-c", "core.fsmonitor=false",
-           "-c", "diff.external=", *[x for kv in config for x in ("-c", kv)], *args]
+    cmd = git_argv(*[x for kv in config for x in ("-c", kv)], *args)
     r = subprocess.run(cmd, cwd=str(cwd), env=_env(), capture_output=True, text=True,
-                       timeout=timeout)
+                       timeout=timeout, input=stdin)
     if check and r.returncode != 0:
         raise WorktreeError(f"git {args[0]} failed: {(r.stderr or r.stdout).strip()[:300]}")
     return r
@@ -228,6 +239,20 @@ AGENT_NAME = "ConductLoop agent"
 AGENT_EMAIL = "agent@conductloop.invalid"
 
 
+def _stageable(wt: Path, path: str) -> bool:
+    """True when ``git add`` can stage ``path`` without failing.
+
+    A path the agent created and then deleted is neither tracked nor on disk,
+    and ``git add`` refuses it: "fatal: pathspec '…' did not match any files".
+    That single unusable path used to fail the whole commit and therefore the
+    whole task — the work was done and lost. A tracked path stays stageable
+    even when it is gone from disk: there the deletion is what gets staged.
+    """
+    if _git(wt, "ls-files", "--error-unmatch", "--", path, check=False).returncode == 0:
+        return True
+    return (wt / path).exists()
+
+
 def commit_paths(worktree: str | Path, paths_: list[str], message: str) -> str | None:
     """Commit exactly ``paths_`` on the worktree's own ``cl/`` branch (local
     only: never push, never merge). Author/committer is the agent identity —
@@ -239,6 +264,9 @@ def commit_paths(worktree: str | Path, paths_: list[str], message: str) -> str |
     if not branch.startswith(BRANCH_PREFIX):
         raise WorktreeError(f"refusing to commit on {branch!r}")
     clean = [p for p in paths_ if p and not p.startswith("-")]
+    if not clean:
+        return None
+    clean = [p for p in clean if _stageable(wt, p)]
     if not clean:
         return None
     _git(wt, "add", "-A", "--", *clean, _commit=True)

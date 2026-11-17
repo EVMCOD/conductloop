@@ -211,7 +211,7 @@ def test_create_session_validations_and_limits(api):
         st, r = call("POST", "/api/sessions", b)
         assert st == 400 and r["error"] == "validation_error" and r["field"] == missing, missing
     for bad in ({"budget_cost_cents": 0}, {"budget_cost_cents": "10"}, {"budget_cost_cents": 1.5},
-                {"max_iterations": 61}, {"max_iterations": 0}, {"provider": "evil"},
+                {"max_iterations": 121}, {"max_iterations": 0}, {"provider": "evil"},
                 {"base_ref": "--upload-pack=x"}, {"scope_globs": "x"}):
         st, r = call("POST", "/api/sessions", {**base, **bad})
         assert st == 400, (bad, r)
