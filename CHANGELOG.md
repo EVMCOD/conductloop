@@ -2,7 +2,13 @@
 
 User-facing changes to ConductLoop (the desktop app and its local server), newest first.
 
-## Unreleased
+## 1.2.33 — 2026-11-17 — The agent exam, and the runner that passes it
+
+### The work of a task is not lost any more
+
+- **A file the agent deletes does not cost it the whole commit.** The session commits the files the agent wrote when the task is done. A temporary file that the agent created and then deleted is neither in the repository nor on the disk, and `git add` refuses it: "pathspec did not match any files". One unusable path failed the whole commit, and with it the whole task, with the work already done. The commit now stages only the paths that can be staged.
+- **A busy answer does not end the session.** When the provider was busy for one turn (HTTP 529), the turn raised, the session stopped, and everything it had done until then was lost. The turn is now asked again a few times, with a wait that grows between attempts, before the session gives up.
+- **The session says what actually happened.** It said "provider error: OverloadedError", the name of an exception. What was really happening is that the plan's window of use was spent: the endpoint answers 529 even to a one-token request. Now it says that the provider is not answering and that, on a plan with a usage window, the window is probably spent and resets on its own.
 
 ### The prompt is cached
 
