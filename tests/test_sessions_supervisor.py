@@ -454,7 +454,11 @@ def test_provider_error_cools_the_key_down_for_every_session(env):
     assert b_prov.calls == 0                                # same key (provider default): not hammered
     assert "provider.cooldown" in kinds(store, b)
     ev = [e for e in store.list_events(a) if e["kind"] == "provider.error"][0]
-    assert json.loads(ev["payload"]) == {"code": "invalid_key", "cooldown_s": 600}
+    # The event carries the raw code AND the classification: with a provider
+    # that answers 529, the raw code is "OverloadedError" and the
+    # classification is what the person is told.
+    assert json.loads(ev["payload"]) == {"code": "invalid_key", "cooldown_s": 600,
+                                         "classified": "invalid_key"}
 
 
 def test_adapter_explicit_provider_no_fallback_and_key_ref(monkeypatch):

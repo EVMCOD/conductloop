@@ -78,6 +78,54 @@ def test_prune_clean_removes_worktree_and_branch(repo):
     assert W.list_session_worktrees(r) == []
 
 
+def test_a_file_the_agent_created_and_deleted_does_not_break_the_commit(repo):
+    """A path that no longer exists and was never tracked cannot be staged.
+
+    The agent writes a temporary file, deletes it and goes on. The commit of
+    the work then fails with "pathspec did not match any files" and the whole
+    task is lost — the work was done and nobody got it. The commit must skip
+    the unusable path and stage the rest.
+    """
+    r, _ = repo
+    info = W.create(r, "main", session_id=8, role="agent")
+    wt = Path(info.path)
+    (wt / "README.md").write_text("changed\n")
+    (wt / "tests").mkdir()
+    tmp = wt / "tests" / "_tmp_cleanup.py"
+    tmp.write_text("x = 1\n")
+    tmp.unlink()
+
+    sha = W.commit_paths(wt, ["README.md", "tests/_tmp_cleanup.py"], "cl: task #8")
+
+    assert sha, "the commit of the work must not fail because of a deleted file"
+    assert g(wt, "log", "--oneline", "-1").strip().endswith("cl: task #8")
+    assert g(wt, "show", "--name-only", "--format=", "HEAD").split() == ["README.md"]
+
+
+def test_a_tracked_file_that_was_deleted_is_staged_as_a_deletion(repo):
+    """The deletion of a tracked file IS a change: it must be committed."""
+    r, _ = repo
+    info = W.create(r, "main", session_id=9, role="agent")
+    wt = Path(info.path)
+    (wt / "app.py").unlink()
+
+    sha = W.commit_paths(wt, ["app.py"], "cl: task #9")
+
+    assert sha
+    assert g(wt, "show", "--name-only", "--format=", "HEAD").split() == ["app.py"]
+    assert g(wt, "status", "--porcelain") == ""
+
+
+def test_commit_paths_without_anything_to_stage_returns_none(repo):
+    r, _ = repo
+    info = W.create(r, "main", session_id=10, role="agent")
+    wt = Path(info.path)
+    (wt / "gone.py").write_text("x\n")
+    (wt / "gone.py").unlink()
+    assert W.commit_paths(wt, ["gone.py"], "cl: task #10") is None
+    assert W.commit_paths(wt, [], "cl: task #10") is None
+
+
 def test_dry_merge_clean_and_conflict(repo):
     r, _ = repo
     a = W.create(r, "main", session_id=3, role="a")

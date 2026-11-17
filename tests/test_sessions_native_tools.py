@@ -20,6 +20,7 @@ import pytest
 
 from ops_dashboard import brain
 from ops_dashboard.sessions import SessionStore, limits
+from ops_dashboard.sessions import runner as runner_mod
 from ops_dashboard.sessions import worktrees as W
 from ops_dashboard.sessions.runner import SessionRunner, native_tools
 
@@ -69,6 +70,42 @@ class Scripted:
     def ask(self, system, messages, **kw):
         self.calls.append([dict(m) for m in messages])
         return self.replies.pop(0)
+
+
+class OverloadedError(RuntimeError):
+    """The endpoint is busy. The SDK calls it OverloadedError (HTTP 529)."""
+
+
+class Blinking:
+    """A provider whose answer gets lost: the endpoint is busy for a moment."""
+
+    name = "openai"
+    model = "m"
+    last_usage = None
+
+    def __init__(self, failures):
+        self.failures = list(failures)
+        self.calls: list[dict] = []
+
+    def supports_tools(self) -> bool:
+        return True
+
+    def ask_step(self, system, messages, tools, **kw):
+        self.calls.append({"system": system, "messages": [dict(m) for m in messages]})
+        if self.failures:
+            raise self.failures.pop(0)
+        return {"text": "done", "tool_calls": []}
+
+    def ask(self, system, messages, **kw):  # the JSON protocol must NOT be used
+        raise AssertionError("a native provider must be asked with ask_step")
+
+
+class _NoSleep:
+    """Stands in for the module ``time`` while the retry waits."""
+
+    @staticmethod
+    def sleep(_seconds):
+        return None
 
 
 @pytest.fixture()
@@ -292,3 +329,81 @@ def test_the_tokens_of_a_native_step_are_not_lost():
     assert step["tool_calls"][0]["name"] == "read_file"
     assert p.last_usage == _Anthropic.last_usage
     assert p.last_usage["cache_read_input_tokens"] == 5000
+
+
+# ── a provider that blinks ────────────────────────────────────────────────
+
+def test_an_overloaded_endpoint_is_a_transient_error():
+    """529 means "busy", not "your request was wrong"."""
+    assert brain.is_transient_error(OverloadedError("overloaded_error"))
+    assert brain.is_transient_error(RuntimeError("HTTP 529: overloaded"))
+    assert brain.is_transient_error(RuntimeError("503 service unavailable"))
+    # A mistake of ours is not retried: the session must stop and say why.
+    assert not brain.is_transient_error(RuntimeError("401 invalid_api_key"))
+    assert not brain.is_transient_error(RuntimeError("429 rate_limit_error"))
+
+
+def test_a_provider_that_blinks_does_not_cost_the_session(env, monkeypatch):
+    """One busy answer must not end the session.
+
+    The turn is asked again a few times before giving up. Without the retry
+    the session stopped with "provider error: OverloadedError" and every turn
+    of work it had already done was lost.
+    """
+    monkeypatch.setattr(runner_mod, "time", _NoSleep)
+    prov = Blinking([OverloadedError("overloaded_error")])
+
+    out = _run(env, prov)
+
+    assert out.task_status == "needs_review", out.reason
+    assert len(prov.calls) >= 2, "the turn must be asked again after the blink"
+    kinds = [e["kind"] for e in env["store"].list_events(prov_sid(env, prov))]
+    assert "provider.retry" in kinds
+
+
+def test_a_provider_that_always_fails_stops_the_session(env, monkeypatch):
+    """Retrying is not forever: the session says what happened and waits.
+
+    The person is told what happened, not the name of an SDK exception: a
+    MiniMax Coding Plan answers 529 'overloaded_error' when the 5-hour
+    window of the model is spent, and 'provider error: OverloadedError' reads
+    like a glitch of the service.
+    """
+    monkeypatch.setattr(runner_mod, "time", _NoSleep)
+    prov = Blinking([OverloadedError("overloaded_error")] * 99)
+
+    out = _run(env, prov)
+
+    assert out.task_status is None
+    assert out.session_status == "waiting_human"
+    assert "OverloadedError" not in out.reason
+    assert "overloaded" in out.reason.lower()
+    assert "window" in out.reason.lower() or "quota" in out.reason.lower()
+    # PROVIDER_RETRIES attempts after the first one.
+    assert len(prov.calls) == runner_mod.PROVIDER_RETRIES + 1
+
+
+def test_an_overloaded_provider_is_classified():
+    """The chat shows the same thing: the window, not the exception."""
+    err = brain._classify_provider_error(_Overloaded529(), "minimax")
+    assert err.code == "provider_overloaded"
+    assert "529" in err.message
+    assert "minimax" in err.message
+    # A rate limit is still a rate limit.
+    assert brain._classify_provider_error(
+        Exception("429 rate_limit_error"), "minimax").code == "rate_limited"
+
+
+class _Overloaded529(Exception):
+    """What the SDK raises when the endpoint answers 529."""
+
+    status_code = 529
+
+
+def prov_sid(env, prov):
+    """The session id of the provider used by the last ``_run``."""
+    for sid, p in env["provs"].items():
+        if p is prov:
+            return sid
+    raise AssertionError("the provider was not used in any session")
+

@@ -1528,7 +1528,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "type": "error",
                     "code": _perr.code,
                     "error": _perr.message,
-                    "recoverable": _perr.code in ("rate_limited", "provider_down", "unreachable"),
+                    "recoverable": _perr.code in ("rate_limited", "provider_down", "unreachable", "provider_overloaded"),
                 }, ensure_ascii=False).encode() + b"\n\n")
                 self.wfile.flush()
             except Exception:
@@ -2582,7 +2582,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 perr = brain._translate_provider_error(e, provider.name)
                 self._send(perr.status or 502, _json({
                     "error": perr.message, "code": perr.code,
-                    "provider": provider.name, "recoverable": perr.code in ("rate_limited","provider_down","unreachable"),
+                    "provider": provider.name, "recoverable": perr.code in ("rate_limited","provider_down","unreachable","provider_overloaded"),
                 }, ensure_ascii=False).encode(), "application/json; charset=utf-8")
                 return
             conv_id = db.save_conversation_turn(
@@ -2770,7 +2770,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "error": e.message,
                     "code": e.code,
                     "provider": provider or "auto",
-                    "recoverable": e.code in ("rate_limited", "provider_down", "unreachable"),
+                    "recoverable": e.code in ("rate_limited", "provider_down", "unreachable", "provider_overloaded"),
                 }, ensure_ascii=False).encode(),
                 "application/json; charset=utf-8",
             )

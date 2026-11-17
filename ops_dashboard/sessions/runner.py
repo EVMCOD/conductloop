@@ -33,9 +33,11 @@ import json
 import math
 import re
 import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
+from .. import brain
 from . import limits, providers, sandbox, worktrees
 from .code_tools import CodeTools, ToolDenied, ToolError
 from .paths import PathConflictError
@@ -55,6 +57,12 @@ PROJECTED_OUTPUT_TOKENS = 1500
 MAX_TOOL_RESULT_CHARS = 8000
 KEEP_LAST_MESSAGES = 30
 BUDGET_WARN_RATIO = 0.8
+# How many times one model turn is asked again when the provider blinks
+# (overloaded, 529, 5xx). Without this a single overloaded answer killed the
+# whole session: the turn raised, the runner stopped with "waiting_human" and
+# all the work of the session was lost. The wait between attempts grows with
+# the attempt number and is capped.
+PROVIDER_RETRIES = 3
 
 AGENT_RULES = """\
 You are a coding agent working in a git worktree of the repository (your
@@ -719,30 +727,48 @@ class SessionRunner:
                 with providers.provider_slot(s["provider"], self.cancel) as ok:
                     if not ok:
                         continue  # cancelled while waiting for the local model
-                    if _native_capable(provider):
-                        # The provider speaks native tool calling: the model
-                        # asks for the tools it wants, several at a time, and
-                        # this loop runs them with its own rules.
-                        system = system_native
-                        step = provider.ask_step(system, window, tools=native_tools(),
-                                                 max_tokens=self.max_tokens_out, temperature=0.2)
-                        reply = str(step.get("text") or "")
-                        calls = [c for c in (step.get("tool_calls") or [])
-                                 if isinstance(c, dict)]
-                    else:
-                        reply = provider.ask(system, window, max_tokens=self.max_tokens_out,
-                                             temperature=0.2)
+                    attempt = 0
+                    while True:
+                        try:
+                            if _native_capable(provider):
+                                # The provider speaks native tool calling: the model
+                                # asks for the tools it wants, several at a time, and
+                                # this loop runs them with its own rules.
+                                system = system_native
+                                step = provider.ask_step(system, window, tools=native_tools(),
+                                                         max_tokens=self.max_tokens_out,
+                                                         temperature=0.2)
+                                reply = str(step.get("text") or "")
+                                calls = [c for c in (step.get("tool_calls") or [])
+                                         if isinstance(c, dict)]
+                            else:
+                                reply = provider.ask(system, window, max_tokens=self.max_tokens_out,
+                                                     temperature=0.2)
+                            break
+                        except Exception as e:
+                            # A provider that blinks (overloaded, 5xx) must not
+                            # cost the session its work: the turn is asked
+                            # again a couple of times before giving up.
+                            if attempt >= PROVIDER_RETRIES or not brain.is_transient_error(e):
+                                raise
+                            attempt += 1
+                            self._event("provider.retry",
+                                        {"attempt": attempt,
+                                         "code": str(getattr(e, "code", type(e).__name__))},
+                                        task_id=tid)
+                            time.sleep(min(2 ** attempt, 8))
             except providers.ProviderUnavailable as e:
                 self._event("provider.unavailable", {"reason": e.reason}, task_id=tid)
                 return self._stop(task, session_status="waiting_human", reason=str(e)[:300],
                                   task_status=None, iterations=n)
             except Exception as e:  # provider SDK errors: classified, never retried here
                 code = getattr(e, "code", type(e).__name__)
+                perr = brain._classify_provider_error(e, str(s.get("provider") or "provider"))
                 secs = providers.mark_failure(s, str(code))
-                self._event("provider.error", {"code": str(code), "cooldown_s": secs},
-                            task_id=tid)
+                self._event("provider.error", {"code": str(code), "cooldown_s": secs,
+                                              "classified": perr.code}, task_id=tid)
                 return self._stop(task, session_status="waiting_human",
-                                  reason=f"provider error: {code}", task_status=None, iterations=n)
+                                  reason=perr.message[:300], task_status=None, iterations=n)
             if self.cancel.is_set():
                 # Cancelled while the provider was answering: never act on it.
                 return self._stop(task, session_status="idle", reason="cancelled",

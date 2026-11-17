@@ -239,6 +239,20 @@ AGENT_NAME = "ConductLoop agent"
 AGENT_EMAIL = "agent@conductloop.invalid"
 
 
+def _stageable(wt: Path, path: str) -> bool:
+    """True when ``git add`` can stage ``path`` without failing.
+
+    A path the agent created and then deleted is neither tracked nor on disk,
+    and ``git add`` refuses it: "fatal: pathspec '…' did not match any files".
+    That single unusable path used to fail the whole commit and therefore the
+    whole task — the work was done and lost. A tracked path stays stageable
+    even when it is gone from disk: there the deletion is what gets staged.
+    """
+    if _git(wt, "ls-files", "--error-unmatch", "--", path, check=False).returncode == 0:
+        return True
+    return (wt / path).exists()
+
+
 def commit_paths(worktree: str | Path, paths_: list[str], message: str) -> str | None:
     """Commit exactly ``paths_`` on the worktree's own ``cl/`` branch (local
     only: never push, never merge). Author/committer is the agent identity —
@@ -250,6 +264,9 @@ def commit_paths(worktree: str | Path, paths_: list[str], message: str) -> str |
     if not branch.startswith(BRANCH_PREFIX):
         raise WorktreeError(f"refusing to commit on {branch!r}")
     clean = [p for p in paths_ if p and not p.startswith("-")]
+    if not clean:
+        return None
+    clean = [p for p in clean if _stageable(wt, p)]
     if not clean:
         return None
     _git(wt, "add", "-A", "--", *clean, _commit=True)
